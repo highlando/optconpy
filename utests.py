@@ -2,7 +2,7 @@ import unittest
 import sympy as smp
 import numpy as np
 import scipy.sparse as sps
-from dolfin import UnitSquare, VectorFunctionSpace, FunctionSpace, Expression
+from dolfin import *
 
 # unittests for the suite
 # if not specified otherwise we use the unit square 
@@ -12,7 +12,7 @@ class OptConPyFunctions(unittest.TestCase):
 
     def setUp(self):
 
-        self.mesh = UnitSquare(24, 24)
+        self.mesh = UnitSquareMesh(24, 24)
         self.V = VectorFunctionSpace(self.mesh, "CG", 2)
         self.Q = FunctionSpace(self.mesh, "CG", 1)
         self.nu = 1e-5
@@ -21,11 +21,14 @@ class OptConPyFunctions(unittest.TestCase):
         ft = smp.sin(om*t)
         u_x = ft*x*x*(1-x)*(1-x)*2*y*(1-y)*(2*y-1)
         u_y = ft*y*y*(1-y)*(1-y)*2*x*(1-x)*(1-2*x)
-		  p = ft*x*(1-x)*y*(1-y)
+        p = ft*x*(1-x)*y*(1-y)
 
-		  self.u_x = u_x
-		  self.u_y = u_y
-		  self.p = p
+        # div u --- should be zero!!
+        self.assertEqual(smp.simplify(smp.diff(u_x,x) + smp.diff(u_y,y)), 0)
+
+        self.u_x = u_x
+        self.u_y = u_y
+        self.p = p
 
         def sympy2expression(term):
             '''Translate a SymPy expression to a FEniCS expression string.
@@ -37,10 +40,10 @@ class OptConPyFunctions(unittest.TestCase):
 			   # convert this into a string, 
 			   # and then replace the substrings RRR, ZZZ
 			   # by x[0], x[1], respectively.
-			   exp = smp.printing.ccode(term.subs('x','XXX').subs('y','YYY')) \
-			   	.replace('M_PI','pi') \
-			   	.replace('XXX','x[0]').replace('YYY','x[1]')
-			   return exp
+            exp = smp.printing.ccode(term.subs('x','XXX').subs('y','YYY')) \
+                .replace('M_PI','pi') \
+                .replace('XXX','x[0]').replace('YYY','x[1]')
+            return exp
 
         dotu_x = smp.simplify(smp.diff(u_x,t))
         dotu_y = smp.simplify(smp.diff(u_y,t))
@@ -61,27 +64,23 @@ class OptConPyFunctions(unittest.TestCase):
 		
         self.fenics_sol_u = Expression((a, b), t=0.0, om=1.0)
 	
-    def test_testsolution_for_incompress(self):
-        from sympy import diff
-
-        # div u --- should be zero!!
-        # self.assertEqual(diff(self.u_x,x) + diff(self.u_y,y), 0)
-
-
     def test_linearized_mat_NSE_form(self):
         """check the conversion: dolfin form <-> numpy arrays
 
 		  and the linearizations"""
 
-		  import dolfin_to_nparrays as dtn
+        import dolfin_to_nparrays as dtn
 
-		  u = self.fenics_sol_u
-		  uvec = u.array()
-		  uvec = uvec.reshape(len(uvec), 1)
+        u = self.fenics_sol_u
+        u.t = 1.0
+        ufun = project(u, self.V)
+        uvec = ufun.vector().array().reshape(len(ufun.vector()), 1)
 
-		  self.assertTrue(np.allclose(0, 0))
+        N1, N2 = dtn.get_convmats(ufun, self.V)
+        conv = dtn.get_convvec(ufun, self.V)
 
+        self.assertTrue(np.allclose(conv, N1*uvec))
+        self.assertTrue(np.allclose(conv, N2*uvec))
 
 if __name__ == '__main__':
     unittest.main()
-
