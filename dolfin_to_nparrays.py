@@ -4,166 +4,186 @@ import scipy.sparse as sps
 
 parameters.linear_algebra_backend = "uBLAS"
 
-def get_sysNSmats( V, Q): # , velbcs ):
-	""" Assembles the system matrices for Stokes equation
+def get_stokessysmats( V, Q): # , velbcs ):
+    """ Assembles the system matrices for Stokes equation
 
-	in mixed FEM formulation, namely
-		
-		[ A  B' ] as [ Aa   Grada ] : W -> W'
-		[ B  0  ]    [ Diva   0   ]
-		
-	for a given trial and test space W = V * Q and boundary conds.
-	
-	Plus the velocity mass matrix M.
-	"""
+    in mixed FEM formulation, namely
+        
+        [ A  B' ] as [ Aa   Grada ] : W -> W'
+        [ B  0  ]    [ Diva   0   ]
+        
+    for a given trial and test space W = V * Q and boundary conds.
+    
+    Plus the velocity mass matrix M.
+    """
 
-	u = TrialFunction(V)
-	p = TrialFunction(Q)
-	v = TestFunction(V)
-	q = TestFunction(Q)
+    u = TrialFunction(V)
+    p = TrialFunction(Q)
+    v = TestFunction(V)
+    q = TestFunction(Q)
 
-	ma = inner(u,v)*dx
-	mp = inner(p,q)*dx
-	aa = inner(grad(u), grad(v))*dx 
-	grada = div(v)*p*dx
-	diva = q*div(u)*dx
+    ma = inner(u,v)*dx
+    mp = inner(p,q)*dx
+    aa = inner(grad(u), grad(v))*dx 
+    grada = div(v)*p*dx
+    diva = q*div(u)*dx
 
-	# Assemble system
-	M = assemble(ma)
-	A = assemble(aa)
-	Grad = assemble(grada)
-	Div = assemble(diva)
-	MP = assemble(mp)
+    # Assemble system
+    M = assemble(ma)
+    A = assemble(aa)
+    Grad = assemble(grada)
+    Div = assemble(diva)
+    MP = assemble(mp)
 
-	# Convert DOLFIN representation to numpy arrays
-	rows, cols, values = M.data()
-	Ma = sps.csr_matrix((values, cols, rows))
+    # Convert DOLFIN representation to numpy arrays
+    rows, cols, values = M.data()
+    Ma = sps.csr_matrix((values, cols, rows))
 
-	rows, cols, values = MP.data()
-	MPa = sps.csr_matrix((values, cols, rows))
+    rows, cols, values = MP.data()
+    MPa = sps.csr_matrix((values, cols, rows))
 
-	rows, cols, values = A.data()
-	Aa = sps.csr_matrix((values, cols, rows))
+    rows, cols, values = A.data()
+    Aa = sps.csr_matrix((values, cols, rows))
 
-	rows, cols, values = Grad.data()
-	BTa = sps.csr_matrix((values, cols, rows))
+    rows, cols, values = Grad.data()
+    BTa = sps.csr_matrix((values, cols, rows))
 
-	rows, cols, values = Div.data()
-	Ba = sps.csr_matrix((values, cols, rows))
+    rows, cols, values = Div.data()
+    Ba = sps.csr_matrix((values, cols, rows))
 
-	return Ma, Aa, BTa, Ba, MPa
-	
+    stokesmats = {'M':M,
+            'A':Aa,
+            'BT':BTa,
+            'B':Ba,
+            'MP':MPa}
+
+    return stokesmats
+    
 
 def get_convmats(u0,V):
-	"""returns the matrices related to the linearized convection
+    """returns the matrices related to the linearized convection
 
-	N1 ~ (u_0 \nabla u) v
-	N2 ~ (u \nabla u_0) v
+    N1 ~ (u_0 \nabla u) v
+    N2 ~ (u \nabla u_0) v
 
-	where u_0 is the linearization point"""
+    where u_0 is the linearization point"""
 
-	u = TrialFunction(V)
-	v = TestFunction(V)
+    u = TrialFunction(V)
+    v = TestFunction(V)
 
-	# Assemble system
-	n1 = inner(grad(u)*u0, v)*dx
-	n2 = inner(grad(u0)*u, v)*dx
-	n1 = assemble(n1)
-	n2 = assemble(n2)
+    # Assemble system
+    n1 = inner(grad(u)*u0, v)*dx
+    n2 = inner(grad(u0)*u, v)*dx
+    n1 = assemble(n1)
+    n2 = assemble(n2)
 
-	# Convert DOLFIN representation to numpy arrays
-	rows, cols, values = n1.data()
-	N1 = sps.csr_matrix((values, cols, rows))
+    # Convert DOLFIN representation to numpy arrays
+    rows, cols, values = n1.data()
+    N1 = sps.csr_matrix((values, cols, rows))
 
-	rows, cols, values = n2.data()
-	N2 = sps.csr_matrix((values, cols, rows))
+    rows, cols, values = n2.data()
+    N2 = sps.csr_matrix((values, cols, rows))
 
-	return N1, N2
+    return N1, N2
 
 def setget_rhs(V, Q, fv, fp, velbcs=None, t=None):
 
-	v = TestFunction(V)
-	q = TestFunction(Q)
+    if t is not None:
+        fv.t = t
+        fp.t = t
 
-	fv = inner(fv,v)*dx 
-	fp = inner(fp,q)*dx
+    v = TestFunction(V)
+    q = TestFunction(Q)
 
-	fv = assemble(fv)
-	fp = assemble(fp)
+    fv = inner(fv,v)*dx 
+    fp = inner(fp,q)*dx
 
-	fv = fv.array()
-	fv = fv.reshape(len(fv), 1)
+    fv = assemble(fv)
+    fp = assemble(fp)
 
-	fp = fp.array()
-	fp = fp.reshape(len(fp), 1)
+    fv = fv.array()
+    fv = fv.reshape(len(fv), 1)
 
-	return fv, fp
+    fp = fp.array()
+    fp = fp.reshape(len(fp), 1)
+
+    rhsvecs = {'fv':fv,
+            'fp':fp}
+
+    return rhsvecs
 
 def get_curfv(V, fv, invinds, tcur):
-	"""get the fv at innernotes at t=tcur
+    """get the fv at innernotes at t=tcur
 
-	"""
+    """
 
-	v = TestFunction(V)
+    v = TestFunction(V)
 
-	fv.t = tcur
+    fv.t = tcur
 
-	fv = inner(fv,v)*dx 
+    fv = inner(fv,v)*dx 
 
-	fv = assemble(fv)
+    fv = assemble(fv)
 
-	fv = fv.array()
-	fv = fv.reshape(len(fv), 1)
+    fv = fv.array()
+    fv = fv.reshape(len(fv), 1)
 
-	return fv[invinds,:]
+    return fv[invinds,:]
 
 
 def get_convvec(u0, V):
-	"""return the convection vector e.g. for explicit schemes
-	"""
+    """return the convection vector e.g. for explicit schemes
+    """
 
-	v = TestFunction(V)
-	ConvForm = inner(grad(u0)*u0, v)*dx
+    v = TestFunction(V)
+    ConvForm = inner(grad(u0)*u0, v)*dx
 
-	ConvForm = assemble(ConvForm)
-	ConvVec = ConvForm.array()
-	ConvVec = ConvVec.reshape(len(ConvVec), 1)
+    ConvForm = assemble(ConvForm)
+    ConvVec = ConvForm.array()
+    ConvVec = ConvVec.reshape(len(ConvVec), 1)
 
-	return ConvVec
+    return ConvVec
 
 
-def condense_sysmatsbybcs(Ma,Aa,BTa,Ba,fv,fp,velbcs):
-	"""resolve the Dirichlet BCs and condense the sysmats
+def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
+    """resolve the Dirichlet BCs and condense the sysmats
 
-	to the inner nodes"""
+    to the inner nodes
+    stms ... dictionary of the stokes matrices"""
 
-	auxu = np.zeros((len(fv),1))
-	bcinds = []
-	for bc in velbcs:
-		bcdict = bc.get_boundary_values()
-		auxu[bcdict.keys(),0] = bcdict.values()
-		bcinds.extend(bcdict.keys())
+    auxu = np.zeros((len(fv),1))
+    bcinds = []
+    for bc in velbcs:
+        bcdict = bc.get_boundary_values()
+        auxu[bcdict.keys(),0] = bcdict.values()
+        bcinds.extend(bcdict.keys())
 
-	# putting the bcs into the right hand sides
-	fvbc = - Aa*auxu    # '*' is np.dot for csr matrices
-	fpbc = - Ba*auxu
-	
-	# indices of the innernodes
-	innerinds = np.setdiff1d(range(len(fv)),bcinds).astype(np.int32)
+    # putting the bcs into the right hand sides
+    fvbc = - stms['A']*auxu    # '*' is np.dot for csr matrices
+    fpbc = - stms['B']*auxu
+    
+    # indices of the innernodes
+    innerinds = np.setdiff1d(range(len(fv)),bcinds).astype(np.int32)
 
-	# extract the inner nodes equation coefficients
-	Mc = Ma[innerinds,:][:,innerinds]
-	Ac = Aa[innerinds,:][:,innerinds]
-	fvbc= fvbc[innerinds,:]
-	Bc  = Ba[:,innerinds]
-	BTc = BTa[innerinds,:]
+    # extract the inner nodes equation coefficients
+    Mc = stms['M'][innerinds,:][:,innerinds]
+    Ac = stms['A'][innerinds,:][:,innerinds]
+    fvbc = fvbc[innerinds,:]
+    Bc  = stms['B'][:,innerinds]
+    BTc = stms['BT'][innerinds,:]
 
-	bcvals = auxu[bcinds]
+    bcvals = auxu[bcinds]
 
-	# removal of the indefiniteness in pressure via pi_0 !=! 0
-	# eeeh, better not here :/
-	# Bc  = Ba[1:,innerinds]
-	# BTc = BTa[innerinds,1:]
-	# fp  = fp[1:,0]
+    bcdata = {'bcinds':bcinds,
+            'bcvals':bcvals,
+            'innerinds':innerinds}
 
-	return Mc, Ac, BTc, Bc, fvbc, fpbc, bcinds, bcvals, innerinds
+    stokesmatsc = {'M':Mc,
+            'A':Ac,
+            'BT':BTc,
+            'B':Bc}
+
+    rhsvecsbc = {'fv':fvbc,
+            'fp':fpbc}
+
+    return stokesmatsc, rhsvecsbc, bcdata 

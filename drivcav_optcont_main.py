@@ -15,12 +15,21 @@ class TimeIntParams(object):
         self.Residuals = NseResiduals()
         self.ParaviewOutput = False
         self.SaveTStps = False
+        self.nu = 100
 
 def optcon_nse(N = 12, Nts = 10):
     tip = TimeIntParams(Nts)
-    dcf = drivcav_femform(N)
+    dcf = DrivcavFemForm(N)
 
-    V, Q, f, diribcs = dcf.V, dcf.Q, dcf.f, dcf.diribcs
+    V, Q, fv, diribcs = dcf.V, dcf.Q, dcf.fv, dcf.diribcs
+    stokesmats = dtn.get_stokessysmats(V,Q)
+
+    rhsvecs = dtn.setget_rhs(V, Q, fv, fp, velbcs=None, t=0)
+
+    stokesmatsc, rhsvecbc, bcdata = condense_sysmatsbybcs(stokesmats,
+            rhsvecs, diribcs)
+
+
 
 
 #ufile_pvd = File("velocity.pvd")
@@ -33,7 +42,7 @@ def optcon_nse(N = 12, Nts = 10):
 #plot(p)
 #interactive()
 
-class drivcav_femform(object):
+class DrivcavFemForm(object):
     """container for the fem items of the (unit) driven cavity
 
     """
@@ -41,6 +50,8 @@ class drivcav_femform(object):
         self.mesh = UnitSquareMesh(N, N)
         self.V = VectorFunctionSpace(self.mesh, "CG", 2)
         self.Q = FunctionSpace(self.mesh, "CG", 1)
+        # pressure node that is set to zero
+        self.pdof = 0
 
         # Boundaries
         def top(x, on_boundary): 
@@ -59,7 +70,7 @@ class drivcav_femform(object):
         # Collect boundary conditions
         self.diribcs = [bc0, bc1]
         # rhs of the continuity eqn
-        self.f = Constant((0.0, 0.0))
+        self.fv = Constant((0.0, 0.0))
 
 
 class NseResiduals(object):
