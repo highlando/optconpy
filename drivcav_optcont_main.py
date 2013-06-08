@@ -5,30 +5,42 @@ import matplotlib.pyplot as plt
 import os, glob
 
 import dolfin_to_nparrays as dtn
+import solvers_drivcav 
 
-class TimeIntParams(object):
-    def __init__(self, Nts):
-        self.t0 = 0.0
-        self.tE = 1.0
-        self.dt = (self.tE - self.t0)/Nts
-        self.UpFiles = UpFiles()
-        self.Residuals = NseResiduals()
-        self.ParaviewOutput = False
-        self.SaveTStps = False
-        self.nu = 100
+parameters.linear_algebra_backend = 'uBLAS'
 
-def optcon_nse(N = 12, Nts = 10):
-    tip = TimeIntParams(Nts)
-    dcf = DrivcavFemForm(N)
+def time_int_params(Nts):
+    t0 = 0.0
+    tE = 1.0
+    dt = (tE - t0)/Nts
 
-    V, Q, fv, diribcs = dcf.V, dcf.Q, dcf.fv, dcf.diribcs
-    stokesmats = dtn.get_stokessysmats(V,Q)
+    tip = dict(t0 = t0,
+            tE = tE,
+            dt = dt, 
+            UpFiles = UpFiles(), 
+            Residuals = NseResiduals(), 
+            ParaviewOutput = False, 
+            SaveTStps = False, 
+            nu = 1e-4)
 
-    rhsvecs = dtn.setget_rhs(V, Q, fv, fp, velbcs=None, t=0)
+    return tip
 
-    stokesmatsc, rhsvecbc, bcdata = condense_sysmatsbybcs(stokesmats,
-            rhsvecs, diribcs)
+def optcon_nse(N = 32, Nts = 10):
 
+    tip = time_int_params(Nts)
+    femp = drivcav_fems(N)
+
+    stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], tip['nu'])
+
+    rhsvecs = dtn.setget_rhs(femp['V'], femp['Q'], femp['fv'], femp['fp'], t=0)
+
+    stokesmatsc, rhsvecbc, bcdata = dtn.condense_sysmatsbybcs(stokesmats,
+            rhsvecs, femp['diribcs'])
+
+    # add the info on boundary and inner nodes 
+    femp.update(bcdata)
+
+    solvers_drivcav.stokes_steadystate(stokesmatsc, rhsvecbc, femp, tip)
 
 
 
@@ -37,40 +49,45 @@ def optcon_nse(N = 12, Nts = 10):
 #pfile_pvd = File("pressure.pvd")
 #pfile_pvd << p
 #
-## Plot solution
-#plot(u)
-#plot(p)
-#interactive()
 
-class DrivcavFemForm(object):
-    """container for the fem items of the (unit) driven cavity
+def drivcav_fems(N):
+    """dictionary for the fem items of the (unit) driven cavity
 
     """
-    def __init__(self, N):
-        self.mesh = UnitSquareMesh(N, N)
-        self.V = VectorFunctionSpace(self.mesh, "CG", 2)
-        self.Q = FunctionSpace(self.mesh, "CG", 1)
-        # pressure node that is set to zero
-        self.pdof = 0
+    mesh = UnitSquareMesh(N, N)
+    V = VectorFunctionSpace(mesh, "CG", 2)
+    Q = FunctionSpace(mesh, "CG", 1)
+    # pressure node that is set to zero
 
-        # Boundaries
-        def top(x, on_boundary): 
-            return x[1] > 1.0 - DOLFIN_EPS 
-        def leftbotright(x, on_boundary): 
-            return ( x[0] > 1.0 - DOLFIN_EPS 
-                or x[1] < DOLFIN_EPS 
-                or x[0] < DOLFIN_EPS)
+    # Boundaries
+    def top(x, on_boundary): 
+        return x[1] > 1.0 - DOLFIN_EPS 
+    def leftbotright(x, on_boundary): 
+        return ( x[0] > 1.0 - DOLFIN_EPS 
+            or x[1] < DOLFIN_EPS 
+            or x[0] < DOLFIN_EPS)
 
-        # No-slip boundary condition for velocity
-        noslip = Constant((0.0, 0.0))
-        bc0 = DirichletBC(self.V, noslip, leftbotright)
-        # Boundary condition for velocity at the lid
-        lid = Constant(("1", "0.0"))
-        bc1 = DirichletBC(self.V, lid, top)
-        # Collect boundary conditions
-        self.diribcs = [bc0, bc1]
-        # rhs of the continuity eqn
-        self.fv = Constant((0.0, 0.0))
+    # No-slip boundary condition for velocity
+    noslip = Constant((0.0, 0.0))
+    bc0 = DirichletBC(V, noslip, leftbotright)
+    # Boundary condition for velocity at the lid
+    lid = Constant(("1", "0.0"))
+    bc1 = DirichletBC(V, lid, top)
+    # Collect boundary conditions
+    diribcs = [bc0, bc1]
+    # rhs of momentum eqn
+    fv = Constant((0.0, 0.0))
+    # rhs of the continuity eqn
+    fp = Constant(0.0)
+
+    dfems = dict(mesh = mesh,
+            V = V,
+            Q = Q,
+            diribcs = diribcs,
+            fv = fv,
+            fp = fp)
+
+    return dfems
 
 
 class NseResiduals(object):

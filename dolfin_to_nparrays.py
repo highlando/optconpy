@@ -4,7 +4,7 @@ import scipy.sparse as sps
 
 parameters.linear_algebra_backend = "uBLAS"
 
-def get_stokessysmats( V, Q): # , velbcs ):
+def get_stokessysmats( V, Q, nu): # , velbcs ):
     """ Assembles the system matrices for Stokes equation
 
     in mixed FEM formulation, namely
@@ -24,7 +24,7 @@ def get_stokessysmats( V, Q): # , velbcs ):
 
     ma = inner(u,v)*dx
     mp = inner(p,q)*dx
-    aa = inner(grad(u), grad(v))*dx 
+    aa = nu*inner(grad(u), grad(v))*dx 
     grada = div(v)*p*dx
     diva = q*div(u)*dx
 
@@ -51,7 +51,7 @@ def get_stokessysmats( V, Q): # , velbcs ):
     rows, cols, values = Div.data()
     Ba = sps.csr_matrix((values, cols, rows))
 
-    stokesmats = {'M':M,
+    stokesmats = {'M':Ma,
             'A':Aa,
             'BT':BTa,
             'B':Ba,
@@ -86,11 +86,13 @@ def get_convmats(u0,V):
 
     return N1, N2
 
-def setget_rhs(V, Q, fv, fp, velbcs=None, t=None):
+def setget_rhs(V, Q, fv, fp, t=None):
 
     if t is not None:
         fv.t = t
         fp.t = t
+    elif hasattr(fv,'t') or hasattr(fp,'t'):
+        Warning('No value for t specified') 
 
     v = TestFunction(V)
     q = TestFunction(Q)
@@ -151,7 +153,9 @@ def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
     to the inner nodes
     stms ... dictionary of the stokes matrices"""
 
-    auxu = np.zeros((len(fv),1))
+    nv = stms['A'].shape[0]
+
+    auxu = np.zeros((nv,1))
     bcinds = []
     for bc in velbcs:
         bcdict = bc.get_boundary_values()
@@ -163,7 +167,7 @@ def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
     fpbc = - stms['B']*auxu
     
     # indices of the innernodes
-    innerinds = np.setdiff1d(range(len(fv)),bcinds).astype(np.int32)
+    innerinds = np.setdiff1d(range(nv),bcinds).astype(np.int32)
 
     # extract the inner nodes equation coefficients
     Mc = stms['M'][innerinds,:][:,innerinds]
@@ -187,3 +191,38 @@ def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
             'fp':fpbc}
 
     return stokesmatsc, rhsvecsbc, bcdata 
+
+def expand_vp_dolfunc(femp, vp=None, vc=None, pc=None, pdof=None):
+    """expand v and p to the dolfin function representation
+    
+    pdof = pressure dof that was set zero
+    """
+
+    v = Function(femp['V'])
+    p = Function(femp['Q'])
+
+    invinds = femp['innerinds']
+
+    if vp is not None:
+        if vp.ndim == 1:
+            vc = vp[:len(invinds)].reshape(len(invinds),1)
+            pc = vp[len(invinds):].reshape(femp['Q'].dim()-1,1)
+        else:
+            vc = vp[:len(invinds),:]
+            pc = vp[len(invinds):,:]
+
+    ve = np.zeros((femp['V'].dim(),1))
+
+    # fill in the boundary values
+    for bc in femp['diribcs']:
+        bcdict = bc.get_boundary_values()
+        ve[bcdict.keys(),0] = bcdict.values()
+
+    ve[invinds] = vc
+
+    pe = np.vstack([pc,[0]])
+
+    v.vector().set_local(ve)
+    p.vector().set_local(pe)
+
+    return v, p
