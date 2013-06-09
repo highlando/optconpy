@@ -178,10 +178,6 @@ def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
 
     bcvals = auxu[bcinds]
 
-    bcdata = {'bcinds':bcinds,
-            'bcvals':bcvals,
-            'innerinds':innerinds}
-
     stokesmatsc = {'M':Mc,
             'A':Ac,
             'BT':BTc,
@@ -190,5 +186,5 @@ def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
     rhsvecsbc = {'fv':fvbc,
             'fp':fpbc}
 
-    return stokesmatsc, rhsvecsbc, bcdata 
+    return stokesmatsc, rhsvecsbc, innerinds, bcinds, bcvals
 
