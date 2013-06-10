@@ -19,10 +19,12 @@ def time_int_params(Nts):
             tE = tE,
             dt = dt, 
             Nts = Nts,
-            vpfiles = def_vpfiles(), 
+            # vpfiles = def_vpfiles(), 
             Residuals = NseResiduals(), 
             ParaviewOutput = True, 
-            nu = 1e-4)
+            nu = 1e-4,
+            nnewtsteps = 3
+            )
 
     return tip
 
@@ -44,28 +46,41 @@ def optcon_nse(N = 32, Nts = 10):
     #        os.remove( fname )
     #    os.chdir('..')
 
-    newtK, t = 0, None
     ## start with the Stokes problem for initialization
     stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], tip['nu'])
     rhsvecs = dtn.setget_rhs(femp['V'], femp['Q'], 
-            femp['fv'], femp['fp'], t=0)
+                            femp['fv'], femp['fp'], t=0)
     # reduce the matrices by resolving the BCs
     stokesmatsc, rhsvecbc, innerinds, bcinds, bcvals = dtn.condense_sysmatsbybcs(
-            stokesmats, rhsvecs, femp['diribcs'])
+                    stokesmats, rhsvecs, femp['diribcs'])
     # add the info on boundary and inner nodes 
     bcdata = {'bcinds':bcinds,
             'bcvals':bcvals,
             'innerinds':innerinds}
     femp.update(bcdata)
 
+    # some parameters 
+    NV = len(femp['innerinds'])
+    # and current values
+    newtK, t = 0, None
+
     # compute the steady state stokes solution
     vp = solvers_drivcav.stokes_steadystate(matdict=stokesmatsc,
-            rhsdict=rhsvecbc)
+                                        rhsdict=rhsvecbc)
 
-    dou.save_curv(vp[:,:len(femp['innerinds'])], 
-        fstring=get_cur_datastring(newtK, N, t, tip))
+    # save the data
+    curdatname = get_cur_datastring(newtonstp=newtk, time=t, 
+                                    meshpara=N, timeinitparams=tip)
+    dou.save_curv(vp[:,:NV], 
+                    fstring='data/'+curdatname)
+    dou.output_paraview(femp, vp=vp, 
+                    fstring='results/'+'NewtonIt{0}'.format(newtK))
 
-    dou.output_paraview(femp, vp=vp, vpfiles=tip['vpfiles'])
+    # Stokes solution as initial value
+    inivalvec = vp[:,:NV]
+
+    for newtk in range(1, tip['nnewtsteps']+1):
+
 
 
 def drivcav_fems(N):
@@ -115,19 +130,24 @@ class NseResiduals(object):
         self.PEr = []
 
 
-def def_vpfiles(name=None):
-    if name is not None:
-        vpf = {'vfile':File("results/%s_velocity.pvd" % name), 
-                'pfile':File("results/%s_pressure.pvd" % name)}
-    else:
-        vpf = {'vfile':File("results/velocity.pvd"), 
-                'pfile':File("results/pressure.pvd")}
+#def def_vpfiles(name=None):
+#    if name is not None:
+#        vpf = {'vfile':File("results/%s_velocity.pvd" % name), 
+#                'pfile':File("results/%s_pressure.pvd" % name)}
+#    else:
+#        vpf = {'vfile':File("results/velocity.pvd"), 
+#                'pfile':File("results/pressure.pvd")}
+#
+#    return vpf
 
-    return vpf
-
-def get_cur_datastring(newtK, N, t, tip):
-    # dname = 'ValSmaMinNts%dN%dtcur%e' % (Nts, N, tcur)
-    return 'woe'
+def get_cur_datastring(newtonstp=None,
+                        time=None,
+                        meshpara=None,
+                        timeinitparams=None):
+    return 'NIt{0}Time{1}Mesh{2}NTs{3}Dt{4}'.format(
+            newtonstp,time,meshpara,
+            timeinitparams['Nts'],timeinitparams['dt']
+            )
 
 if __name__ == '__main__':
     optcon_nse()

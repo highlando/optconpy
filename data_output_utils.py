@@ -37,15 +37,18 @@ def expand_vp_dolfunc(femp, vp=None, vc=None, pc=None, pdof=None):
 
     return v, p
 
-def output_paraview(femp, vp=None, t=None, vpfiles=None):
+
+def output_paraview(femp, vp=None, t=None, fstring=''):
     """write the paraview output for a solution vector vp
 
     """
+
     v, p = expand_vp_dolfunc(femp, vp=vp)
 
-    vpfiles['vfile'] << v, t
-    vpfiles['pfile'] << p, t
+    File(fstring+'_vel.pvd') << v, t
+    File(fstring+'_p.pvd') << p, t
  
+
 def save_curv(v, fstring='not specified yet'):
     savemat(fstring, { 'v': v })
 

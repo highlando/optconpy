@@ -1,11 +1,9 @@
-class myclass():
-	def __init__(self, nummber):
-		from numpy import array
-		self.a = nummber
-		def incre(x):
-			return x+1
-		self.b = incre(self.a)
-		self.c = array([1])
-	
+from scipy.io import savemat, loadmat
+import numpy as np
 
+N = 50
+arand = np.random.rand(N,N)
+
+timeit np.save('arand',arand)
+timeit arand = np.load('arand.npy')
 
