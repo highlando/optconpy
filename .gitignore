@@ -6,6 +6,7 @@
 *.vtu
 *.xml
 *.mat
+*.npy
 
 # C extensions
 *.so
