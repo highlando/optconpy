@@ -34,10 +34,11 @@ def optcon_nse(N = 32, Nts = 10):
     femp = drivcav_fems(N)
 
     ### Output
+    ddir = 'data/'
     try:
-        os.chdir('data')
+        os.chdir(ddir)
     except OSError:
-        raise Warning('need "data" subdirectory for storing the data')
+        raise Warning('need ' + ddir + 'subdirectory for storing the data')
     os.chdir('..')
 
     #if tip['ParaviewOutput']:
@@ -51,36 +52,54 @@ def optcon_nse(N = 32, Nts = 10):
     rhsvecs = dtn.setget_rhs(femp['V'], femp['Q'], 
                             femp['fv'], femp['fp'], t=0)
     # reduce the matrices by resolving the BCs
-    stokesmatsc, rhsvecbc, innerinds, bcinds, bcvals = dtn.condense_sysmatsbybcs(
-                    stokesmats, rhsvecs, femp['diribcs'])
+    (stokesmatsc, 
+            rhsvecbc, 
+            innerinds, 
+            bcinds, 
+            bcvals) = dtn.condense_sysmatsbybcs(stokesmats, 
+                                                rhsvecs, femp['diribcs'])
     # add the info on boundary and inner nodes 
     bcdata = {'bcinds':bcinds,
             'bcvals':bcvals,
             'innerinds':innerinds}
     femp.update(bcdata)
 
-    # some parameters 
-    NV = len(femp['innerinds'])
+    # casting some parameters 
+    NV, DT = len(femp['innerinds']), tip['dt']
     # and current values
-    newtK, t = 0, None
+    newtk, t = 0, None
 
     # compute the steady state stokes solution
     vp = solvers_drivcav.stokes_steadystate(matdict=stokesmatsc,
                                         rhsdict=rhsvecbc)
 
     # save the data
-    curdatname = get_cur_datastring(newtonstp=newtk, time=t, 
-                                    meshpara=N, timeinitparams=tip)
-    dou.save_curv(vp[:,:NV], 
-                    fstring='data/'+curdatname)
+    curdatname = get_datastr(nwtn=newtk, time=t, mshp=N, timps=tip)
+    dou.save_curv(vp[:,:NV], fstring=ddir+curdatname)
+    v = dou.load_curv(ddir+curdatname)
+
     dou.output_paraview(femp, vp=vp, 
-                    fstring='results/'+'NewtonIt{0}'.format(newtK))
+                    fstring='results/'+'NewtonIt{0}'.format(newtk))
 
     # Stokes solution as initial value
     inivalvec = vp[:,:NV]
 
     for newtk in range(1, tip['nnewtsteps']+1):
+        v_old = inivalvec
+        for t in np.arange(tip['t0'], tip['tE'], DT):
+            cdatstr = get_datastr(nwtn=newtk, time=t, 
+                                  meshp=N, timps=tip)
+            prevdatstr = get_datastr(nwtn=newtk-1, time=t, 
+                                     meshp=N, timps=tip)
 
+            # try - except for linearizations about stationary sols
+            # for which t=None
+            try:
+                prev_v = dou.load(ddir+prevdatstr)
+            except IOError:
+                prevdatstr = get_datastr(nwtn=newtk-1, time=None, 
+                                         meshp=N, timps=tip)
+                prev_v = dou.load(ddir+prevdatstr)
 
 
 def drivcav_fems(N):
@@ -140,13 +159,11 @@ class NseResiduals(object):
 #
 #    return vpf
 
-def get_cur_datastring(newtonstp=None,
-                        time=None,
-                        meshpara=None,
-                        timeinitparams=None):
+def get_datastr(nwtn=None, time=None, 
+                            meshp=None, timps=None):
     return 'NIt{0}Time{1}Mesh{2}NTs{3}Dt{4}'.format(
-            newtonstp,time,meshpara,
-            timeinitparams['Nts'],timeinitparams['dt']
+            nwtn, time, meshp,
+            timps['Nts'],timps['dt']
             )
 
 if __name__ == '__main__':

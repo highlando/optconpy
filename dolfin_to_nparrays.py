@@ -60,13 +60,20 @@ def get_stokessysmats( V, Q, nu): # , velbcs ):
     return stokesmats
     
 
-def get_convmats(u0,V):
+def get_convmats(u0_dolfun=None, u0_vec=None, V=None, invinds=None,
+                diribcs=None):
     """returns the matrices related to the linearized convection
 
     N1 ~ (u_0 \nabla u) v
     N2 ~ (u \nabla u_0) v
 
     where u_0 is the linearization point"""
+
+    if u0_vec is not None:
+        u0, p = expand_vp_dolfunc(vc=u0_vec, diribcs=diribcs,
+                                    invinds=invinds)
+    else:
+        u0 = u0_dolfun
 
     u = TrialFunction(V)
     v = TestFunction(V)
@@ -133,9 +140,17 @@ def get_curfv(V, fv, invinds, tcur):
     return fv[invinds,:]
 
 
-def get_convvec(u0, V):
+def get_convvec(u0_dolfun=None, V=None, u0_vec=None, femp=None):
     """return the convection vector e.g. for explicit schemes
+
+    given a dolfin function or the coefficient vector
     """
+
+    if u0_vec is not None:
+        u0, p = expand_vp_dolfunc(vc=u0_vec, diribcs=diribcs,
+                                    invinds=invinds)
+    else:
+        u0 = u0_dolfun
 
     v = TestFunction(V)
     ConvForm = inner(grad(u0)*u0, v)*dx
@@ -188,3 +203,41 @@ def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
 
     return stokesmatsc, rhsvecsbc, innerinds, bcinds, bcvals
 
+def expand_vp_dolfunc(V=None, Q=None, invinds=None, diribcs=None, vp=None,
+        vc=None, pc=None):
+    """expand v [and p] to the dolfin function representation
+    
+    pdof = pressure dof that was set zero
+
+    This function returns v as a dolfunc and - if specified - p
+    Error if:
+        - not enough input to expand v and maybe p
+        - only p is to be expanded
+    """
+
+    if vp is not None:
+        vc = vp[:len(invinds),:]
+        pc = vp[len(invinds):,:]
+        p = Function(Q)
+    elif pc is not None:
+        p = Function(Q)
+
+    v = Function(V)
+    ve = np.zeros((V.dim(),1))
+
+    # fill in the boundary values
+    for bc in diribcs:
+        bcdict = bc.get_boundary_values()
+        ve[bcdict.keys(),0] = bcdict.values()
+
+    ve[invinds] = vc
+
+    if pc is not None:
+        pe = np.vstack([pc,[0]])
+        p.vector().set_local(pe)
+    else:
+        p = None
+
+    v.vector().set_local(ve)
+
+    return v, p

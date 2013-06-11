@@ -76,11 +76,62 @@ class OptConPyFunctions(unittest.TestCase):
         ufun = project(u, self.V)
         uvec = ufun.vector().array().reshape(len(ufun.vector()), 1)
 
-        N1, N2 = dtn.get_convmats(ufun, self.V)
-        conv = dtn.get_convvec(ufun, self.V)
+        N1, N2 = dtn.get_convmats(u0_dolfun=ufun, V=self.V)
+        conv = dtn.get_convvec(u0_dolfun=ufun, V=self.V)
 
         self.assertTrue(np.allclose(conv, N1*uvec))
         self.assertTrue(np.allclose(conv, N2*uvec))
+
+    def test_expand_condense_vfuncs(self):
+        """check the expansion of vectors to dolfin funcs
+
+        """
+        from dolfin_to_nparrays import expand_vp_dolfunc
+
+        u = Expression(('x[1]','0'))
+        ufun = project(u, self.V)
+        ufuntest = project(u, self.V)
+        uvec = ufun.vector().array().reshape(len(ufun.vector()), 1)
+
+        # Boundaries
+        def top(x, on_boundary): 
+            return x[1] > 1.0 - DOLFIN_EPS 
+        def leftbotright(x, on_boundary): 
+            return ( x[0] > 1.0 - DOLFIN_EPS 
+                or x[1] < DOLFIN_EPS 
+                or x[0] < DOLFIN_EPS)
+
+        # No-slip boundary condition for velocity
+        noslip = u 
+        bc0 = DirichletBC(self.V, noslip, leftbotright)
+        # Boundary condition for velocity at the lid
+        lid = u 
+        bc1 = DirichletBC(self.V, lid, top)
+        # Collect boundary conditions
+        diribcs = [bc0, bc1]
+        bcinds = []
+        for bc in diribcs:
+            bcdict = bc.get_boundary_values()
+            bcinds.extend(bcdict.keys())
+            bc.apply(ufuntest)
+            
+        # indices of the innernodes
+        innerinds = np.setdiff1d(range(self.V.dim()), 
+                                        bcinds).astype(np.int32)
+
+        # take only the inner nodes
+        uvec_condensed = uvec[innerinds,]
+
+        v, p = expand_vp_dolfunc(V=self.V, vc=uvec_condensed,
+                invinds=innerinds, diribcs=diribcs) 
+
+        plot(ufun-ufuntest)
+
+        vvec = v.vector().array().reshape(len(v.vector()), 1)
+
+        self.assertTrue(np.allclose(uvec, vvec))
+
+
 
 if __name__ == '__main__':
     unittest.main()
