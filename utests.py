@@ -90,7 +90,6 @@ class OptConPyFunctions(unittest.TestCase):
 
         u = Expression(('x[1]','0'))
         ufun = project(u, self.V)
-        ufuntest = project(u, self.V)
         uvec = ufun.vector().array().reshape(len(ufun.vector()), 1)
 
         # Boundaries
@@ -113,7 +112,6 @@ class OptConPyFunctions(unittest.TestCase):
         for bc in diribcs:
             bcdict = bc.get_boundary_values()
             bcinds.extend(bcdict.keys())
-            bc.apply(ufuntest)
             
         # indices of the innernodes
         innerinds = np.setdiff1d(range(self.V.dim()), 
@@ -125,12 +123,9 @@ class OptConPyFunctions(unittest.TestCase):
         v, p = expand_vp_dolfunc(V=self.V, vc=uvec_condensed,
                 invinds=innerinds, diribcs=diribcs) 
 
-        plot(ufun-ufuntest)
-
         vvec = v.vector().array().reshape(len(v.vector()), 1)
 
-        self.assertTrue(np.allclose(uvec, vvec))
-
+        self.assertTrue(np.allclose(uvec, vvec, atol=1e-5))
 
 
 if __name__ == '__main__':
