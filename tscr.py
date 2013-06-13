@@ -7,8 +7,8 @@ mesh = UnitSquareMesh(64, 64)
 V = VectorFunctionSpace(mesh, "CG", 1)
 u = Expression(('x[1]','0'))
 
-ufun = project(u, V)
-ufunbc = project(u, V)
+ufun = project(u, V, solver_type='lu')
+ufunbc = project(u, V, solver_type='lu')
 
 # definition of the boundary
 def boundary(x, on_boundary): 

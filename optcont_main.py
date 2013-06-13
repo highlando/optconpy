@@ -49,15 +49,15 @@ def optcon_nse(N = 32, Nts = 10):
 
     ## start with the Stokes problem for initialization
     stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], tip['nu'])
-    rhsvecs = dtn.setget_rhs(femp['V'], femp['Q'], 
+    rhsv_vf = dtn.setget_rhs(femp['V'], femp['Q'], 
                             femp['fv'], femp['fp'], t=0)
+
     # reduce the matrices by resolving the BCs
     (stokesmatsc, 
-            rhsvecbc, 
+            rhsv_stbc, 
             innerinds, 
             bcinds, 
-            bcvals) = dtn.condense_sysmatsbybcs(stokesmats, 
-                                                rhsvecs, femp['diribcs'])
+            bcvals) = dtn.condense_sysmatsbybcs(stokesmats, femp['diribcs'])
     # add the info on boundary and inner nodes 
     bcdata = {'bcinds':bcinds,
             'bcvals':bcvals,
@@ -70,8 +70,10 @@ def optcon_nse(N = 32, Nts = 10):
     newtk, t = 0, None
 
     # compute the steady state stokes solution
+    currhsv = dict(fv=rhsv_stbc['fv']+rhs_vf['fv'],
+                        fp=rhs_stbc['fp']+rhs_vf['fp'])
     vp = solvers_drivcav.stokes_steadystate(matdict=stokesmatsc,
-                                        rhsdict=rhsvecbc)
+                                        rhsdict=currhsv)
 
     # save the data
     curdatname = get_datastr(nwtn=newtk, time=t, mshp=N, timps=tip)
@@ -89,7 +91,7 @@ def optcon_nse(N = 32, Nts = 10):
         for t in np.arange(tip['t0'], tip['tE'], DT):
             cdatstr = get_datastr(nwtn=newtk, time=t, 
                                   meshp=N, timps=tip)
-            prevdatstr = get_datastr(nwtn=newtk-1, time=t, 
+            prevdatstr = get_datastr(nwtn=newtk-1, time=t+DT, 
                                      meshp=N, timps=tip)
 
             # try - except for linearizations about stationary sols
@@ -100,6 +102,12 @@ def optcon_nse(N = 32, Nts = 10):
                 prevdatstr = get_datastr(nwtn=newtk-1, time=None, 
                                          meshp=N, timps=tip)
                 prev_v = dou.load(ddir+prevdatstr)
+
+            N1, N2 = dtn.get_convmats(u0_vec=prev_vec, V=femp['V'],
+                                        invinds=femp['innerinds'],
+                                        diribcs = femp['diribcs'])
+
+
 
 
 def drivcav_fems(N):
