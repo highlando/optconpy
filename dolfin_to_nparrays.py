@@ -70,7 +70,7 @@ def get_convmats(u0_dolfun=None, u0_vec=None, V=None, invinds=None,
     where u_0 is the linearization point"""
 
     if u0_vec is not None:
-        u0, p = expand_vp_dolfunc(vc=u0_vec, diribcs=diribcs,
+        u0, p = expand_vp_dolfunc(vc=u0_vec, V=V, diribcs=diribcs,
                                     invinds=invinds)
     else:
         u0 = u0_dolfun
@@ -81,8 +81,11 @@ def get_convmats(u0_dolfun=None, u0_vec=None, V=None, invinds=None,
     # Assemble system
     n1 = inner(grad(u)*u0, v)*dx
     n2 = inner(grad(u0)*u, v)*dx
+    f3 = inner(grad(u0)*u0, v)*dx
+
     n1 = assemble(n1)
     n2 = assemble(n2)
+    f3 = assemble(f3)
 
     # Convert DOLFIN representation to numpy arrays
     rows, cols, values = n1.data()
@@ -91,7 +94,10 @@ def get_convmats(u0_dolfun=None, u0_vec=None, V=None, invinds=None,
     rows, cols, values = n2.data()
     N2 = sps.csr_matrix((values, cols, rows))
 
-    return N1, N2
+    fv = f3.array()
+    fv = fv.reshape(len(fv), 1)
+
+    return N1, N2, fv
 
 def setget_rhs(V, Q, fv, fp, t=None):
 
@@ -147,7 +153,7 @@ def get_convvec(u0_dolfun=None, V=None, u0_vec=None, femp=None):
     """
 
     if u0_vec is not None:
-        u0, p = expand_vp_dolfunc(vc=u0_vec, diribcs=diribcs,
+        u0, p = expand_vp_dolfunc(vc=u0_vec, V=V, diribcs=diribcs,
                                     invinds=invinds)
     else:
         u0 = u0_dolfun
@@ -162,7 +168,7 @@ def get_convvec(u0_dolfun=None, V=None, u0_vec=None, femp=None):
     return ConvVec
 
 
-def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
+def condense_sysmatsbybcs(stms, velbcs):
     """resolve the Dirichlet BCs and condense the sysmats
 
     to the inner nodes
@@ -182,14 +188,14 @@ def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
     fpbc = - stms['B']*auxu
     
     # indices of the innernodes
-    innerinds = np.setdiff1d(range(nv),bcinds).astype(np.int32)
+    invinds = np.setdiff1d(range(nv),bcinds).astype(np.int32)
 
     # extract the inner nodes equation coefficients
-    Mc = stms['M'][innerinds,:][:,innerinds]
-    Ac = stms['A'][innerinds,:][:,innerinds]
-    fvbc = fvbc[innerinds,:]
-    Bc  = stms['B'][:,innerinds]
-    BTc = stms['BT'][innerinds,:]
+    Mc = stms['M'][invinds,:][:,invinds]
+    Ac = stms['A'][invinds,:][:,invinds]
+    fvbc = fvbc[invinds,:]
+    Bc  = stms['B'][:,invinds]
+    BTc = stms['BT'][invinds,:]
 
     bcvals = auxu[bcinds]
 
@@ -201,7 +207,35 @@ def condense_sysmatsbybcs(stms, rhsvecs, velbcs):
     rhsvecsbc = {'fv':fvbc,
             'fp':fpbc}
 
-    return stokesmatsc, rhsvecsbc, innerinds, bcinds, bcvals
+    return stokesmatsc, rhsvecsbc, invinds, bcinds, bcvals
+
+
+def condense_velmatsbybcs(A, velbcs):
+    """resolve the Dirichlet BCs and condense the velmats
+
+    to the inner nodes"""
+
+    nv = A.shape[0]
+
+    auxu = np.zeros((nv,1))
+    bcinds = []
+    for bc in velbcs:
+        bcdict = bc.get_boundary_values()
+        auxu[bcdict.keys(),0] = bcdict.values()
+        bcinds.extend(bcdict.keys())
+
+    # putting the bcs into the right hand sides
+    fvbc = - A*auxu    # '*' is np.dot for csr matrices
+    
+    # indices of the innernodes
+    invinds = np.setdiff1d(range(nv),bcinds).astype(np.int32)
+
+    # extract the inner nodes equation coefficients
+    Ac = A[invinds,:][:,invinds]
+    fvbc = fvbc[invinds,:]
+
+    return Ac, fvbc
+
 
 def expand_vp_dolfunc(V=None, Q=None, invinds=None, diribcs=None, vp=None,
         vc=None, pc=None):

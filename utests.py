@@ -89,7 +89,7 @@ class OptConPyFunctions(unittest.TestCase):
         from dolfin_to_nparrays import expand_vp_dolfunc
 
         u = Expression(('x[1]','0'))
-        ufun = project(u, self.V)
+        ufun = project(u, self.V, solver_type='lu')
         uvec = ufun.vector().array().reshape(len(ufun.vector()), 1)
 
         # Boundaries
@@ -125,7 +125,7 @@ class OptConPyFunctions(unittest.TestCase):
 
         vvec = v.vector().array().reshape(len(v.vector()), 1)
 
-        self.assertTrue(np.allclose(uvec, vvec, atol=1e-5))
+        self.assertTrue(np.allclose(uvec, vvec))
 
 
 if __name__ == '__main__':

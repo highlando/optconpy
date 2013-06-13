@@ -9,7 +9,8 @@ def output_paraview(femp, vp=None, t=None, fstring=''):
 
     """
 
-    v, p = dtn.expand_vp_dolfunc(femp, vp=vp)
+    v, p = expand_vp_dolfunc(V=femp['V'], Q=femp['Q'], 
+                        invinds=femp['invinds'], diribcs=femp['diribcs'],vp=vp)
 
     File(fstring+'_vel.pvd') << v, t
     File(fstring+'_p.pvd') << p, t
