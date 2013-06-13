@@ -2,13 +2,13 @@ import numpy as np
 from dolfin import *
 from dolfin_to_nparrays import expand_vp_dolfunc
 
-mesh = UnitSquareMesh(64, 64)
+mesh = UnitSquare(64, 64)
 
 V = VectorFunctionSpace(mesh, "CG", 1)
 u = Expression(('x[1]','0'))
 
-ufun = project(u, V)
-ufunbc = project(u, V)
+ufun = project(u, V, solver_type='umfpack')
+ufunbc = project(u, V, solver_type='umfpack')
 
 # definition of the boundary
 def boundary(x, on_boundary): 
