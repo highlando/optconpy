@@ -136,9 +136,6 @@ def optcon_nse(N = 24, Nts = 10):
         tip['norm_newtondif'].append(norm_newtondif)
 
 
-
-
-
 def drivcav_fems(N):
     """dictionary for the fem items of the (unit) driven cavity
 
