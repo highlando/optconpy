@@ -119,7 +119,7 @@ def optcon_nse(N = 24, Nts = 10):
                                 rhsv_conbc+rhsd_vfstbc['fv']),
                             fp=rhsd_vfstbc['fp'])
 
-        matd_cur = dict(A=stokesmatsc['M']+DT*(stokesmatsc['A']+Nc),
+            matd_cur = dict(A=stokesmatsc['M']+DT*(stokesmatsc['A']+Nc),
                             BT=stokesmatsc['BT'],
                             B=stokesmatsc['B'])
 
@@ -140,7 +140,7 @@ def drivcav_fems(N):
     """dictionary for the fem items of the (unit) driven cavity
 
     """
-    mesh = UnitSquare(N, N)
+    mesh = UnitSquareMesh(N, N)
     V = VectorFunctionSpace(mesh, "CG", 2)
     Q = FunctionSpace(mesh, "CG", 1)
     # pressure node that is set to zero

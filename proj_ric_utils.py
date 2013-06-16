@@ -1,7 +1,8 @@
 import numpy as np
 import scipy.sparse as sps
+import scipy.sparse.linalg as spsla
 
-def solve_proj_lyap_stein(A, B, W, M=None):
+def solve_proj_lyap_stein(At=None, B=None, W=None, Mt=None):
     """ approximates X that solves the projected lyap equation
 
         A*XM + M*XA + B*YM + M*Y*B = -WW*
@@ -11,36 +12,35 @@ def solve_proj_lyap_stein(A, B, W, M=None):
     by considering the equivalent Stein eqns
     and computing the first members of the 
     series converging to X
+
+    At, Mt ... is A*, M* - no transposing in this function
     """
 
     ms = [-1]
 
-    def comp_Am11invW(A, M, B, ms, W):
-        Np, NW = B.shape[0], W.shape[1]
-        SysM = sps.vstack([sps.hstack([A.T + ms.conjugate()*M.T, -B.T]),
+    def app_projinvz(At, Mt, B, ms, Z):
+        Np, NZ = B.shape[0], Z.shape[1]
+        sysm = sps.vstack([sps.hstack([At + ms.conjugate()*Mt, -B.T]),
                            sps.hstack([B,sps.csr_matrix((Np,Np))])],
-                                format='csr')
-        Zp = spsla.spsolve(SysM,np.vstack([W, np.zeros((Np,NW))]))
-        return Zp[:-Np,:]
+                                format='csc')
+        
+        # raise Warning('TODO: debug') 
+        aminv = spsla.splu(sysm)
+        # Zp = aminv.solve(np.vstack([Z, np.zeros((Np,NZ))]))
+        Zp = Z
+        return Zp #[:-Np,:]
 
-    def comp_Im11Z(A, M, B, ms, Z):
-        Np, NW = B.shape[0], W.shape[1]
-        SysM = sps.vstack([sps.hstack([A.T + ms.conjugate()*M.T, -B.T]),
-                           sps.hstack([B,sps.csr_matrix((Np,Np))])],
-                                format='csr')
-        Zp = spsla.spsolve(SysM,np.vstack([(A.T-ms*M.T)*Z, 
-                                            np.zeros((Np,NW))]))
-        return Zp[:-Np,:]
-
-    Z = comp_Am11invW(A, M, B, ms, W)
+    Z = app_projinvz(At, Mt, B, ms[0], W)
     U = Z
 
     for n in range(4):
-        Z = comp_Im11Z(A, M, B, ms, Z)
+        Z = (At - ms[0]*Mt)*Z
+        Z = app_projinvz(At, Mt, B, ms[0], Z)
         U = np.hstack([U,Z])
-        rel_err = np.norm(Z)/np.norm(U)
+        rel_err = np.linalg.norm(Z)/np.linalg.norm(U)
+        print rel_err
 
-    U = np.sqrt(-2*ms.real)*U
+    U = np.sqrt(-2*ms[0].real)*U
 
 
 
