@@ -33,30 +33,54 @@ def test_ioops():
     v = TestFunction(V)
     u = TrialFunction(U)
 
-    u1 = L2abLinBas(2,8)
-    xv = np.arange(0,1,0.05)
+    xv = np.arange(dood['xmin'], dood['xmax'], 
+                    (dood['xmax']-dood['xmin'])/10)
+
     vv = np.zeros(1)
+    bvv = np.zeros(1)
+
+    u1 = L2abLinBas(1,4)
+    Bu = Inp2Rhs(u1, dood['xmin'], dood['xmax'])
 
     for x in xv:
-        u1.eval(vv,np.array([x]))
-        print x, vv
+        u1.evaluate(vv, np.array([x]))
+        Bu.eval(bvv, np.array([x]))
+        print x, vv, bvv
 
-class L2abLinBas(Expression):
+    return u1, Bu
+
+class L2abLinBas():
     def __init__(self, num, N, a=0.0, b=1.0):
         self.dist = (b-a)/(N+1)
-        self.vert = num*self.dist
-        self.num = num
+        self.vertex = num*self.dist
+        self.num, self.N = num, N
+        self.a, self.b = a, b
 
-    def eval(self, value, x):
-        if self.vert - self.dist <= x[0] <= self.vert:
-            value[0] = 1.0 - 1.0/self.dist*(self.vert - x[0])
-        elif self.vert <= x[0] <= self.vert + self.dist:
-            value[0] = 1.0 - 1.0/self.dist*(x[0] - self.vert)
+    def evaluate(self, value, x):
+        if self.vertex - self.dist <= x[0] <= self.vertex:
+            value[0] = 1.0 - 1.0/self.dist*(self.vertex - x[0])
+        elif self.vertex <= x[0] <= self.vertex + self.dist:
+            value[0] = 1.0 - 1.0/self.dist*(x[0] - self.vertex)
         else:
             value[0] = 0
 
-    #def value_shape(self):
-    #    return (1,)
+class Inp2Rhs(Expression):
+    """ map the control defined on [u.a, u.b]
+
+    into the domain of control : [cda, cdb] """
+    def __init__(self, u, cda, cdb):
+        self.u = u 
+        self.cda, self.cdb = cda, cdb
+
+    def eval(self, value, x):
+        if x[0] < self.cda or self.cdb < x[0] :
+            raise UserWarning('x value outside domain of control')
+        # transformation of the intervals [cda, cdb] -> [a, b]
+        # via xn = m*x + d
+        m = (self.u.b - self.u.a)/(self.cdb - self.cda)
+        d = self.u.b - m*self.cdb
+
+        self.u.evaluate(value, m*x+d)
 
 
 if __name__ == '__main__':
