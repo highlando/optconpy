@@ -136,7 +136,7 @@ def optcon_nse(N = 24, Nts = 10):
         tip['norm_newtondif'].append(norm_newtondif)
 
 
-def drivcav_fems(N):
+def drivcav_fems(N, NU=None, NY=None):
     """dictionary for the fem items of the (unit) driven cavity
 
     """
@@ -152,6 +152,27 @@ def drivcav_fems(N):
         return ( x[0] > 1.0 - DOLFIN_EPS 
             or x[1] < DOLFIN_EPS 
             or x[0] < DOLFIN_EPS)
+
+    dood = dict(xmin=0.45,
+                xmax=0.55,
+                ymin=0.5,
+                ymax=0.7)
+
+    docd = dict(xmin=0.4,
+                xmax=0.6,
+                ymin=0.2,
+                ymax=0.3)
+
+    # Subdomains of Control and Observation
+    class ContDomain(SubDomain):
+        def inside(self, x, interior):
+            return (between(x[0], (dood['xmin'], dood['xmax'])) and
+                    between(x[1], (dood['ymin'], dood['ymax']))
+
+    class ObsDomain(SubDomain):
+        def inside(self, x, interior):
+            return (between(x[0], (docd['xmin'], docd['xmax'])) and
+                    between(x[1], (docd['ymin'], docd['ymax']))
 
     # No-slip boundary condition for velocity
     noslip = Constant((0.0, 0.0))
