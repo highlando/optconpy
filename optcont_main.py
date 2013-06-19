@@ -7,6 +7,7 @@ import os, glob
 import dolfin_to_nparrays as dtn
 import solvers_drivcav 
 import data_output_utils as dou
+import cont_obs_utils as cou
 
 parameters.linear_algebra_backend = 'uBLAS'
 
@@ -23,7 +24,7 @@ def time_int_params(Nts):
             Residuals = NseResiduals(), 
             ParaviewOutput = True, 
             nu = 1e-3,
-            nnewtsteps = 6,
+            nnewtsteps = 2,
             norm_nwtnupd = []
             )
 
@@ -33,6 +34,7 @@ def optcon_nse(N = 24, Nts = 10):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
+    contp = control_params()
 
     ### Output
     ddir = 'data/'
@@ -65,6 +67,11 @@ def optcon_nse(N = 24, Nts = 10):
             'invinds':invinds}
     femp.update(bcdata)
 
+    # define the control and observation operators
+    cdom = cou.ContDomain(contp['cdcoo'])
+    Ba = cou.get_inp_opa(cdom=cdom, V=femp['V'], NU=contp['NU']) 
+
+
     # casting some parameters 
     NV, DT, INVINDS = len(femp['invinds']), tip['dt'], femp['invinds']
     # and current values
@@ -88,7 +95,7 @@ def optcon_nse(N = 24, Nts = 10):
 
     for newtk in range(1, tip['nnewtsteps']+1):
         v_old = inivalvec
-        norm_newtondif = 0
+        norm_nwtnupd = 0
         for t in np.arange(tip['t0'], tip['tE'], DT):
             cdatstr = get_datastr(nwtn=newtk, time=t+DT, 
                                   meshp=N, timps=tip)
@@ -130,10 +137,12 @@ def optcon_nse(N = 24, Nts = 10):
 
             dou.save_curv(v_old, fstring=ddir+cdatstr)
 
-            norm_newtondif += DT*np.dot((v_old-prev_v).T, 
+            norm_nwtnupd += DT*np.dot((v_old-prev_v).T, 
                                         stokesmatsc['M']*(v_old-prev_v))
 
-        tip['norm_newtondif'].append(norm_newtondif)
+        tip['norm_nwtnupd'].append(norm_nwtnupd)
+
+    print tip['norm_nwtnupd']
 
 
 def drivcav_fems(N, NU=None, NY=None):
@@ -152,27 +161,6 @@ def drivcav_fems(N, NU=None, NY=None):
         return ( x[0] > 1.0 - DOLFIN_EPS 
             or x[1] < DOLFIN_EPS 
             or x[0] < DOLFIN_EPS)
-
-    dood = dict(xmin=0.45,
-                xmax=0.55,
-                ymin=0.5,
-                ymax=0.7)
-
-    docd = dict(xmin=0.4,
-                xmax=0.6,
-                ymin=0.2,
-                ymax=0.3)
-
-    # Subdomains of Control and Observation
-    class ContDomain(SubDomain):
-        def inside(self, x, interior):
-            return (between(x[0], (dood['xmin'], dood['xmax'])) and
-                    between(x[1], (dood['ymin'], dood['ymax']))
-
-    class ObsDomain(SubDomain):
-        def inside(self, x, interior):
-            return (between(x[0], (docd['xmin'], docd['xmax'])) and
-                    between(x[1], (docd['ymin'], docd['ymax']))
 
     # No-slip boundary condition for velocity
     noslip = Constant((0.0, 0.0))
@@ -195,6 +183,28 @@ def drivcav_fems(N, NU=None, NY=None):
             fp = fp)
 
     return dfems
+
+
+def control_params():
+    """define the extensions of the subdomains
+
+    of control and observation"""
+
+    NU, NY = 10, 10
+    odcoo = dict(xmin=0.45,
+                 xmax=0.55,
+                 ymin=0.5,
+                 ymax=0.7)
+
+    cdcoo = dict(xmin=0.4,
+                 xmax=0.6,
+                 ymin=0.2,
+                 ymax=0.3)
+
+    return dict(NU=NU,
+                NY=NY,
+                cdcoo=cdcoo,
+                odcoo=odcoo)
 
 
 class NseResiduals(object):

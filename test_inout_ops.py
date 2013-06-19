@@ -1,8 +1,8 @@
 from dolfin import *
 import numpy as np
 import scipy.sparse as sps
-import cont_obs_utils as cou
 
+import cont_obs_utils as cou
 
 N = 24
 mesh = UnitSquareMesh(N, N)
