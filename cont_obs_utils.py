@@ -16,8 +16,6 @@ def get_inp_opa(cdom=None, NU=8, V=None):
         ubf = L2abLinBas(nbf, NU)
         bux = Cast1Dto2D(ubf, cdom, vcomp=0, xcomp=0)
         buy = Cast1Dto2D(ubf, cdom, vcomp=1, xcomp=0)
-
-        parameters["form_compiler_parameters"]["quadrature_degree"] = 1
         bx = inner(v,bux)*dx
         by = inner(v,buy)*dx
         Bx = assemble(bx)
@@ -70,8 +68,8 @@ def get_mout_opa(odom=None, NY=8, V=None):
         Yy = Yy.array()
         Yx = Yx.reshape(1, len(Yx))
         Yy = Yy.reshape(1, len(Yy))
-        YX.append(sps.csc_matrix(Yy))
-        YY.append(sps.csc_matrix(Yx))
+        YX.append(sps.csc_matrix(Yx))
+        YY.append(sps.csc_matrix(Yy))
 
     My = ybf.massmat()
 
@@ -152,4 +150,3 @@ class Cast1Dto2D(Expression):
 
     def value_shape(self):
         return (2,)
-
