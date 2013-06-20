@@ -1,0 +1,49 @@
+\documentclass[a4paper,10pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{epsfig}
+\usepackage{amssymb,amsmath,amsthm,mathrsfs,mathtools,amscd}
+\usepackage{natbib}
+\usepackage{float}
+\usepackage[figtopcap]{subfigure}
+\usepackage[bookmarks=true]{hyperref}
+
+
+
+%\input{mathComAbb} %uses mathcomabb.tex to define commands for symbols and notations 
+
+%opening
+\title{}
+\author{Jan Heiland}
+
+\begin{document}
+\maketitle
+\tableofcontents
+%\input{mathEnv}
+
+\section{How to assemble the output}
+
+How to compute $y(s) = \frac{1}{C}\int_{xmin}^{xmax} v(x,s) dx$?
+
+I don't think there is a generic way to do this, since the (discrete) representation of $u(y)$ has to be defined beforehand. If you want it expressed in a 1D finite element basis then you can do the following
+
+\begin{enumerate}
+	\item define the 1D FEM basis $\{\phi_i(y)\}$
+	\item for every $\{\phi_i(y)\}$ define a 2D expression $b_i(x,y) = \phi_i(y)$
+	\item test every $b_i$ against your $f$ to get
+		$$ \int \int b_i(x,y)f(x,y)dxdy=\int\phi_i(y)u(y)dy =: \tilde u_i
+		$$
+	\item compute the coefficients of the expansion of $u$ in the FEM basis - $u(y) \approx \sum_i u_i \phi_i(y)$ - via
+		$$ \begin{bmatrix} \vdots \\ u_i \\ \vdots \end{bmatrix} = \mathcal M_{\phi}^{-1} \begin{bmatrix} \vdots \\ \tilde u_i \\ \vdots \end{bmatrix},
+			$$
+			where $M_\phi$ is the FEM mass matrix.
+	\end{enumerate}
+
+If you have the expression 'bi' in fenics and function 'f', then you find
+
+    'ui' = assemble('bi'*'f'*dx)
+
+\bibliographystyle{plain}
+\bibliography{}
+\end{document}
+
