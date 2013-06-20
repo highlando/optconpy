@@ -4,11 +4,11 @@ import scipy.sparse as sps
 
 import cont_obs_utils as cou
 
-N = 24
+N = 48 
 mesh = UnitSquareMesh(N, N)
 V = VectorFunctionSpace(mesh, "CG", 2)
 
-NU = 8
+NU = 2
 
 cdcoo = dict(xmin=0.4,
             xmax=0.6,

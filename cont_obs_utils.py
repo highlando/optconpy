@@ -14,8 +14,8 @@ def get_inp_opa(cdom=None, NU=8, V=None):
 
     for nbf in range(NU+1):
         ubf = L2abLinBas(nbf, NU)
-        bux = Inp2Rhs2D(ubf, cdom, comp=0)
-        buy = Inp2Rhs2D(ubf, cdom, comp=1)
+        bux = Inp2Rhs2D(ubf, cdom, vcomp=0, xcomp=0)
+        buy = Inp2Rhs2D(ubf, cdom, vcomp=1, xcomp=0)
 
         bx = inner(v,bux)*dx
         by = inner(v,buy)*dx
@@ -53,14 +53,14 @@ class L2abLinBas():
         self.num, self.N = num, N
         self.a, self.b = a, b
 
-    def evaluate(self, value, x, comp=0):
-        value[:] = 0
-        if self.vertex - self.dist <= x[0] <= self.vertex:
-            value[comp] = 1.0 - 1.0/self.dist*(self.vertex - x[0])
-        elif self.vertex <= x[0] <= self.vertex + self.dist:
-            value[comp] = 1.0 - 1.0/self.dist*(x[0] - self.vertex)
+    def evaluate(self, s):
+        if self.vertex - self.dist <= s <= self.vertex:
+            sval = 1.0 - 1.0/self.dist*(self.vertex - s)
+        elif self.vertex <= s <= self.vertex + self.dist:
+            sval = 1.0 - 1.0/self.dist*(s - self.vertex)
         else:
-            value[comp] = 0
+            sval = 0
+        return sval
 
 class Inp2Rhs2D(Expression):
     """ map the control defined on [u.a, u.b]
@@ -69,20 +69,24 @@ class Inp2Rhs2D(Expression):
     defined on the control domain cdom
     """
 
-    def __init__(self, u, cdom, comp=0):
+    def __init__(self, u, cdom, vcomp=0, xcomp=0):
+        # control 1D basis function
         self.u = u 
-        self.comp = comp
+        # domain of control
         self.cdom = cdom
+        # component of the value to be set as u(s)
+        self.vcomp = vcomp
+        # component of x to be considered as s coordinate 
+        self.xcomp = xcomp
         # transformation of the intervals [cd.xmin, cd.xmax] -> [a, b]
-        # via xn = m*x + d
+        # via s = m*x + d
         self.m = (self.u.b - self.u.a)/(cdom.xmax - cdom.xmin)
         self.d = self.u.b - self.m*cdom.xmax
 
     def eval(self, value, x):
-        if not self.cdom.inside(x, False):
-            value[:] = 0
-        else:
-            self.u.evaluate(value, self.m*x+self.d, comp=self.comp)
+        value[:] = 0
+        if self.cdom.inside(x, False):
+            value[self.vcomp] = self.u.evaluate(self.m*x[self.xcomp]+self.d)
 
     def value_shape(self):
         return (2,)
