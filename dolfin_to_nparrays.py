@@ -9,8 +9,8 @@ def get_stokessysmats( V, Q, nu): # , velbcs ):
 
     in mixed FEM formulation, namely
         
-        [ A  B' ] as [ Aa   Grada ] : W -> W'
-        [ B  0  ]    [ Diva   0   ]
+        [ A  J' ] as [ Aa   Grada ] : W -> W'
+        [ J  0  ]    [ Diva   0   ]
         
     for a given trial and test space W = V * Q and boundary conds.
     
@@ -46,15 +46,15 @@ def get_stokessysmats( V, Q, nu): # , velbcs ):
     Aa = sps.csr_matrix((values, cols, rows))
 
     rows, cols, values = Grad.data()
-    BTa = sps.csr_matrix((values, cols, rows))
+    JTa = sps.csr_matrix((values, cols, rows))
 
     rows, cols, values = Div.data()
-    Ba = sps.csr_matrix((values, cols, rows))
+    Ja = sps.csr_matrix((values, cols, rows))
 
     stokesmats = {'M':Ma,
             'A':Aa,
-            'BT':BTa,
-            'B':Ba,
+            'JT':JTa,
+            'J':Ja,
             'MP':MPa}
 
     return stokesmats
@@ -185,7 +185,7 @@ def condense_sysmatsbybcs(stms, velbcs):
 
     # putting the bcs into the right hand sides
     fvbc = - stms['A']*auxu    # '*' is np.dot for csr matrices
-    fpbc = - stms['B']*auxu
+    fpbc = - stms['J']*auxu
     
     # indices of the innernodes
     invinds = np.setdiff1d(range(nv),bcinds).astype(np.int32)
@@ -194,15 +194,15 @@ def condense_sysmatsbybcs(stms, velbcs):
     Mc = stms['M'][invinds,:][:,invinds]
     Ac = stms['A'][invinds,:][:,invinds]
     fvbc = fvbc[invinds,:]
-    Bc  = stms['B'][:,invinds]
-    BTc = stms['BT'][invinds,:]
+    Jc  = stms['J'][:,invinds]
+    JTc = stms['JT'][invinds,:]
 
     bcvals = auxu[bcinds]
 
     stokesmatsc = {'M':Mc,
             'A':Ac,
-            'BT':BTc,
-            'B':Bc}
+            'JT':JTc,
+            'J':Jc}
 
     rhsvecsbc = {'fv':fvbc,
             'fp':fpbc}

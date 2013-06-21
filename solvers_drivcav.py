@@ -15,14 +15,14 @@ def stokes_steadystate(matdict=None, rhsdict=None, add_a=None):
 
     if add_a is not None:
         SysM1 = sps.hstack([matdict['A']+add_a, 
-            -matdict['BT']],format='csr')
+            -matdict['JT']],format='csr')
     else:
-        SysM1 = sps.hstack([matdict['A'], -matdict['BT']],format='csr')
+        SysM1 = sps.hstack([matdict['A'], -matdict['JT']],format='csr')
 
-    SysM2 = sps.hstack([matdict['B'],sps.csr_matrix((Np,Np))],format='csr')
-    A = sps.vstack([SysM1,SysM2],format='csr')[:-1,:][:,:-1]
+    SysM2 = sps.hstack([matdict['J'],sps.csr_matrix((Np,Np))],format='csr')
+    A = sps.vstack([SysM1,SysM2],format='csr')
 
-    rhs = np.vstack([rhsdict['fv'], rhsdict['fp'][:-1]])
+    rhs = np.vstack([rhsdict['fv'], rhsdict['fp']])
 
     vp = np.atleast_2d(spsla.spsolve(A,rhs)).T
 

@@ -30,7 +30,7 @@ def time_int_params(Nts):
 
     return tip
 
-def optcon_nse(N = 24, Nts = 10):
+def optcon_nse(N = 20, Nts = 10):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
@@ -55,6 +55,11 @@ def optcon_nse(N = 24, Nts = 10):
     rhsd_vf = dtn.setget_rhs(femp['V'], femp['Q'], 
                             femp['fv'], femp['fp'], t=0)
 
+    # remove the freedom in the pressure 
+    stokesmats['J'] = stokesmats['J'][:-1,:][:,:]
+    stokesmats['JT'] = stokesmats['JT'][:,:-1][:,:]
+    rhsd_vf['fp'] = rhsd_vf['fp'][:-1,:]
+
     # reduce the matrices by resolving the BCs
     (stokesmatsc, 
             rhsd_stbc, 
@@ -70,6 +75,13 @@ def optcon_nse(N = 24, Nts = 10):
     # define the control and observation operators
     cdom = cou.ContDomain(contp['cdcoo'])
     Ba = cou.get_inp_opa(cdom=cdom, V=femp['V'], NU=contp['NU']) 
+    Ba = Ba[invinds,:][:,:]
+
+    odom = cou.ContDomain(contp['odcoo'])
+    MyC, My = cou.get_mout_opa(odom=odom, V=femp['V'], NY=contp['NY'])
+    MyC = MyC[:,invinds][:,:]
+    C = cou.get_regularzd_c(MyC, My, J=stokesmatsc['J'], M=stokesmatsc['M'])
+    raise Warning('STOP: in the name of love') 
 
 
     # casting some parameters 
@@ -127,8 +139,8 @@ def optcon_nse(N = 24, Nts = 10):
                             fp=rhsd_vfstbc['fp'])
 
             matd_cur = dict(A=stokesmatsc['M']+DT*(stokesmatsc['A']+Nc),
-                            BT=stokesmatsc['BT'],
-                            B=stokesmatsc['B'])
+                            JT=stokesmatsc['JT'],
+                            J=stokesmatsc['J'])
 
             vp = solvers_drivcav.stokes_steadystate(matdict=matd_cur,
                                                     rhsdict=rhsd_cur)
@@ -190,7 +202,7 @@ def control_params():
 
     of control and observation"""
 
-    NU, NY = 10, 10
+    NU, NY = 10, 7
     odcoo = dict(xmin=0.45,
                  xmax=0.55,
                  ymin=0.5,

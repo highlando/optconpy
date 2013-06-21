@@ -6,7 +6,7 @@ import scipy.sparse.linalg as spsla
 import cont_obs_utils as cou
 parameters.linear_algebra_backend = "uBLAS"
 
-N = 40
+N = 20
 mesh = UnitSquareMesh(N, N)
 V = VectorFunctionSpace(mesh, "CG", 2)
 
