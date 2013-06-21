@@ -97,7 +97,7 @@ def get_regularzd_c(MyC, My, J=None, M=None):
         MC = MyC - MC*J 
         #My is small
         MyI = spsla.inv(My)
-        tC = MyI*MC
+        tC = MyI*(MyC - MC)
         np.save('data/tildeCNY{0}vdim{1}.npy'.format(NY, Nv), tC)
 
     return tC
