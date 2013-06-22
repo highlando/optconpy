@@ -158,7 +158,7 @@ class OptConPyFunctions(unittest.TestCase):
         Mv = sps.csr_matrix((values, cols, rows))
 
         # check the B
-        B = cou.get_inp_opa(cdom=cdom, V=V, NU=NU) 
+        B, Mu = cou.get_inp_opa(cdom=cdom, V=V, NU=NU) 
 
         # get mass mat
         v, w = TrialFunction(V), TestFunction(V)

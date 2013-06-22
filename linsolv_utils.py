@@ -28,3 +28,21 @@ def stokes_steadystate(matdict=None, rhsdict=None, add_a=None):
 
     return vp
 
+def apply_massinv(M, rhsa):
+    """ inverse of mass or any other spd matrix applied
+
+    to a rhs array 
+    TODO: check cases for CG, spsolve, 
+    """
+
+    return spsla.spsolve(M, rhsa):
+
+def apply_massinvsqrt_fromleft(M, rhsa):
+    """apply the sqrt of the inverse of a mass matrix or other spd 
+
+    """
+    Z = scipy.linalg.cholesky(M.todense())
+    # R = Z.T*Z  <-> R^-1 = Z^-1*Z.-T
+    return rhsa*np.linalg.inv(Chf)
+
+

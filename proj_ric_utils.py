@@ -2,18 +2,18 @@ import numpy as np
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 
-def solve_proj_lyap_stein(At=None, B=None, W=None, Mt=None):
+def solve_proj_lyap_stein(At=None, B=None, W=None, Mt=None, nadisteps=30):
     """ approximates X that solves the projected lyap equation
 
-        A*XM + M*XA + B*YM + M*Y*B = -WW*
+        A.T*X*M + M.T*X*A + B.T*Y*M + M.T*Y.T*B = -W*W.T
 
-        BXM = 0    and    M*XB* = 0 
+        B*X*M = 0    and    M.T*X*B.T = 0 
 
     by considering the equivalent Stein eqns
     and computing the first members of the 
     series converging to X
 
-    At, Mt ... is A*, M* - no transposing in this function
+    At, Mt ... is A.T, M.T - no transposing in this function
     """
 
     ms = [-10]
@@ -48,7 +48,7 @@ def solve_proj_lyap_stein(At=None, B=None, W=None, Mt=None):
     Z = _app_projinvz(W, At=At, Mt=Mt, B=B, ms=ms[0])
     U = Z
 
-    for n in range(49):
+    for n in range(nadisteps):
         Z = (At - ms[0]*Mt)*Z
         Z = _app_projinvz(Z, At=At, Mt=Mt, B=B, ms=ms[0])
         print Z.shape

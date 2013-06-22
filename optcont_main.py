@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import os, glob
 
 import dolfin_to_nparrays as dtn
-import solvers_drivcav 
+import linsolv_utils
 import data_output_utils as dou
 import cont_obs_utils as cou
 
@@ -24,8 +24,10 @@ def time_int_params(Nts):
             Residuals = NseResiduals(), 
             ParaviewOutput = True, 
             nu = 1e-3,
-            nnewtsteps = 2,
-            norm_nwtnupd = []
+            nnewtsteps = 1,
+            norm_nwtnupd = [],
+            # parameters for the Newton-ADI
+            nnwtadisteps = 3
             )
 
     return tip
@@ -34,7 +36,7 @@ def optcon_nse(N = 20, Nts = 10):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
-    contp = control_params()
+    contp = inout_params()
 
     ### Output
     ddir = 'data/'
@@ -74,15 +76,14 @@ def optcon_nse(N = 20, Nts = 10):
 
     # define the control and observation operators
     cdom = cou.ContDomain(contp['cdcoo'])
-    Ba = cou.get_inp_opa(cdom=cdom, V=femp['V'], NU=contp['NU']) 
+    Ba, Mu = cou.get_inp_opa(cdom=cdom, V=femp['V'], NU=contp['NU']) 
     Ba = Ba[invinds,:][:,:]
 
     odom = cou.ContDomain(contp['odcoo'])
     MyC, My = cou.get_mout_opa(odom=odom, V=femp['V'], NY=contp['NY'])
     MyC = MyC[:,invinds][:,:]
     C = cou.get_regularzd_c(MyC, My, J=stokesmatsc['J'], M=stokesmatsc['M'])
-    raise Warning('STOP: in the name of love') 
-
+    # raise Warning('STOP: in the name of love') 
 
     # casting some parameters 
     NV, DT, INVINDS = len(femp['invinds']), tip['dt'], femp['invinds']
@@ -97,7 +98,7 @@ def optcon_nse(N = 20, Nts = 10):
 
     # save the data
     curdatname = get_datastr(nwtn=newtk, time=t, meshp=N, timps=tip)
-    dou.save_curv(vp[:NV,], fstring=ddir+curdatname)
+    dou.save_curv(vp[:NV,], fstring=ddir+'vel'+curdatname)
 
     dou.output_paraview(femp, vp=vp, 
                     fstring='results/'+'NewtonIt{0}'.format(newtk))
@@ -119,11 +120,11 @@ def optcon_nse(N = 20, Nts = 10):
             # try - except for linearizations about stationary sols
             # for which t=None
             try:
-                prev_v = dou.load_curv(ddir+pdatstr)
+                prev_v = dou.load_curv(ddir+'vel'+pdatstr)
             except IOError:
                 pdatstr = get_datastr(nwtn=newtk-1, time=None, 
                                          meshp=N, timps=tip)
-                prev_v = dou.load_curv(ddir+pdatstr)
+                prev_v = dou.load_curv(ddir+'vel'+pdatstr)
 
             # get and condense the linearized convection
             # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
@@ -147,7 +148,7 @@ def optcon_nse(N = 20, Nts = 10):
 
             v_old = vp[:NV,]
 
-            dou.save_curv(v_old, fstring=ddir+cdatstr)
+            dou.save_curv(v_old, fstring=ddir+'vel'+cdatstr)
 
             norm_nwtnupd += DT*np.dot((v_old-prev_v).T, 
                                         stokesmatsc['M']*(v_old-prev_v))
@@ -155,6 +156,47 @@ def optcon_nse(N = 20, Nts = 10):
         tip['norm_nwtnupd'].append(norm_nwtnupd)
 
     print tip['norm_nwtnupd']
+
+## solve the differential-alg. Riccati eqn for the feedback gain X
+#  via computing factors Z, such that X = -Z*Z.T
+
+    # tB = BR^{-1/2}
+    tB = linsolv_utils.apply_massinvsqrtfromleft(R, B)
+    tCT = linsolv_utils.apply_massinvsqrtfromleft(My, MyC.T)
+
+    t = tE
+    Zp = linsolv_utils.apply_massinv(stokesmatsc['M'], tCT)
+
+    cdatstr = get_datastr(nwtn=newtk, time=DT, 
+                          meshp=N, timps=tip)
+
+    dou.save_curv(Z, fstring=ddir+'Z'+cdatstr) 
+
+    for t in np.linspace(tE-DT, t0, np.round((tE-t0)/DT)):
+        Zcn = np.copy(Zp) # starting value for Newton-ADI iteration
+        for nnwtadi in range(tip['nnwtadisteps']):
+            cmtxtb = M.T*np.dot(Zcn, Zcn.T*tB)
+            crhsadi = np.hstack([stokesmatsc['M']*Zp,
+                      np.hstack([np.sqrt(DT)*cmtxtb, tCT])])
+
+            # get the current convection matrices 
+            cdatstr = get_datastr(nwtn=newtk, time=t, 
+                                  meshp=N, timps=tip)
+            # try - except for linearizations about stationary sols
+            # for which t=None
+            try:
+                prev_v = dou.load_curv(ddir+'vel'+pdatstr)
+            except IOError:
+                pdatstr = get_datastr(nwtn=newtk-1, time=None, 
+                                         meshp=N, timps=tip)
+                prev_v = dou.load_curv(ddir+'vel'+pdatstr)
+            # get and condense the linearized convection
+            # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
+            N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
+                                            invinds=femp['invinds'],
+                                            diribcs = femp['diribcs'])
+            Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1+N2,
+                                                        femp['diribcs'])
 
 
 def drivcav_fems(N, NU=None, NY=None):
@@ -197,7 +239,7 @@ def drivcav_fems(N, NU=None, NY=None):
     return dfems
 
 
-def control_params():
+def inout_params():
     """define the extensions of the subdomains
 
     of control and observation"""

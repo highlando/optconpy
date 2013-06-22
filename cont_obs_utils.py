@@ -28,7 +28,9 @@ def get_inp_opa(cdom=None, NU=8, V=None):
         BX.append(sps.csc_matrix(By))
         BY.append(sps.csc_matrix(Bx))
 
-    return sps.hstack([sps.hstack(BX), sps.hstack(BY)], format='csc')
+    Mu = ubf.massmat()
+
+    return sps.hstack([sps.hstack(BX), sps.hstack(BY)], format='csc'), sps.block_diag([Mu,Mu])
 
 def get_mout_opa(odom=None, NY=8, V=None): 
     """assemble the 'MyC' matrix
@@ -75,6 +77,8 @@ def get_mout_opa(odom=None, NY=8, V=None):
     My = ybf.massmat()
 
     return sps.vstack([sps.vstack(YX), sps.vstack(YY)], format='csc'), sps.block_diag([My,My])
+
+
 
 def get_regularzd_c(MyC, My, J=None, M=None):
     """apply the regularization (projection to divfree vels)
