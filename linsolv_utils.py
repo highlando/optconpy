@@ -1,4 +1,5 @@
 import numpy as np
+import scipy
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 import krypy.linsys
@@ -28,21 +29,37 @@ def stokes_steadystate(matdict=None, rhsdict=None, add_a=None):
 
     return vp
 
-def apply_massinv(M, rhsa):
+def apply_massinv(M, rhsa, output=None):
     """ inverse of mass or any other spd matrix applied
 
     to a rhs array 
     TODO: check cases for CG, spsolve, 
     """
+    if output=='sparse':
+        return spsla.spsolve(M, rhsa)
 
-    return spsla.spsolve(M, rhsa):
+    else:
+        mlu = spsla.splu(M)
+        try:
+            mirhs = np.copy(rhsa.todense())
+        except AttributeError:
+            mirhs = np.copy(rhsa)
 
-def apply_massinvsqrt_fromleft(M, rhsa):
+        for ccol in range(mirhs.shape[1]):
+            mirhs[:,ccol] = mlu.solve(mirhs[:,ccol])
+
+        return mirhs
+
+
+def apply_invsqrt_fromleft(M, rhsa, output=None):
     """apply the sqrt of the inverse of a mass matrix or other spd 
 
     """
     Z = scipy.linalg.cholesky(M.todense())
     # R = Z.T*Z  <-> R^-1 = Z^-1*Z.-T
-    return rhsa*np.linalg.inv(Chf)
+    if output=='sparse':
+        return sps.csc_matrix(rhsa*np.linalg.inv(Z))
+    else:
+        return rhsa*np.linalg.inv(Z)
 
 

@@ -8,6 +8,7 @@ import dolfin_to_nparrays as dtn
 import linsolv_utils
 import data_output_utils as dou
 import cont_obs_utils as cou
+import proj_ric_utils as pru
 
 parameters.linear_algebra_backend = 'uBLAS'
 
@@ -27,16 +28,16 @@ def time_int_params(Nts):
             nnewtsteps = 1,
             norm_nwtnupd = [],
             # parameters for the Newton-ADI
-            nnwtadisteps = 3
+            nnwtadisteps = 1
             )
 
     return tip
 
-def optcon_nse(N = 20, Nts = 10):
+def optcon_nse(N = 20, Nts = 4):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
-    contp = inout_params()
+    contp = cont_params()
 
     ### Output
     ddir = 'data/'
@@ -84,6 +85,14 @@ def optcon_nse(N = 20, Nts = 10):
     MyC = MyC[:,invinds][:,:]
     C = cou.get_regularzd_c(MyC, My, J=stokesmatsc['J'], M=stokesmatsc['M'])
     # raise Warning('STOP: in the name of love') 
+    # set the weighing matrices
+    if contp['R'] is None:
+        contp['R'] = contp['alphau']*Mu
+    # TODO: by now we tacitly assume that V, W = MyC.T My^-1 MyC
+    # if contp['V'] is None:
+    #     contp['V'] = My
+    # if contp['W'] is None:
+    #     contp['W'] = My
 
     # casting some parameters 
     NV, DT, INVINDS = len(femp['invinds']), tip['dt'], femp['invinds']
@@ -93,7 +102,7 @@ def optcon_nse(N = 20, Nts = 10):
     # compute the steady state stokes solution
     rhsd_vfstbc = dict(fv=rhsd_stbc['fv']+rhsd_vf['fv'][INVINDS,],
                         fp=rhsd_stbc['fp']+rhsd_vf['fp'])
-    vp = solvers_drivcav.stokes_steadystate(matdict=stokesmatsc,
+    vp = linsolv_utils.stokes_steadystate(matdict=stokesmatsc,
                                         rhsdict=rhsd_vfstbc)
 
     # save the data
@@ -143,7 +152,7 @@ def optcon_nse(N = 20, Nts = 10):
                             JT=stokesmatsc['JT'],
                             J=stokesmatsc['J'])
 
-            vp = solvers_drivcav.stokes_steadystate(matdict=matd_cur,
+            vp = linsolv_utils.stokes_steadystate(matdict=matd_cur,
                                                     rhsdict=rhsd_cur)
 
             v_old = vp[:NV,]
@@ -160,43 +169,60 @@ def optcon_nse(N = 20, Nts = 10):
 ## solve the differential-alg. Riccati eqn for the feedback gain X
 #  via computing factors Z, such that X = -Z*Z.T
 
-    # tB = BR^{-1/2}
-    tB = linsolv_utils.apply_massinvsqrtfromleft(R, B)
-    tCT = linsolv_utils.apply_massinvsqrtfromleft(My, MyC.T)
+    # we will need a lot transposes, and explicit is better than expl
+    stokesmatsc.update(dict(MT=stokesmatsc['M'], AT=stokesmatsc['A']))
 
-    t = tE
+    # tB = BR^{-1/2}
+    tB = linsolv_utils.apply_invsqrt_fromleft(contp['R'], Ba,
+                                              output='sparse')
+    tCT = linsolv_utils.apply_invsqrt_fromleft(My, MyC.T, output='dense')
+
+    t = tip['tE']
     Zp = linsolv_utils.apply_massinv(stokesmatsc['M'], tCT)
 
     cdatstr = get_datastr(nwtn=newtk, time=DT, 
                           meshp=N, timps=tip)
 
-    dou.save_curv(Z, fstring=ddir+'Z'+cdatstr) 
+    dou.save_curv(Zp, fstring=ddir+'Z'+cdatstr) 
 
-    for t in np.linspace(tE-DT, t0, np.round((tE-t0)/DT)):
-        Zcn = np.copy(Zp) # starting value for Newton-ADI iteration
+    for t in np.linspace(tip['tE']-DT, tip['t0'],
+                            np.round((tip['tE']-tip['t0'])/DT)):
+        # get the current convection matrices 
+        cdatstr = get_datastr(nwtn=newtk, time=t, 
+                              meshp=N, timps=tip)
+        # try - except for linearizations about stationary sols
+        # for which t=None
+        try:
+            prev_v = dou.load_curv(ddir+'vel'+pdatstr)
+        except IOError:
+            pdatstr = get_datastr(nwtn=newtk-1, time=None, 
+                                     meshp=N, timps=tip)
+            prev_v = dou.load_curv(ddir+'vel'+pdatstr)
+        # get and condense the linearized convection
+        # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
+        N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
+                                        invinds=femp['invinds'],
+                                        diribcs = femp['diribcs'])
+        Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1+N2,
+                                                    femp['diribcs'])
+
+        # starting value for Newton-ADI iteration
+        Zcn = np.copy(Zp)
         for nnwtadi in range(tip['nnwtadisteps']):
-            cmtxtb = M.T*np.dot(Zcn, Zcn.T*tB)
-            crhsadi = np.hstack([stokesmatsc['M']*Zp,
+            cmtxtb = stokesmatsc['MT']*np.dot(Zcn, Zcn.T*tB)
+            crhsadi = np.hstack([stokesmatsc['MT']*Zp,
                       np.hstack([np.sqrt(DT)*cmtxtb, tCT])])
 
-            # get the current convection matrices 
-            cdatstr = get_datastr(nwtn=newtk, time=t, 
-                                  meshp=N, timps=tip)
-            # try - except for linearizations about stationary sols
-            # for which t=None
-            try:
-                prev_v = dou.load_curv(ddir+'vel'+pdatstr)
-            except IOError:
-                pdatstr = get_datastr(nwtn=newtk-1, time=None, 
-                                         meshp=N, timps=tip)
-                prev_v = dou.load_curv(ddir+'vel'+pdatstr)
-            # get and condense the linearized convection
-            # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
-            N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
-                                            invinds=femp['invinds'],
-                                            diribcs = femp['diribcs'])
-            Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1+N2,
-                                                        femp['diribcs'])
+
+            mTzzTg = pru.get_mTzzG(stokesmatsc['MT'], Zcn, tB)
+
+            lyapAT = 0.5*stokesmatsc['MT'] + DT*(stokesmatsc['AT'] 
+                                                + Nc.T + mTzzTg)
+
+            Zcn = pru.solve_proj_lyap_stein(At=lyapAT, Mt=stokesmatsc['MT'],
+                                            J=stokesmatsc['J'], W=crhsadi)
+
+        dou.save_curv(Zcn, fstring=ddir+'Z'+cdatstr) 
 
 
 def drivcav_fems(N, NU=None, NY=None):
@@ -239,10 +265,15 @@ def drivcav_fems(N, NU=None, NY=None):
     return dfems
 
 
-def inout_params():
-    """define the extensions of the subdomains
+def cont_params():
+    """define the parameters of the control problem 
 
-    of control and observation"""
+    as there are
+    - dimensions of in and output space
+    - extensions of the subdomains of control and observation
+    - weighting matrices (if None, then massmatrix)
+    - desired output
+    """
 
     NU, NY = 10, 7
     odcoo = dict(xmin=0.45,
@@ -258,8 +289,13 @@ def inout_params():
     return dict(NU=NU,
                 NY=NY,
                 cdcoo=cdcoo,
-                odcoo=odcoo)
-
+                odcoo=odcoo,
+                R=None, 
+                # regularization parameter
+                alphau=1e-4,
+                vstar=None,
+                V=None,
+                W=None)
 
 class NseResiduals(object):
     def __init__(self):

@@ -2,12 +2,12 @@ import numpy as np
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 
-def solve_proj_lyap_stein(At=None, B=None, W=None, Mt=None, nadisteps=30):
+def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None, nadisteps=30):
     """ approximates X that solves the projected lyap equation
 
-        A.T*X*M + M.T*X*A + B.T*Y*M + M.T*Y.T*B = -W*W.T
+        A.T*X*M + M.T*X*A + J.T*Y*M + M.T*Y.T*J = -W*W.T
 
-        B*X*M = 0    and    M.T*X*B.T = 0 
+        J*X*M = 0    and    M.T*X*J.T = 0 
 
     by considering the equivalent Stein eqns
     and computing the first members of the 
@@ -18,39 +18,70 @@ def solve_proj_lyap_stein(At=None, B=None, W=None, Mt=None, nadisteps=30):
 
     ms = [-10]
 
-    def get_aminv(At, Mt, B, ms):
+    raise Warning('TODO: debug') 
+
+    def get_aminv(At, Mt, J, ms):
         """compute the LU of the projection matrix 
 
         """
-        Np = B.shape[0]
-        sysm = sps.vstack([sps.hstack([At + ms.conjugate()*Mt, -B.T]),
-                           sps.hstack([B,sps.csr_matrix((Np,Np))])],
+        Np = J.shape[0]
+        sysm = sps.vstack([sps.hstack([At + ms.conjugate()*Mt, -J.T]),
+                           sps.hstack([J,sps.csr_matrix((Np,Np))])],
                                 format='csc')
         return spsla.splu(sysm)
 
-    def _app_projinvz(Z, At=None, Mt=None, B=None, ms=None, aminv=None):
+    def get_Sinv_smw(Alu,U,V):
+        """ compute (the small) inverse of I-V.T*Ainv*U
+        """
+        aiu = np.zeros(U.shape)
+        for ccol in range(U.shape[1]):
+            aiu[:,ccol] = Alu.solve(U[:,ccol])
+        return np.linalg.inv(np.eye(U.shape[1])-np.dot(V.T,aiu))
 
-        # raise Warning('TODO: debug') 
+
+    def semisparse_inv_via_smw(Alu, U, V, rhs, Sinv=None):
+    """compute the sherman morrison woodbury inverse 
+
+    of A - np.dot(U,V.T) applied to rhs. 
+    """
+    if Sinv is None:
+        Sinv = get_Sinv_smw(Alu,U,V)
+
+    auvirhs = np.zeros(rhs.shape)
+    for rhscol in range(rhs.shape[1]):
+        crhs = rhs[:,rhscol]
+        # the corrected rhs: (I + U*Sinv*VT*Ainv)*rhs
+        crhs = crhs + np.dot(U, np.dot(Sinv, 
+                                    np.dot(V.T, Alu.solve(crhs))))
+        auvirhs[:,rhscol] = Alu.solve(crhs)
+
+    return auvirhs
+
+
+    def _app_projinvz(Z, At=None, Mt=None, J=None, ms=None, aminv=None):
 
         if aminv is None:
-            aminv = get_aminv(At, Mt, B, ms)
+            aminv = get_aminv(At, Mt, J, ms)
 
         NZ = Z.shape[0]
 
         Zp = np.zeros(Z.shape)
-        zcol = np.zeros(NZ+B.shape[0])
+        zcol = np.zeros(NZ+J.shape[0])
         for ccol in range(Z.shape[1]):
             zcol[:NZ] = Z[:NZ,ccol]
             Zp[:,ccol] = aminv.solve(zcol)[:NZ]
 
         return Zp 
 
-    Z = _app_projinvz(W, At=At, Mt=Mt, B=B, ms=ms[0])
+    Alu = get_aminv(At, Mt, J, ms[0])
+
+    Z = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
     U = Z
 
     for n in range(nadisteps):
         Z = (At - ms[0]*Mt)*Z
-        Z = _app_projinvz(Z, At=At, Mt=Mt, B=B, ms=ms[0])
+        # raise Warning('TODO: debug') 
+        Z = _app_projinvz(Z, At=At, Mt=Mt, J=J, ms=ms[0])
         print Z.shape
         print U.shape
         U = np.hstack([U,Z])
@@ -58,6 +89,15 @@ def solve_proj_lyap_stein(At=None, B=None, W=None, Mt=None, nadisteps=30):
         print rel_err
 
     U = np.sqrt(-2*ms[0].real)*U
+
+def get_mTzzG(MT, Z, tB):
+    """ compute the lyapunov coefficient related to the linearization
+
+    TODO: 
+    - sparse or dense
+    - return just a factor
+    """
+    return (MT*(np.dot(Z,(Z.T*tB))))*tB.T
 
 
 
