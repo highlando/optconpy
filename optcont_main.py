@@ -28,12 +28,13 @@ def time_int_params(Nts):
             nnewtsteps = 1,
             norm_nwtnupd = [],
             # parameters for the Newton-ADI
-            nnwtadisteps = 1
+            nnwtadisteps = 2,
+            nadisteps = 10
             )
 
     return tip
 
-def optcon_nse(N = 20, Nts = 4):
+def optcon_nse(N = 10, Nts = 4, compvels=True):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
@@ -69,6 +70,10 @@ def optcon_nse(N = 20, Nts = 4):
             invinds, 
             bcinds, 
             bcvals) = dtn.condense_sysmatsbybcs(stokesmats, femp['diribcs'])
+    # we will need transposes, and explicit is better than implicit
+    # here, the coefficient matrices are symmetric
+    stokesmatsc.update(dict(MT=stokesmatsc['M'], AT=stokesmatsc['A']))
+
     # add the info on boundary and inner nodes 
     bcdata = {'bcinds':bcinds,
             'bcvals':bcvals,
@@ -77,14 +82,17 @@ def optcon_nse(N = 20, Nts = 4):
 
     # define the control and observation operators
     cdom = cou.ContDomain(contp['cdcoo'])
-    Ba, Mu = cou.get_inp_opa(cdom=cdom, V=femp['V'], NU=contp['NU']) 
+    Ba, Mu = cou.get_inp_opa(cdom=cdom, V=femp['V'],
+                             NU=contp['NU']) 
     Ba = Ba[invinds,:][:,:]
 
     odom = cou.ContDomain(contp['odcoo'])
-    MyC, My = cou.get_mout_opa(odom=odom, V=femp['V'], NY=contp['NY'])
+    MyC, My = cou.get_mout_opa(odom=odom, V=femp['V'],
+                               NY=contp['NY'])
     MyC = MyC[:,invinds][:,:]
-    C = cou.get_regularzd_c(MyC, My, J=stokesmatsc['J'], M=stokesmatsc['M'])
-    # raise Warning('STOP: in the name of love') 
+    C = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'], 
+                            Mt=stokesmatsc['MT'])
+
     # set the weighing matrices
     if contp['R'] is None:
         contp['R'] = contp['alphau']*Mu
@@ -115,62 +123,62 @@ def optcon_nse(N = 20, Nts = 4):
     # Stokes solution as initial value
     inivalvec = vp[:NV,]
 
-    for newtk in range(1, tip['nnewtsteps']+1):
-        v_old = inivalvec
-        norm_nwtnupd = 0
-        for t in np.arange(tip['t0'], tip['tE'], DT):
-            cdatstr = get_datastr(nwtn=newtk, time=t+DT, 
-                                  meshp=N, timps=tip)
 
-            # t+DT for implicit scheme
-            pdatstr = get_datastr(nwtn=newtk-1, time=t+DT, 
-                                     meshp=N, timps=tip)
+## Compute the time-dependent flow
+    if compvels:
+        for newtk in range(1, tip['nnewtsteps']+1):
+            v_old = inivalvec
+            norm_nwtnupd = 0
+            for t in np.arange(tip['t0'], tip['tE'], DT):
+                cdatstr = get_datastr(nwtn=newtk, time=t+DT, 
+                                      meshp=N, timps=tip)
 
-            # try - except for linearizations about stationary sols
-            # for which t=None
-            try:
-                prev_v = dou.load_curv(ddir+'vel'+pdatstr)
-            except IOError:
-                pdatstr = get_datastr(nwtn=newtk-1, time=None, 
+                # t+DT for implicit scheme
+                pdatstr = get_datastr(nwtn=newtk-1, time=t+DT, 
                                          meshp=N, timps=tip)
-                prev_v = dou.load_curv(ddir+'vel'+pdatstr)
 
-            # get and condense the linearized convection
-            # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
-            N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
-                                            invinds=femp['invinds'],
-                                            diribcs = femp['diribcs'])
-            Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1+N2,
-                                                        femp['diribcs'])
+                # try - except for linearizations about stationary sols
+                # for which t=None
+                try:
+                    prev_v = dou.load_curv(ddir+'vel'+pdatstr)
+                except IOError:
+                    pdatstr = get_datastr(nwtn=newtk-1, time=None, 
+                                             meshp=N, timps=tip)
+                    prev_v = dou.load_curv(ddir+'vel'+pdatstr)
 
-            rhsd_cur = dict(fv=stokesmatsc['M']*v_old+
-                                DT*(rhs_con[INVINDS,:]+
-                                rhsv_conbc+rhsd_vfstbc['fv']),
-                            fp=rhsd_vfstbc['fp'])
+                # get and condense the linearized convection
+                # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
+                N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
+                                                invinds=femp['invinds'],
+                                                diribcs = femp['diribcs'])
+                Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1+N2,
+                                                            femp['diribcs'])
 
-            matd_cur = dict(A=stokesmatsc['M']+DT*(stokesmatsc['A']+Nc),
-                            JT=stokesmatsc['JT'],
-                            J=stokesmatsc['J'])
+                rhsd_cur = dict(fv=stokesmatsc['M']*v_old+
+                                    DT*(rhs_con[INVINDS,:]+
+                                    rhsv_conbc+rhsd_vfstbc['fv']),
+                                fp=rhsd_vfstbc['fp'])
 
-            vp = linsolv_utils.stokes_steadystate(matdict=matd_cur,
-                                                    rhsdict=rhsd_cur)
+                matd_cur = dict(A=stokesmatsc['M']+DT*(stokesmatsc['A']+Nc),
+                                JT=stokesmatsc['JT'],
+                                J=stokesmatsc['J'])
 
-            v_old = vp[:NV,]
+                vp = linsolv_utils.stokes_steadystate(matdict=matd_cur,
+                                                        rhsdict=rhsd_cur)
 
-            dou.save_curv(v_old, fstring=ddir+'vel'+cdatstr)
+                v_old = vp[:NV,]
 
-            norm_nwtnupd += DT*np.dot((v_old-prev_v).T, 
-                                        stokesmatsc['M']*(v_old-prev_v))
+                dou.save_curv(v_old, fstring=ddir+'vel'+cdatstr)
 
-        tip['norm_nwtnupd'].append(norm_nwtnupd)
+                norm_nwtnupd += DT*np.dot((v_old-prev_v).T, 
+                                            stokesmatsc['M']*(v_old-prev_v))
 
-    print tip['norm_nwtnupd']
+            tip['norm_nwtnupd'].append(norm_nwtnupd)
+
+        print tip['norm_nwtnupd']
 
 ## solve the differential-alg. Riccati eqn for the feedback gain X
 #  via computing factors Z, such that X = -Z*Z.T
-
-    # we will need a lot transposes, and explicit is better than expl
-    stokesmatsc.update(dict(MT=stokesmatsc['M'], AT=stokesmatsc['A']))
 
     # tB = BR^{-1/2}
     tB = linsolv_utils.apply_invsqrt_fromleft(contp['R'], Ba,
@@ -180,8 +188,7 @@ def optcon_nse(N = 20, Nts = 4):
     t = tip['tE']
     Zp = linsolv_utils.apply_massinv(stokesmatsc['M'], tCT)
 
-    cdatstr = get_datastr(nwtn=newtk, time=DT, 
-                          meshp=N, timps=tip)
+    cdatstr = get_datastr(nwtn=newtk, time=DT, meshp=N, timps=tip)
 
     dou.save_curv(Zp, fstring=ddir+'Z'+cdatstr) 
 
@@ -209,20 +216,24 @@ def optcon_nse(N = 20, Nts = 4):
         # starting value for Newton-ADI iteration
         Zcn = np.copy(Zp)
         for nnwtadi in range(tip['nnwtadisteps']):
-            cmtxtb = stokesmatsc['MT']*np.dot(Zcn, Zcn.T*tB)
-            crhsadi = np.hstack([stokesmatsc['MT']*Zp,
-                      np.hstack([np.sqrt(DT)*cmtxtb, tCT])])
 
+            mTxtb = stokesmatsc['MT']*np.dot(Zcn, Zcn.T*tB)
+            rhsadi = np.hstack([stokesmatsc['MT']*Zp,
+                      np.hstack([np.sqrt(DT)*mTxtb, tCT])])
 
-            mTzzTg = pru.get_mTzzG(stokesmatsc['MT'], Zcn, tB)
+            lyapAT = 0.5*stokesmatsc['MT'] + DT*(stokesmatsc['AT'] + Nc.T)
+            raise Warning('TODO: debug') 
 
-            lyapAT = 0.5*stokesmatsc['MT'] + DT*(stokesmatsc['AT'] 
-                                                + Nc.T + mTzzTg)
-
+            # to avoid a dense matrix we use the smw formula
+            # for the factorization mTzzTg = mTzzTtb * tbT = -U*VT
             Zcn = pru.solve_proj_lyap_stein(At=lyapAT, Mt=stokesmatsc['MT'],
-                                            J=stokesmatsc['J'], W=crhsadi)
+                                            U=-DT*mTxtb,
+                                            V=np.array(tB.todense()),
+                                            J=stokesmatsc['J'], W=rhsadi,
+                                            nadisteps=tip['nadisteps'])
 
-        dou.save_curv(Zcn, fstring=ddir+'Z'+cdatstr) 
+    dou.save_curv(Zcn, fstring=ddir+'Z'+cdatstr) 
+    Zp = Zcn
 
 
 def drivcav_fems(N, NU=None, NY=None):

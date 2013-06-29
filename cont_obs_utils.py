@@ -3,6 +3,8 @@ import numpy as np
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 
+import linsolv_utils 
+
 def get_inp_opa(cdom=None, NU=8, V=None): 
     """assemble the 'B' matrix
 
@@ -78,33 +80,44 @@ def get_mout_opa(odom=None, NY=8, V=None):
 
     return sps.vstack([sps.vstack(YX), sps.vstack(YY)], format='csc'), sps.block_diag([My,My])
 
-
-
-def get_regularzd_c(MyC, My, J=None, M=None):
+def app_difffreeproj(v=None, J=None, M=None):
     """apply the regularization (projection to divfree vels)
 
-    and invert the remove My"""
-    Nv, NY = M.shape[0], MyC.shape[0]
-    try:
-        tC = np.load('data/tildeCNY{0}vdim{1}.npy'.format(NY, Nv))
-    except IOError:
-        print 'no data/tildeCNY{0}vdim{1}.npy'.format(NY, Nv)
-        # C*M^-1
-        MC = spsla.spsolve(M.T,MyC.T).T.todense()
-        # C*M^-1*J.T
-        MC = MC*J.T
-        # C*M^-1*J.T*S^-1
-        S = J*spsla.spsolve(M,J.T).todense()
-        MC = np.linalg.solve(S,MC.T).T
-        # C*M^-1*J.T*S^-1J
-        # C*[I-M^-1*J.T*S^-1J]
-        MC = MyC - MC*J 
-        #My is small
-        MyI = spsla.inv(My)
-        tC = MyI*(MyC - MC)
-        np.save('data/tildeCNY{0}vdim{1}.npy'.format(NY, Nv), tC)
+    i.e. compute v = [I-M^-1*J.T*S^-1*J]v 
+    """
 
-    return tC
+    vg = linsolv_utils.app_schurc_inv(M,J, np.atleast_2d(J*v).T)
+
+    vg = spsla.spsolve(M,J.T*vg)
+
+    return v - vg
+
+
+def get_regularized_c(Ct=None, J=None, Mt=None):
+    """apply the regularization (projection to divfree vels)
+
+    i.e. compute rC = C*[I-M^-1*J.T*S^-1*J] as
+    rCT = [I - J.T*S.-T*J*M.-T]*C.T
+    """
+
+    Nv, NY = Mt.shape[0], Ct.shape[1]
+    try:
+        rCt = np.load('data/TODOregCNY{0}vdim{1}.npy'.format(NY, Nv))
+    except IOError:
+        print 'no data/regCNY{0}vdim{1}.npy'.format(NY, Nv)
+        MTlu = spsla.splu(Mt)
+        auCt = np.zeros(Ct.shape)
+        # M.-T*C.T
+        for ccol in range(NY):
+            auCt[:,ccol] = MTlu.solve(np.array(Ct[:,ccol].todense())[:,0])
+        # J*M.-T*C.T
+        auCt = J*auCt
+        # S.-T*J*M.-T*C.T
+        auCt = linsolv_utils.app_schurc_inv(MTlu, J, auCt)
+        rCt = Ct - J.T*auCt
+        np.save('data/regCNY{0}vdim{1}.npy'.format(NY, Nv), rCt)
+
+    return np.array(rCt)
 
 
 # Subdomains of Control and Observation

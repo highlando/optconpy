@@ -62,4 +62,67 @@ def apply_invsqrt_fromleft(M, rhsa, output=None):
     else:
         return rhsa*np.linalg.inv(Z)
 
+def get_Sinv_smw(Alu, U=None, V=None):
+    """ compute (the small) inverse of I-V.T*Ainv*U
+    """
+    aiu = np.zeros(U.shape)
+    for ccol in range(U.shape[1]):
+        try:
+            aiu[:,ccol] = Alu.solve(U[:,ccol])
+        except AttributeError:
+            aiu[:,ccol] = spsla.spsolve(Alu,U[:,ccol])
+
+    return np.linalg.inv(np.eye(U.shape[1])-np.dot(V.T,aiu))
+
+
+def app_smw_inv(Alu, U=None, V=None, rhsa=None, Sinv=None):
+    """compute the sherman morrison woodbury inverse 
+
+    of 
+        A - np.dot(U,V.T)
+
+    applied to (array)rhs. 
+    """
+
+    auvirhs = np.zeros(rhsa.shape)
+    for rhscol in range(rhsa.shape[1]):
+        if Sinv is None:
+            Sinv = get_Sinv_smw(Alu,U,V)
+
+        crhs = rhsa[:,rhscol]
+        # the corrected rhs: (I + U*Sinv*VT*Ainv)*rhs
+        crhs = crhs + np.dot(U, np.dot(Sinv, 
+                                    np.dot(V.T, Alu.solve(crhs))))
+
+        try:
+            # if Alu comes with a solve routine, e.g. LU-factored - fine
+            auvirhs[:,rhscol] = Alu.solve(crhs)
+        except AttributeError:
+            auvirhs[:,rhscol] = spsla.spsolve(Alu,crhs)
+
+    return auvirhs
+
+def app_schurc_inv(M, J, veca):
+    """ apply the inverse of the Schurcomplement 
+
+    for M is strictly positive definite
+    """
+
+    def _schurc(cveca):
+        try:
+            # if M comes with a solve routine
+            return J*M.solve(J.T*cveca.flatten())
+        except AttributeError:
+            # return J*krypy.linsys.cg(M, J.T*cveca, tol=1e-18)['xk']
+            return J*spsla.spsolve(M, J.T*cveca)
+
+    S = spsla.LinearOperator( (J.shape[0],J.shape[0]), matvec=_schurc,
+                               dtype=np.float32)
+
+    auveca = np.zeros(veca.shape)
+    for ccol in range(veca.shape[1]):
+        auveca[:,ccol] = krypy.linsys.cg(S, veca[:,ccol], tol=1e-16)['xk']
+
+    return auveca
+
 
