@@ -123,7 +123,6 @@ def optcon_nse(N = 10, Nts = 4, compvels=True):
     # Stokes solution as initial value
     inivalvec = vp[:NV,]
 
-
 ## Compute the time-dependent flow
     if compvels:
         for newtk in range(1, tip['nnewtsteps']+1):

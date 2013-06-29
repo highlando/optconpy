@@ -102,7 +102,7 @@ def get_regularized_c(Ct=None, J=None, Mt=None):
 
     Nv, NY = Mt.shape[0], Ct.shape[1]
     try:
-        rCt = np.load('data/TODOregCNY{0}vdim{1}.npy'.format(NY, Nv))
+        rCt = np.load('data/regCNY{0}vdim{1}.npy'.format(NY, Nv))
     except IOError:
         print 'no data/regCNY{0}vdim{1}.npy'.format(NY, Nv)
         MTlu = spsla.splu(Mt)
