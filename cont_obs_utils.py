@@ -195,3 +195,12 @@ class Cast1Dto2D(Expression):
 
     def value_shape(self):
         return (2,)
+
+def get_rightinv(C):
+    """compute the rightinverse bmo SVD
+
+    """
+    # u, s, vt = spsla.svds(C, k=C.shape[0])
+    u, s, vt = np.linalg.svd(C.todense(), full_matrices=0)
+
+    return np.dot(vt.T, np.dot(np.diag(1.0/s), u.T))

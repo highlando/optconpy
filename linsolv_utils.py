@@ -102,6 +102,7 @@ def app_smw_inv(Alu, U=None, V=None, rhsa=None, Sinv=None):
 
     return auvirhs
 
+
 def app_schurc_inv(M, J, veca):
     """ apply the inverse of the Schurcomplement 
 
@@ -113,7 +114,6 @@ def app_schurc_inv(M, J, veca):
             # if M comes with a solve routine
             return J*M.solve(J.T*cveca.flatten())
         except AttributeError:
-            # return J*krypy.linsys.cg(M, J.T*cveca, tol=1e-18)['xk']
             return J*spsla.spsolve(M, J.T*cveca)
 
     S = spsla.LinearOperator( (J.shape[0],J.shape[0]), matvec=_schurc,
