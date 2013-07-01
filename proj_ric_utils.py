@@ -87,14 +87,12 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
                                       rhsa=We, Sinv=Sinv)[:NZ,:]
         for n in range(nadisteps):
             Z = (At - ms[0]*Mt)*Z
-            # raise Warning('TODO: debug') 
             Ze = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
             Z = linsolv_utils.app_smw_inv(Alu, U=Ue, V=Ve, 
                                           rhsa=Ze, Sinv=Sinv)[:NZ,:]
             print Z.shape
             print U.shape
             U = np.hstack([U,Z])
-            raise Warning('TODO: debug') 
             rel_err = np.linalg.norm(Z)/np.linalg.norm(U)
             print rel_err
 
@@ -107,7 +105,6 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
 
         for n in range(nadisteps):
             Z = (At - ms[0]*Mt)*Z
-            # raise Warning('TODO: debug') 
             Z = _app_projinvz(Z, At=At, Mt=Mt, J=J, ms=ms[0])
             print Z.shape
             print U.shape

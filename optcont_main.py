@@ -16,7 +16,6 @@ def time_int_params(Nts):
     t0 = 0.0
     tE = 1.0
     dt = (tE - t0)/Nts
-
     tip = dict(t0 = t0,
             tE = tE,
             dt = dt, 
@@ -34,7 +33,7 @@ def time_int_params(Nts):
 
     return tip
 
-def optcon_nse(N = 10, Nts = 4, compvels=True):
+def optcon_nse(N = 20, Nts = 4, compvels=True):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
@@ -54,7 +53,10 @@ def optcon_nse(N = 10, Nts = 4, compvels=True):
     #        os.remove( fname )
     #    os.chdir('..')
 
-    ## start with the Stokes problem for initialization
+###
+## start with the Stokes problem for initialization
+###
+
     stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], tip['nu'])
     rhsd_vf = dtn.setget_rhs(femp['V'], femp['Q'], 
                             femp['fv'], femp['fp'], t=0)
@@ -80,31 +82,9 @@ def optcon_nse(N = 10, Nts = 4, compvels=True):
             'invinds':invinds}
     femp.update(bcdata)
 
-    # define the control and observation operators
-    cdom = cou.ContDomain(contp['cdcoo'])
-    Ba, Mu = cou.get_inp_opa(cdom=cdom, V=femp['V'],
-                             NU=contp['NU']) 
-    Ba = Ba[invinds,:][:,:]
-
-    odom = cou.ContDomain(contp['odcoo'])
-    MyC, My = cou.get_mout_opa(odom=odom, V=femp['V'],
-                               NY=contp['NY'])
-    MyC = MyC[:,invinds][:,:]
-    C = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'], 
-                            Mt=stokesmatsc['MT'])
-
-    # set the weighing matrices
-    if contp['R'] is None:
-        contp['R'] = contp['alphau']*Mu
-    # TODO: by now we tacitly assume that V, W = MyC.T My^-1 MyC
-    # if contp['V'] is None:
-    #     contp['V'] = My
-    # if contp['W'] is None:
-    #     contp['W'] = My
-
     # casting some parameters 
     NV, DT, INVINDS = len(femp['invinds']), tip['dt'], femp['invinds']
-    # and current values
+    # and setting current values
     newtk, t = 0, None
 
     # compute the steady state stokes solution
@@ -123,7 +103,10 @@ def optcon_nse(N = 10, Nts = 4, compvels=True):
     # Stokes solution as initial value
     inivalvec = vp[:NV,]
 
+###
 ## Compute the time-dependent flow
+###
+
     if compvels:
         for newtk in range(1, tip['nnewtsteps']+1):
             v_old = inivalvec
@@ -176,8 +159,36 @@ def optcon_nse(N = 10, Nts = 4, compvels=True):
 
         print tip['norm_nwtnupd']
 
+###
+## Prepare for control 
+###
+
+    # define the control and observation operators
+    cdom = cou.ContDomain(contp['cdcoo'])
+    Ba, Mu = cou.get_inp_opa(cdom=cdom, V=femp['V'],
+                             NU=contp['NU']) 
+    Ba = Ba[invinds,:][:,:]
+
+    odom = cou.ContDomain(contp['odcoo'])
+    MyC, My = cou.get_mout_opa(odom=odom, V=femp['V'],
+                               NY=contp['NY'])
+    MyC = MyC[:,invinds][:,:]
+    C = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'], 
+                            Mt=stokesmatsc['MT'])
+
+    # set the weighing matrices
+    if contp['R'] is None:
+        contp['R'] = contp['alphau']*Mu
+    # TODO: by now we tacitly assume that V, W = MyC.T My^-1 MyC
+    # if contp['V'] is None:
+    #     contp['V'] = My
+    # if contp['W'] is None:
+    #     contp['W'] = My
+
+###
 ## solve the differential-alg. Riccati eqn for the feedback gain X
-#  via computing factors Z, such that X = -Z*Z.T
+## via computing factors Z, such that X = -Z*Z.T
+###
 
     # tB = BR^{-1/2}
     tB = linsolv_utils.apply_invsqrt_fromleft(contp['R'], Ba,
@@ -199,11 +210,11 @@ def optcon_nse(N = 10, Nts = 4, compvels=True):
         # try - except for linearizations about stationary sols
         # for which t=None
         try:
-            prev_v = dou.load_curv(ddir+'vel'+pdatstr)
+            prev_v = dou.load_curv(ddir+'vel'+cdatstr)
         except IOError:
-            pdatstr = get_datastr(nwtn=newtk-1, time=None, 
+            cdatstr = get_datastr(nwtn=newtk-1, time=None, 
                                      meshp=N, timps=tip)
-            prev_v = dou.load_curv(ddir+'vel'+pdatstr)
+            prev_v = dou.load_curv(ddir+'vel'+cdatstr)
         # get and condense the linearized convection
         # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
         N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
@@ -221,7 +232,6 @@ def optcon_nse(N = 10, Nts = 4, compvels=True):
                       np.hstack([np.sqrt(DT)*mTxtb, tCT])])
 
             lyapAT = 0.5*stokesmatsc['MT'] + DT*(stokesmatsc['AT'] + Nc.T)
-            raise Warning('TODO: debug') 
 
             # to avoid a dense matrix we use the smw formula
             # for the factorization mTzzTg = mTzzTtb * tbT = -U*VT
