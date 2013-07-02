@@ -176,6 +176,8 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
     C = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'], 
                             Mt=stokesmatsc['MT'])
 
+    vstar = cou.get_vstar(C, contp['ystar'])
+
     # set the weighing matrices
     if contp['R'] is None:
         contp['R'] = contp['alphau']*Mu
@@ -295,6 +297,11 @@ def cont_params():
     - desired output
     """
 
+    ystar1 = Expression('1')
+    ystar2 = Expression('1')
+
+    ystar = [ystar1, ystar2]
+
     NU, NY = 10, 7
     odcoo = dict(xmin=0.45,
                  xmax=0.55,
@@ -313,7 +320,7 @@ def cont_params():
                 R=None, 
                 # regularization parameter
                 alphau=1e-4,
-                vstar=None,
+                ystar=ystar,
                 V=None,
                 W=None)
 

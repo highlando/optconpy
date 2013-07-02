@@ -45,15 +45,15 @@ stokesmats['JT'] = stokesmats['JT'][:,:-1][:,:]
         bcinds, 
         bcvals) = dtn.condense_sysmatsbybcs(stokesmats, femp['diribcs'])
 
-## check the B
-B, Mu = cou.get_inp_opa(cdom=cdom, V=V, NU=NU) 
-# get the rhs expression of Bu
-Bu = spsla.spsolve(stokesmats['M'], B*np.vstack([0*np.ones((NU,1)),
-                                                 1*np.ones((NU,1))]))
-
-bu = Function(V)
-bu.vector().set_local(Bu)
-plot(bu)
+# ## check the B
+# B, Mu = cou.get_inp_opa(cdom=cdom, V=V, NU=NU) 
+# # get the rhs expression of Bu
+# Bu = spsla.spsolve(stokesmats['M'], B*np.vstack([0*np.ones((NU,1)),
+#                                                  1*np.ones((NU,1))]))
+# 
+# bu = Function(V)
+# bu.vector().set_local(Bu)
+# plot(bu)
 
 ## check the C
 MyC, My = cou.get_mout_opa(odom=odom, V=V, NY=NY)
@@ -67,6 +67,14 @@ print np.allclose(np.eye(MyC.shape[0]), MyC*Cplus)
 MyCv = MyC*testv.vector().array()
 testy = spsla.spsolve(My, MyCv)
 # print np.linalg.norm(testy)
+
+ystar1 = Expression('1')
+ystar2 = Expression('1')
+ystar = [ystar1, ystar2]
+
+vstar = cou.get_vstar(MyC, ystar, odcoo, NY)
+print np.linalg.norm(vstar)
+print np.linalg.norm(MyC*vstar)
 
 ymesh = IntervalMesh(NY-1, odcoo['ymin'], odcoo['ymax'])
 Y = FunctionSpace(ymesh, 'CG', 1)
@@ -94,8 +102,9 @@ print np.linalg.norm(stokesmats['J']*testvi)
 print np.linalg.norm(stokesmats['J']*testvi0)
 
 testyv0 = spsla.spsolve(My, MyC*testvi0)
-testyg = spsla.spsolve(My, MyC*(testvi-testvi0))
+testyg = spsla.spsolve(My, MyC*(testvi.flatten()-testvi0))
 testry = spsla.spsolve(My, np.dot(rC, testvi))
+testystar = MyC*vstar
 
 print np.linalg.norm(testyv0 - testry)
 
@@ -105,6 +114,8 @@ y4.vector().set_local(testyv0[NY:])
 plot(y4, title='Cv0')
 y5.vector().set_local(testyg[NY:])
 plot(y5, title='Cvg')
+y6.vector().set_local(testystar[NY:])
+plot(y6, title='ystar')
 
 ## check if the projection is indeed a projection
 # os.remove('data/regCNY14vdim3042.npy')

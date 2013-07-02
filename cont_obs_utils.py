@@ -201,6 +201,29 @@ def get_rightinv(C):
 
     """
     # u, s, vt = spsla.svds(C, k=C.shape[0])
-    u, s, vt = np.linalg.svd(C.todense(), full_matrices=0)
+    u, s, vt = np.linalg.svd(np.array(C.todense()), full_matrices=0)
 
     return np.dot(vt.T, np.dot(np.diag(1.0/s), u.T))
+
+def get_vstar(C, ystar, odcoo, NY):
+
+    ystarvec = get_ystarvec(ystar, odcoo, NY)
+    Cgeninv = get_rightinv(C)
+
+    return np.dot(Cgeninv,ystarvec)
+
+
+def get_ystarvec(ystar, odcoo, NY): 
+    """get the vector of the current target signal
+
+    """
+    ymesh = IntervalMesh(NY-1, odcoo['ymin'], odcoo['ymax'])
+    Y = FunctionSpace(ymesh, 'CG', 1)
+
+    ystarvec = np.zeros((NY*len(ystar), 1))
+    for k, ysc in enumerate(ystar):
+        cyv = interpolate(ysc, Y)
+        ystarvec[k*NY:(k+1)*NY,0] = cyv.vector().array()
+
+    return ystarvec 
+
