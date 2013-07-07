@@ -176,7 +176,7 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
     C = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'], 
                             Mt=stokesmatsc['MT'])
 
-    vstar = cou.get_vstar(C, contp['ystar'])
+    vstar = cou.get_vstar(C, contp['ystar'], odcoo, NY)
 
     # set the weighing matrices
     if contp['R'] is None:

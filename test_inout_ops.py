@@ -57,19 +57,22 @@ stokesmats['JT'] = stokesmats['JT'][:,:-1][:,:]
 
 ## check the C
 MyC, My = cou.get_mout_opa(odom=odom, V=V, NY=NY)
+MyC = MyC[:,invinds][:,:]
+
 exv = Expression(('x[1]', 'x[1]'))
 testv = interpolate(exv, V)
 # plot(testv)
+
 Cplus = cou.get_rightinv(MyC)
 
 print np.allclose(np.eye(MyC.shape[0]), MyC*Cplus)
 
-MyCv = MyC*testv.vector().array()
+MyCv = MyC*testv.vector().array()[invinds]
 testy = spsla.spsolve(My, MyCv)
 # print np.linalg.norm(testy)
 
-ystar1 = Expression('1')
-ystar2 = Expression('1')
+ystar1 = Expression('x[0]')
+ystar2 = Expression('x[0]')
 ystar = [ystar1, ystar2]
 
 vstar = cou.get_vstar(MyC, ystar, odcoo, NY)
@@ -93,13 +96,13 @@ plot(y2)
 
 ## check the regularization of C
 # MyC = MyC[:,invinds][:,:]
-rC = cou.get_regularized_c(MyC.T, J=stokesmats['J'], Mt=stokesmats['M']).T
+rC = cou.get_regularized_c(MyC.T, J=stokesmatsc['J'], Mt=stokesmatsc['M']).T
 
-testvi = testv.vector().array()#[invinds]
-testvi0 = cou.app_difffreeproj(M=stokesmats['M'],J=stokesmats['J'],v=testvi)
+testvi = testv.vector().array()[invinds]
+testvi0 = cou.app_difffreeproj(M=stokesmatsc['M'],J=stokesmatsc['J'],v=testvi)
 
-print np.linalg.norm(stokesmats['J']*testvi)
-print np.linalg.norm(stokesmats['J']*testvi0)
+print np.linalg.norm(stokesmatsc['J']*testvi)
+print np.linalg.norm(stokesmatsc['J']*testvi0)
 
 testyv0 = spsla.spsolve(My, MyC*testvi0)
 testyg = spsla.spsolve(My, MyC*(testvi.flatten()-testvi0))
