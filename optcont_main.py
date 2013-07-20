@@ -176,7 +176,7 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
     C = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'], 
                             Mt=stokesmatsc['MT'])
 
-    # we never need vstar, don't we?
+    # we never need vstar, do we?
     # vstar = cou.get_vstar(C, contp['ystar'], contp['odcoo'], NY)
 
     # set the weighing matrices
@@ -191,7 +191,12 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
 ###
 ## solve the differential-alg. Riccati eqn for the feedback gain X
 ## via computing factors Z, such that X = -Z*Z.T
+## 
+## at the same time we solve for the affine-linear correction w
 ###
+    
+    # cast some values from the dics
+    ystar = contp['ystar']
 
     # tB = BR^{-1/2}
     tB = linsolv_utils.apply_invsqrt_fromleft(contp['R'], Ba,
@@ -199,7 +204,10 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
     tCT = linsolv_utils.apply_invsqrt_fromleft(My, MyC.T, output='dense')
 
     t = tip['tE']
+
+    # set/compute the terminal values
     Zp = linsolv_utils.apply_massinv(stokesmatsc['M'], tCT)
+    wp = -linsolv_utils.apply_massinv(stokesmatsc['MT'], MyC.T*ystar)
 
     cdatstr = get_datastr(nwtn=newtk, time=DT, meshp=N, timps=tip)
 
@@ -222,7 +230,7 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
         # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
         N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
                                         invinds=femp['invinds'],
-                                        diribcs = femp['diribcs'])
+                                        diribcs=femp['diribcs'])
         Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1+N2,
                                                     femp['diribcs'])
 
