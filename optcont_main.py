@@ -206,26 +206,26 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
     t = tip['tE']
 
     # set/compute the terminal values
-    Zp = linsolv_utils.apply_massinv(stokesmatsc['M'], tCT)
-    wp = -linsolv_utils.apply_massinv(stokesmatsc['MT'], MyC.T*ystar)
+    Zc = linsolv_utils.apply_massinv(stokesmatsc['M'], tCT)
+    wc = -linsolv_utils.apply_massinv(stokesmatsc['MT'], MyC.T*ystar)
 
     cdatstr = get_datastr(nwtn=newtk, time=DT, meshp=N, timps=tip)
 
-    dou.save_curv(Zp, fstring=ddir+'Z'+cdatstr) 
+    dou.save_curv(Zc, fstring=ddir+'Z'+cdatstr) 
 
     for t in np.linspace(tip['tE']-DT, tip['t0'],
                             np.round((tip['tE']-tip['t0'])/DT)):
-        # get the current convection matrices 
-        cdatstr = get_datastr(nwtn=newtk, time=t, 
+        # get the previous time convection matrices 
+        pdatstr = get_datastr(nwtn=newtk, time=t, 
                               meshp=N, timps=tip)
         # try - except for linearizations about stationary sols
         # for which t=None
         try:
-            prev_v = dou.load_curv(ddir+'vel'+cdatstr)
+            prev_v = dou.load_curv(ddir+'vel'+pdatstr)
         except IOError:
-            cdatstr = get_datastr(nwtn=newtk-1, time=None, 
+            pdatstr = get_datastr(nwtn=newtk, time=None, 
                                      meshp=N, timps=tip)
-            prev_v = dou.load_curv(ddir+'vel'+cdatstr)
+            prev_v = dou.load_curv(ddir+'vel'+pdatstr)
         # get and condense the linearized convection
         # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
         N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
@@ -235,25 +235,27 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
                                                     femp['diribcs'])
 
         # starting value for Newton-ADI iteration
-        Zcn = np.copy(Zp)
+        Zpn = np.copy(Zc)
         for nnwtadi in range(tip['nnwtadisteps']):
 
-            mTxtb = stokesmatsc['MT']*np.dot(Zcn, Zcn.T*tB)
-            rhsadi = np.hstack([stokesmatsc['MT']*Zp,
+            mTxtb = stokesmatsc['MT']*np.dot(Zpn, Zpn.T*tB)
+            rhsadi = np.hstack([stokesmatsc['MT']*Zc,
                       np.hstack([np.sqrt(DT)*mTxtb, tCT])])
 
             lyapAT = 0.5*stokesmatsc['MT'] + DT*(stokesmatsc['AT'] + Nc.T)
 
             # to avoid a dense matrix we use the smw formula
             # for the factorization mTzzTg = mTzzTtb * tbT = -U*VT
-            Zcn = pru.solve_proj_lyap_stein(At=lyapAT, Mt=stokesmatsc['MT'],
+            Zpn = pru.solve_proj_lyap_stein(At=lyapAT, Mt=stokesmatsc['MT'],
                                             U=-DT*mTxtb,
                                             V=np.array(tB.todense()),
                                             J=stokesmatsc['J'], W=rhsadi,
                                             nadisteps=tip['nadisteps'])
+        wp = 
 
-    dou.save_curv(Zcn, fstring=ddir+'Z'+cdatstr) 
-    Zp = Zcn
+
+    dou.save_curv(Zpn, fstring=ddir+'Z'+cdatstr) 
+    Zc = Zpn
 
 
 def drivcav_fems(N, NU=None, NY=None):
