@@ -33,7 +33,7 @@ def time_int_params(Nts):
 
     return tip
 
-def optcon_nse(N = 20, Nts = 4, compvels=True):
+def optcon_nse(N = 20, Nts = 4, compvels=False):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)

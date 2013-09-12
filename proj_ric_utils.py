@@ -5,9 +5,10 @@ import linsolv_utils
 
 def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None, 
                           U=None, V=None, nadisteps=5):
+
     """ approximates X that solves the projected lyap equation
 
-        A.T*X*M + M.T*X*A + J.T*Y*M + M.T*Y.T*J = -W*W.T
+        [A+UV].T*X*M + M.T*X*[A+UV] + J.T*Y*M + M.T*Y.T*J = -W*W.T
 
         J*X*M = 0    and    M.T*X*J.T = 0 
 
@@ -16,6 +17,9 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
     series converging to X
 
     At, Mt ... is A.T, M.T - no transposing in this function
+
+    We use the SMW formula: 
+    http://en.wikipedia.org/wiki/Woodbury_matrix_identity
     """
 
     ms = [-10]
@@ -32,12 +36,12 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
         return spsla.splu(sysm)
 
     def get_Sinv_smw(Alu,U,V):
-        """ compute (the small) inverse of I-V.T*Ainv*U
+        """ compute (the small) inverse of I-V*Ainv*U
         """
         aiu = np.zeros(U.shape)
         for ccol in range(U.shape[1]):
             aiu[:,ccol] = Alu.solve(U[:,ccol])
-        return np.linalg.inv(np.eye(U.shape[1])-np.dot(V.T,aiu))
+        return np.linalg.inv(np.eye(U.shape[1])-np.dot(V,aiu))
 
 
     def app_inv_via_smw(Alu, U, V, rhs, Sinv=None):
@@ -53,7 +57,7 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
             crhs = rhs[:,rhscol]
             # the corrected rhs: (I + U*Sinv*VT*Ainv)*rhs
             crhs = crhs + np.dot(U, np.dot(Sinv, 
-                                        np.dot(V.T, Alu.solve(crhs))))
+                                        np.dot(V, Alu.solve(crhs))))
             auvirhs[:,rhscol] = Alu.solve(crhs)
 
         return auvirhs
