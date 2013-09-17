@@ -73,8 +73,21 @@ def get_Sinv_smw(Alu, U=None, V=None):
         except AttributeError:
             aiu[:,ccol] = spsla.spsolve(Alu,U[:,ccol])
 
-
     return np.linalg.inv(np.eye(U.shape[1])-np.dot(V,aiu))
+
+def app_luinv_to_spmat(Alu, Z):
+    """ compute A.-1*Z  where A comes factored
+
+    and with a solve routine"""
+
+    Z.tocsc()
+    ainvz = np.zeros(Z.shape)
+    for ccol in range(Z.shape[1]):
+        ainvz[:,ccol] = Alu.solve(Z[:,ccol].toarray().flatten())
+
+    return ainvz
+
+
 
 
 def app_smw_inv(Alu, U=None, V=None, rhsa=None, Sinv=None):

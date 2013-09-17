@@ -40,6 +40,19 @@ class smw_formula(unittest.TestCase):
                                     np.dot(self.V, AuvInvZ))
         self.assertTrue(np.allclose(AAinvZ, self.Z))
 
+    def test_luinv_to_spmat(self):
+        """check the application of the inverse 
+
+        of a lu-factored matrix to a sparse mat"""
+
+        import linsolv_utils as lsu
+
+        Alu = spsla.splu(self.A)
+        Z = sps.csr_matrix(self.U)
+        AinvZ = lsu.app_luinv_to_spmat(Alu, Z)
+
+        self.assertTrue(np.allclose(self.U, self.A*AinvZ))
+
 
 if __name__ == '__main__':
     unittest.main()
