@@ -45,23 +45,23 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
 #        return np.linalg.inv(np.eye(U.shape[1])-np.dot(V,aiu))
 
 
-    def app_inv_via_smw(Alu, U, V, rhs, Sinv=None):
-        """compute the sherman morrison woodbury inverse 
-
-        of A - np.dot(U,V.T) applied to rhs. 
-        """
-        if Sinv is None:
-            Sinv = get_Sinv_smw(Alu,U,V)
-
-        auvirhs = np.zeros(rhs.shape)
-        for rhscol in range(rhs.shape[1]):
-            crhs = rhs[:,rhscol]
-            # the corrected rhs: (I + U*Sinv*VT*Ainv)*rhs
-            crhs = crhs + np.dot(U, np.dot(Sinv, 
-                                        np.dot(V, Alu.solve(crhs))))
-            auvirhs[:,rhscol] = Alu.solve(crhs)
-
-        return auvirhs
+#    def app_inv_via_smw(Alu, U, V, rhs, Sinv=None):
+#        """compute the sherman morrison woodbury inverse 
+#
+#        of A - np.dot(U,V.T) applied to rhs. 
+#        """
+#        if Sinv is None:
+#            Sinv = get_Sinv_smw(Alu,U,V)
+#
+#        auvirhs = np.zeros(rhs.shape)
+#        for rhscol in range(rhs.shape[1]):
+#            crhs = rhs[:,rhscol]
+#            # the corrected rhs: (I + U*Sinv*VT*Ainv)*rhs
+#            crhs = crhs + np.dot(U, np.dot(Sinv, 
+#                                        np.dot(V, Alu.solve(crhs))))
+#            auvirhs[:,rhscol] = Alu.solve(crhs)
+#
+#        return auvirhs
 
 
     def _app_projinvz(Z, At=None, Mt=None, J=None, ms=None, aminv=None):
@@ -139,8 +139,4 @@ def get_mTzzTtb(MT, Z, tB, output=None):
         return MT*(np.dot(Z,(Z.T*tB)))
     else:
         return MT*(np.dot(Z,(Z.T*tB)))
-
-
-
-
 
