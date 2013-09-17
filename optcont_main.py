@@ -251,7 +251,7 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
                                             V=np.array(tB.todense()),
                                             J=stokesmatsc['J'], W=rhsadi,
                                             nadisteps=tip['nadisteps'])
-        wp = 
+        # wp = 
 
 
     dou.save_curv(Zpn, fstring=ddir+'Z'+cdatstr) 
