@@ -1,0 +1,5 @@
+#!/bin/bash
+
+FILETOEDIT=optcont_main.py
+echo $FILETOEDIT
+gvim --remote-silent $FILETOEDIT 
