@@ -140,3 +140,39 @@ def get_mTzzTtb(MT, Z, tB, output=None):
     else:
         return MT*(np.dot(Z,(Z.T*tB)))
 
+def proj_alg_ric_newtonadi(M,F,J,B,W,U=None,V=None):
+    """ solve the projected algebraic ricc via newton adi 
+
+    M.T*X*[F-UV] + F.T*X*M - M.T*X*B*B.T*X*M + J(Y) = -WW.T
+
+        JXM = 0 and M.TXJ.T = 0
+
+    """
+        for nnwtadi in range(tip['nnwtadisteps']):
+
+            mTxtb = -stokesmatsc['MT']*np.dot(Zpn, Zpn.T*tB)
+            rhsadi = np.hstack([stokesmatsc['MT']*Zc,
+                      np.sqrt(DT)*np.hstack([mTxtb, tCT])])
+
+
+            # to avoid a dense matrix we use the smw formula
+            # to compute (A-UV).-1
+            # for the factorization mTxg = mTxtb * tbT = U*V
+            # 
+            # note that proj solve lyap is defined for
+            #
+            # F.T*X*M + M.T*X*F = -CC.T
+            #
+            # to give X spd if M spd and X hurwitz
+
+            Zpn = pru.solve_proj_lyap_stein(At=-lyapAT,
+                                            Mt=stokesmatsc['MT'],
+                                            U=DT*mTxtb,
+                                            V=np.array(tB.todense()),
+                                            J=stokesmatsc['J'],
+                                            W=rhsadi,
+                                            nadisteps=tip['nadisteps'])
+
+        # wp = 
+
+

@@ -135,30 +135,32 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
 
                 # get and condense the linearized convection
                 # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
-                N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
-                                                invinds=femp['invinds'],
-                                                diribcs = femp['diribcs'])
+                N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v,
+                                            V=femp['V'],
+                                            invinds=femp['invinds'],
+                                            diribcs = femp['diribcs'])
                 Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1+N2,
-                                                            femp['diribcs'])
+                                            femp['diribcs'])
 
                 rhsd_cur = dict(fv=stokesmatsc['M']*v_old+
                                     DT*(rhs_con[INVINDS,:]+
                                     rhsv_conbc+rhsd_vfstbc['fv']),
                                 fp=rhsd_vfstbc['fp'])
 
-                matd_cur = dict(A=stokesmatsc['M']+DT*(stokesmatsc['A']+Nc),
+                matd_cur = dict(A=stokesmatsc['M']+
+                                            DT*(stokesmatsc['A']+Nc),
                                 JT=stokesmatsc['JT'],
                                 J=stokesmatsc['J'])
 
                 vp = linsolv_utils.stokes_steadystate(matdict=matd_cur,
-                                                        rhsdict=rhsd_cur)
+                                                      rhsdict=rhsd_cur)
 
                 v_old = vp[:NV,]
 
                 dou.save_curv(v_old, fstring=ddir+'vel'+cdatstr)
 
                 norm_nwtnupd += DT*np.dot((v_old-prev_v).T, 
-                                            stokesmatsc['M']*(v_old-prev_v))
+                                    stokesmatsc['M']*(v_old-prev_v))
 
             tip['norm_nwtnupd'].append(norm_nwtnupd)
 
@@ -206,7 +208,8 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
     # tB = BR^{-1/2}
     tB = linsolv_utils.apply_invsqrt_fromleft(contp['R'], Ba,
                                               output='sparse')
-    tCT = linsolv_utils.apply_invsqrt_fromleft(My, MyC.T, output='dense')
+    tCT = linsolv_utils.apply_invsqrt_fromleft(My, MyC.T, 
+                                                output='dense')
 
     t = tip['tE']
 
@@ -239,24 +242,10 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
         Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1+N2,
                                                     femp['diribcs'])
 
+        lyapAT = 0.5*stokesmatsc['MT'] + DT*(stokesmatsc['AT'] + Nc.T)
+
         # starting value for Newton-ADI iteration
         Zpn = np.copy(Zc)
-        for nnwtadi in range(tip['nnwtadisteps']):
-
-            mTxtb = stokesmatsc['MT']*np.dot(Zpn, Zpn.T*tB)
-            rhsadi = np.hstack([stokesmatsc['MT']*Zc,
-                      np.hstack([np.sqrt(DT)*mTxtb, tCT])])
-
-            lyapAT = 0.5*stokesmatsc['MT'] + DT*(stokesmatsc['AT'] + Nc.T)
-
-            # to avoid a dense matrix we use the smw formula
-            # for the factorization mTzzTg = mTzzTtb * tbT = -U*VT
-            Zpn = pru.solve_proj_lyap_stein(At=lyapAT, Mt=stokesmatsc['MT'],
-                                            U=-DT*mTxtb,
-                                            V=np.array(tB.todense()),
-                                            J=stokesmatsc['J'], W=rhsadi,
-                                            nadisteps=tip['nadisteps'])
-        # wp = 
 
 
     dou.save_curv(Zpn, fstring=ddir+'Z'+cdatstr) 
