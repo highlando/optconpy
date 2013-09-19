@@ -57,7 +57,8 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
 ## start with the Stokes problem for initialization
 ###
 
-    stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], tip['nu'])
+    stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'],
+                                         tip['nu'])
     rhsd_vf = dtn.setget_rhs(femp['V'], femp['Q'], 
                             femp['fv'], femp['fp'], t=0)
 
@@ -74,7 +75,8 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
             bcvals) = dtn.condense_sysmatsbybcs(stokesmats, femp['diribcs'])
     # we will need transposes, and explicit is better than implicit
     # here, the coefficient matrices are symmetric
-    stokesmatsc.update(dict(MT=stokesmatsc['M'], AT=stokesmatsc['A']))
+    stokesmatsc.update(dict(MT=stokesmatsc['M'],
+                            AT=stokesmatsc['A']))
 
     # add the info on boundary and inner nodes 
     bcdata = {'bcinds':bcinds,
@@ -88,17 +90,20 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
     newtk, t = 0, None
 
     # compute the steady state stokes solution
-    rhsd_vfstbc = dict(fv=rhsd_stbc['fv']+rhsd_vf['fv'][INVINDS,],
-                        fp=rhsd_stbc['fp']+rhsd_vf['fp'])
+    rhsd_vfstbc = dict(fv=rhsd_stbc['fv']+
+                            rhsd_vf['fv'][INVINDS,],
+                       fp=rhsd_stbc['fp']+rhsd_vf['fp'])
     vp = linsolv_utils.stokes_steadystate(matdict=stokesmatsc,
                                         rhsdict=rhsd_vfstbc)
 
     # save the data
-    curdatname = get_datastr(nwtn=newtk, time=t, meshp=N, timps=tip)
+    curdatname = get_datastr(nwtn=newtk, time=t, 
+                              meshp=N, timps=tip)
     dou.save_curv(vp[:NV,], fstring=ddir+'vel'+curdatname)
 
     dou.output_paraview(femp, vp=vp, 
-                    fstring='results/'+'NewtonIt{0}'.format(newtk))
+                    fstring='results/'+
+                            'NewtonIt{0}'.format(newtk))
 
     # Stokes solution as initial value
     inivalvec = vp[:NV,]
