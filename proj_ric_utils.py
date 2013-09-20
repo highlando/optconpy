@@ -36,34 +36,6 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
                                 format='csc')
         return spsla.splu(sysm)
 
-#    def get_Sinv_smw(Alu,U,V):
-#        """ compute (the small) inverse of I-V*Ainv*U
-#        """
-#        aiu = np.zeros(U.shape)
-#        for ccol in range(U.shape[1]):
-#            aiu[:,ccol] = Alu.solve(U[:,ccol])
-#        return np.linalg.inv(np.eye(U.shape[1])-np.dot(V,aiu))
-
-
-#    def app_inv_via_smw(Alu, U, V, rhs, Sinv=None):
-#        """compute the sherman morrison woodbury inverse 
-#
-#        of A - np.dot(U,V.T) applied to rhs. 
-#        """
-#        if Sinv is None:
-#            Sinv = get_Sinv_smw(Alu,U,V)
-#
-#        auvirhs = np.zeros(rhs.shape)
-#        for rhscol in range(rhs.shape[1]):
-#            crhs = rhs[:,rhscol]
-#            # the corrected rhs: (I + U*Sinv*VT*Ainv)*rhs
-#            crhs = crhs + np.dot(U, np.dot(Sinv, 
-#                                        np.dot(V, Alu.solve(crhs))))
-#            auvirhs[:,rhscol] = Alu.solve(crhs)
-#
-#        return auvirhs
-
-
     def _app_projinvz(Z, At=None, Mt=None, J=None, ms=None, aminv=None):
 
         if aminv is None:
@@ -140,7 +112,7 @@ def get_mTzzTtb(MT, Z, tB, output=None):
     else:
         return MT*(np.dot(Z,(Z.T*tB)))
 
-def proj_alg_ric_newtonadi(M,F,J,B,W,U=None,V=None):
+def proj_alg_ric_newtonadi(M, F, J, B, W, Z0=None, U=None, V=None):
     """ solve the projected algebraic ricc via newton adi 
 
     M.T*X*[F-UV] + F.T*X*M - M.T*X*B*B.T*X*M + J(Y) = -WW.T
