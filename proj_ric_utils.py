@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
-import linsolv_utils
+import lin_alg_utils
 
 def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None, 
                           U=None, V=None, nadisteps=5):
@@ -59,13 +59,13 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
         Ve = np.vstack([V, np.zeros((J.shape[0], V.shape[1]))])
         We = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
 
-        Sinv = linsolv_utils.get_Sinv_smw(Alu, U=Ue, V=Ve)
-        Z = linsolv_utils.app_smw_inv(Alu, U=Ue, V=Ve, 
+        Sinv = lin_alg_utils.get_Sinv_smw(Alu, U=Ue, V=Ve)
+        Z = lin_alg_utils.app_smw_inv(Alu, U=Ue, V=Ve, 
                                       rhsa=We, Sinv=Sinv)[:NZ,:]
         for n in range(nadisteps):
             Z = (At - ms[0]*Mt)*Z
             Ze = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
-            Z = linsolv_utils.app_smw_inv(Alu, U=Ue, V=Ve, 
+            Z = lin_alg_utils.app_smw_inv(Alu, U=Ue, V=Ve, 
                                           rhsa=Ze, Sinv=Sinv)[:NZ,:]
             print Z.shape
             print U.shape
@@ -112,15 +112,6 @@ def get_mTzzTtb(MT, Z, tB, output=None):
     else:
         return MT*(np.dot(Z,(Z.T*tB)))
 
-def comp_frobnorm_factored_difference(zone, ztwo):
-    """compute the squared Frobenius norm of z1*z1.T - z2*z2.T
-
-    """
-    tr1sq = (zone*zone).sum(-1)
-    tr2sq = (ztwo*ztwo).sum(-1)
-    tr12  = np.sqrt(tr1sq*tr2sq)
-
-    return (tr1sq - 2*tr12 + tr2sq).sum()
 
 def proj_alg_ric_newtonadi(mt=None, ft=None, jmat=None, bmat=None, 
                             wmat=None, z0=None, 

@@ -43,14 +43,14 @@ class TestProjLyap(unittest.TestCase):
         """check the solution of the projected
         
         lyap eqn via ADI iteration"""
-        import linsolv_utils as lsu
+        import lin_alg_utils as lau
         import proj_ric_utils as pru
 
         Z = pru.solve_proj_lyap_stein(At=self.F.T, Mt=self.M.T, 
                                         J=self.J, W=self.W,
                                         nadisteps=self.adisteps)
 
-        MinvJt = lsu.app_luinv_to_spmat(self.Mlu, self.J.T)
+        MinvJt = lau.app_luinv_to_spmat(self.Mlu, self.J.T)
         Sinv = np.linalg.inv(self.J*MinvJt)
         P = np.eye(self.Nv)-np.dot(MinvJt,Sinv*self.J)
 
