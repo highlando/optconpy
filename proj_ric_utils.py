@@ -112,39 +112,45 @@ def get_mTzzTtb(MT, Z, tB, output=None):
     else:
         return MT*(np.dot(Z,(Z.T*tB)))
 
-def proj_alg_ric_newtonadi(M, F, J, B, W, Z0=None, U=None, V=None):
+def comp_frobnorm_factored_difference(zone, ztwo):
+    """compute the squared Frobenius norm of z1*z1.T - z2*z2.T
+
+    """
+    tr1sq = (zone*zone).sum(-1)
+    tr2sq = (ztwo*ztwo).sum(-1)
+    tr12  = (zone*ztwo).sum(-1)
+
+    return (tr1sq - 2*tr12 + tr2sq).sum()
+
+def proj_alg_ric_newtonadi(mt=None, ft=None, jmat=None, bmat=None, 
+                            wmat=None, z0=None, 
+                            newtonadisteps=10, adisteps=100):
+
     """ solve the projected algebraic ricc via newton adi 
 
-    M.T*X*[F-UV] + F.T*X*M - M.T*X*B*B.T*X*M + J(Y) = -WW.T
+    M.T*X*F + F.T*X*M - M.T*X*B*B.T*X*M + J(Y) = -WW.T
 
         JXM = 0 and M.TXJ.T = 0
 
     """
-        for nnwtadi in range(tip['nnwtadisteps']):
+    znc = z0
 
-            mTxtb = -stokesmatsc['MT']*np.dot(Zpn, Zpn.T*tB)
-            rhsadi = np.hstack([stokesmatsc['MT']*Zc,
-                      np.sqrt(DT)*np.hstack([mTxtb, tCT])])
+    for nnwtadi in range(newtonadisteps):
 
+        mtxb = mt*np.dot(znc, znc.T*B)
+        rhsadi = np.hstack([mtxb, wmat])
 
-            # to avoid a dense matrix we use the smw formula
-            # to compute (A-UV).-1
-            # for the factorization mTxg = mTxtb * tbT = U*V
-            # 
-            # note that proj solve lyap is defined for
-            #
-            # F.T*X*M + M.T*X*F = -CC.T
-            #
-            # to give X spd if M spd and X hurwitz
+        # to avoid a dense matrix we use the smw formula
+        # to compute (A-UV).-1
+        # for the factorization mTxg = mTxtb * tbT = U*V
 
-            Zpn = pru.solve_proj_lyap_stein(At=-lyapAT,
-                                            Mt=stokesmatsc['MT'],
-                                            U=DT*mTxtb,
-                                            V=np.array(tB.todense()),
-                                            J=stokesmatsc['J'],
-                                            W=rhsadi,
-                                            nadisteps=tip['nadisteps'])
+        znc = solve_proj_lyap_stein(At=ft,
+                                    Mt=mt,
+                                    U=mTxtb,
+                                    V=bmat.todense(),
+                                    J=jmat,
+                                    W=wmat,
+                                    nadisteps=nadisteps)
 
-        # wp = 
 
 
