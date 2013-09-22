@@ -118,7 +118,7 @@ def comp_frobnorm_factored_difference(zone, ztwo):
     """
     tr1sq = (zone*zone).sum(-1)
     tr2sq = (ztwo*ztwo).sum(-1)
-    tr12  = (zone*ztwo).sum(-1)
+    tr12  = np.sqrt(tr1sq*tr2sq)
 
     return (tr1sq - 2*tr12 + tr2sq).sum()
 
