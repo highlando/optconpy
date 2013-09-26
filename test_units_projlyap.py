@@ -80,13 +80,12 @@ class TestProjLyap(unittest.TestCase):
         V = self.W.T
 
         Z = pru.solve_proj_lyap_stein(At=self.F.T, Mt=self.M.T, 
-                                        U=U, V=V, 
+                                        ut=U.T, vt=V.T, 
                                         J=self.J, W=self.W,
                                         nadisteps=self.adisteps)
 
-        uvs = sps.csr_matrix(np.dot(U,V))
-        Z2 = pru.solve_proj_lyap_stein(At=self.F.T-uvs, Mt=self.M.T, 
-                                        # U=U, V=V, 
+        uvst = sps.csr_matrix(np.dot(V.T,U.T))
+        Z2 = pru.solve_proj_lyap_stein(At=self.F.T-uvst, Mt=self.M.T, 
                                         J=self.J, W=self.W,
                                         nadisteps=self.adisteps)
 

@@ -4,7 +4,7 @@ import scipy.sparse.linalg as spsla
 import lin_alg_utils as lau
 
 def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None, 
-                           Vt=None, Ut=None, nadisteps=5):
+                           vt=None, ut=None, nadisteps=5):
 
     """ approximates X that solves the projected lyap equation
 
@@ -33,13 +33,13 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
     ms = [-10]
     NZ = W.shape[0]
 
-    def get_aminv(At, Mt, J, ms):
+    def get_atmtlu(At, Mt, J, ms):
         """compute the LU of the projection matrix 
 
         """
-        Np = J.shape[0]
+        NP = J.shape[0]
         sysm = sps.vstack([sps.hstack([At + ms.conjugate()*Mt, -J.T]),
-                           sps.hstack([J,sps.csr_matrix((Np,Np))])],
+                           sps.hstack([J,sps.csr_matrix((NP, NP))])],
                                 format='csc')
         return spsla.splu(sysm)
 
@@ -47,7 +47,7 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
                         J=None, ms=None, atmtlu=None):
 
         if atmtlu is None:
-            atmtlu = get_aminv(At, Mt, J, ms)
+            atmtlu = get_atmtlu(At, Mt, J, ms)
 
         NZ = Z.shape[0]
 
@@ -59,33 +59,34 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
 
         return Zp, atmtlu
 
-    if Ut is not None and Vt is not None:
+    if ut is not None and vt is not None:
         # preps to apply the smw formula
         atmtlu = get_atmtlu(At, Mt, J, ms[0])
 
         # adding zeros to the coefficients to fit the
         # saddle point systems
-        vte = np.vstack([Vt, np.zeros((J.shape[0], Vt.shape[1]))])
-        ute = np.hstack([Ut, np.zeros((Ut.shape[0], J.shape[0]))])
+        vte = np.vstack([vt, np.zeros((J.shape[0], vt.shape[1]))])
+        ute = np.hstack([ut, np.zeros((ut.shape[0], J.shape[0]))])
         We = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
 
-        Stinv = lau.get_Sinv_smw(atmtlu, U=Vte, V=Ute)
+        Stinv = lau.get_Sinv_smw(atmtlu, U=vte, V=ute)
 
         ## Start the ADI iteration
         Z = lau.app_smw_inv(atmtlu, U=vte, V=ute, 
                                       rhsa=We, Sinv=Stinv)[:NZ,:]
+        ufac = Z
 
         for n in range(nadisteps):
-            Z = (At - ms[0]*Mt)*Z - np.dot(vte, np.dot(ute, Z))
+            Z = (At - ms[0]*Mt)*Z - np.dot(vt, np.dot(ut, Z))
             Ze = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
-            Z = lau.app_smw_inv(Atlu, U=vte, V=ute, 
-                                          rhsa=Ze, Sinv=Sinv)[:NZ,:]
-            U = np.hstack([U,Z])
+            Z = lau.app_smw_inv(atmtlu, U=vte, V=ute, 
+                                          rhsa=Ze, Sinv=Stinv)[:NZ,:]
+            ufac = np.hstack([ufac, Z])
 
-        rel_err = np.linalg.norm(Z)/np.linalg.norm(U)
+        rel_err = np.linalg.norm(Z)/np.linalg.norm(ufac)
         print 'Number of ADI steps {0} - Relative norm of the update {1}'.format(nadisteps, rel_err)
 
-        return np.sqrt(-2*ms[0].real)*U
+        return np.sqrt(-2*ms[0].real)*ufac
 
 
     else:
@@ -95,7 +96,7 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
         for n in range(nadisteps):
             Z = (At - ms[0]*Mt)*Z
             Z = _app_projinvz(Z, At=At, Mt=Mt, 
-                              J=J, ms=ms[0], aminv=atmtlu)
+                              J=J, ms=ms[0], atmtlu=atmtlu)[0]
             U = np.hstack([U,Z])
 
         rel_err = np.linalg.norm(Z)/np.linalg.norm(U)
