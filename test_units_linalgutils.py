@@ -6,7 +6,7 @@ import scipy.sparse.linalg as spsla
 
 # unittests for the helper functions
 
-class smw_formula(unittest.TestCase):
+class TestLinalgUtils(unittest.TestCase):
 
     def setUp(self):
 
@@ -70,5 +70,5 @@ class smw_formula(unittest.TestCase):
         self.assertTrue(np.allclose(frob_zmu*frob_zmu,my_frob_zmu))
 
 
-if __name__ == '__main__':
-    unittest.main()
+suite = unittest.TestLoader().loadTestsFromTestCase(TestLinalgUtils)
+unittest.TextTestRunner(verbosity=2).run(suite)

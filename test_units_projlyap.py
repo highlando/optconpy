@@ -13,7 +13,7 @@ class TestProjLyap(unittest.TestCase):
         self.Nv = 200
         self.Np = 150
         self.Ny = 30
-        self.adisteps = 100
+        self.adisteps = 150
 
         # -F, M spd -- coefficient matrices
         self.F = -sps.eye(self.Nv) - sps.rand(self.Nv, self.Nv)*sps.rand(self.Nv, self.Nv) 
@@ -40,9 +40,9 @@ class TestProjLyap(unittest.TestCase):
             raise Warning('Fail: J is not full rank')
 
     def test_proj_lyap_sol(self):
-        """check the solution of the projected
+        """check the solution of the projected lyap eqn 
         
-        lyap eqn via ADI iteration"""
+        via ADI iteration"""
         import lin_alg_utils as lau
         import proj_ric_utils as pru
 
@@ -62,10 +62,61 @@ class TestProjLyap(unittest.TestCase):
                 np.dot( np.dot(P.T, FtXM.T), P) + \
                 np.dot(PtW,PtW.T)
 
+        print np.linalg.norm(MtXM)
+
         self.assertTrue(np.allclose(MtXM,np.dot(P.T,np.dot(MtXM,P))))
 
         self.assertTrue(np.linalg.norm(ProjRes)/np.linalg.norm(MtXM)
                             < 1e-4 )
+
+    def test_proj_lyap_smw_sol(self):
+        """check the solution of the projected lyap eqn 
+        
+        via ADI iteration"""
+        import lin_alg_utils as lau
+        import proj_ric_utils as pru
+
+        U = 1e-4*self.W
+        V = self.W.T
+
+        Z = pru.solve_proj_lyap_stein(At=self.F.T, Mt=self.M.T, 
+                                        U=U, V=V, 
+                                        J=self.J, W=self.W,
+                                        nadisteps=self.adisteps)
+
+        uvs = sps.csr_matrix(np.dot(U,V))
+        Z2 = pru.solve_proj_lyap_stein(At=self.F.T-uvs, Mt=self.M.T, 
+                                        # U=U, V=V, 
+                                        J=self.J, W=self.W,
+                                        nadisteps=self.adisteps)
+
+        print 'this should be 0={0}'.format(np.linalg.norm(Z-Z2))
+
+        MinvJt = lau.app_luinv_to_spmat(self.Mlu, self.J.T)
+        Sinv = np.linalg.inv(self.J*MinvJt)
+        P = np.eye(self.Nv)-np.dot(MinvJt,Sinv*self.J)
+
+        XM = np.dot(Z,Z.T*self.M)
+        MtXM = self.M.T*XM
+
+        FtUVXM = self.F.T*np.dot(Z,Z.T)*self.M - np.dot(U, np.dot(V, XM))
+        PtW = np.dot(P.T,self.W)
+        ProjRes = np.dot(P.T, np.dot(FtUVXM, P)) + \
+                np.dot( np.dot(P.T, FtUVXM.T), P) + \
+                np.dot(PtW,PtW.T)
+
+        print np.linalg.norm(MtXM)
+
+        self.assertTrue(np.allclose(MtXM,np.dot(P.T,np.dot(MtXM,P))))
+
+        self.assertTrue(np.linalg.norm(ProjRes)/np.linalg.norm(MtXM)
+                            < 1e-4 )
+
+    def test_proj_alg_ric_sol(self):
+        """check the sol of the projected alg. Riccati Eqn
+
+        via Newton ADI"""
+        
 
 suite = unittest.TestLoader().loadTestsFromTestCase(TestProjLyap)
 unittest.TextTestRunner(verbosity=2).run(suite)

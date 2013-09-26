@@ -1,10 +1,10 @@
 import numpy as np
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
-import lin_alg_utils
+import lin_alg_utils as lau
 
 def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None, 
-                          U=None, V=None, nadisteps=5):
+                           Vt=None, Ut=None, nadisteps=5):
 
     """ approximates X that solves the projected lyap equation
 
@@ -19,7 +19,14 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
     At, Mt ... is A.T, M.T - no transposing in this function
 
     We use the SMW formula: 
-    (A-UV).-1 = A.-1 + A.-1*U[I-VA.-1U).-1 A.-1
+    (A-UV).-1 = A.-1 + A.-1*U [ I - V A.-1 U].-1 A.-1
+
+    or
+
+    (A-UV).-T = A.-T + A.-T*Vt [ I - Ut A.-T Vt ].-1 A.-T 
+
+              = (A.T - Vt Ut).-1
+
     see numOptAff.pdf
     """
 
@@ -51,27 +58,26 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
 
         return Zp 
 
-    if U is not None and V is not None:
+    if Ut is not None and Vt is not None:
         # to apply the smw formula
-        Alu = get_aminv(At, Mt, J, ms[0])
+        Atlu = get_aminv(At, Mt, J, ms[0])
 
-        Ue = np.vstack([U, np.zeros((J.shape[0], U.shape[1]))])
-        Ve = np.vstack([V, np.zeros((J.shape[0], V.shape[1]))])
+        vte = np.vstack([V, np.zeros((J.shape[0], V.shape[1]))])
+        ute = np.hstack([U, np.zeros((U.shape[0], J.shape[0]))])
         We = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
 
-        Sinv = lin_alg_utils.get_Sinv_smw(Alu, U=Ue, V=Ve)
-        Z = lin_alg_utils.app_smw_inv(Alu, U=Ue, V=Ve, 
-                                      rhsa=We, Sinv=Sinv)[:NZ,:]
+        Stinv = lau.get_Sinv_smw(Atlu, U=Vte, V=Ute)
+        Z =lau.app_smw_inv(Atlu, U=vte, V=ute, 
+                                      rhsa=We, Sinv=Stinv)[:NZ,:]
         for n in range(nadisteps):
             Z = (At - ms[0]*Mt)*Z
             Ze = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
-            Z = lin_alg_utils.app_smw_inv(Alu, U=Ue, V=Ve, 
+            Z =lau.app_smw_inv(Atlu, U=vte, V=ute, 
                                           rhsa=Ze, Sinv=Sinv)[:NZ,:]
-            print Z.shape
-            print U.shape
             U = np.hstack([U,Z])
-            rel_err = np.linalg.norm(Z)/np.linalg.norm(U)
-            print rel_err
+
+        rel_err = np.linalg.norm(Z)/np.linalg.norm(U)
+        print 'Number of ADI steps {0} - Relative norm of the update {1}'.format(nadisteps, rel_err)
 
         return np.sqrt(-2*ms[0].real)*U
 
@@ -83,11 +89,10 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
         for n in range(nadisteps):
             Z = (At - ms[0]*Mt)*Z
             Z = _app_projinvz(Z, At=At, Mt=Mt, J=J, ms=ms[0])
-            print Z.shape
-            print U.shape
             U = np.hstack([U,Z])
-            rel_err = np.linalg.norm(Z)/np.linalg.norm(U)
-            print rel_err
+
+        rel_err = np.linalg.norm(Z)/np.linalg.norm(U)
+        print 'Number of ADI steps {0} - Relative error in the update {1}'.format(nadisteps, rel_err)
 
         return np.sqrt(-2*ms[0].real)*U
 
@@ -124,24 +129,35 @@ def proj_alg_ric_newtonadi(mt=None, ft=None, jmat=None, bmat=None,
         JXM = 0 and M.TXJ.T = 0
 
     """
-    znc = z0
+    znn = solve_proj_lyap_stein(At=ft,
+                                Mt=mt,
+                                J=jmat,
+                                W=wmat,
+                                nadisteps=adisteps)
+
+    znc = znn
 
     for nnwtadi in range(newtonadisteps):
 
-        mtxb = mt*np.dot(znc, znc.T*B)
+        mtxb = mt*np.dot(znc, np.dot(znc.T, bmat))
         rhsadi = np.hstack([mtxb, wmat])
+        rhsadi = wmat
 
         # to avoid a dense matrix we use the smw formula
         # to compute (A-UV).-1
         # for the factorization mTxg = mTxtb * tbT = U*V
 
-        znc = solve_proj_lyap_stein(At=ft,
+        znn = solve_proj_lyap_stein(At=ft,
                                     Mt=mt,
-                                    U=mTxtb,
-                                    V=bmat.todense(),
+                                    # U=mtxb, V=bmat.T,
                                     J=jmat,
-                                    W=wmat,
-                                    nadisteps=nadisteps)
+                                    W=rhsadi,
+                                    nadisteps=adisteps)
+        
+        fndif = lau.comp_frobnorm_factored_difference(znc, znn)
+        print np.sqrt(fndif)
+        print 'current f norm of newton adi update is {0}'.format(fndif)
+        znc = znn
 
 
 
