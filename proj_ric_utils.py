@@ -21,7 +21,7 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
     We use the SMW formula: 
     (A-UV).-1 = A.-1 + A.-1*U [ I - V A.-1 U].-1 A.-1
 
-    or
+    for the transpose:
 
     (A-UV).-T = A.-T + A.-T*Vt [ I - Ut A.-T Vt ].-1 A.-T 
 
@@ -43,10 +43,11 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
                                 format='csc')
         return spsla.splu(sysm)
 
-    def _app_projinvz(Z, At=None, Mt=None, J=None, ms=None, aminv=None):
+    def _app_projinvz(Z, At=None, Mt=None, 
+                        J=None, ms=None, atmtlu=None):
 
-        if aminv is None:
-            aminv = get_aminv(At, Mt, J, ms)
+        if atmtlu is None:
+            atmtlu = get_aminv(At, Mt, J, ms)
 
         NZ = Z.shape[0]
 
@@ -54,25 +55,30 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
         zcol = np.zeros(NZ+J.shape[0])
         for ccol in range(Z.shape[1]):
             zcol[:NZ] = Z[:NZ,ccol]
-            Zp[:,ccol] = aminv.solve(zcol)[:NZ]
+            Zp[:,ccol] = atmtlu.solve(zcol)[:NZ]
 
-        return Zp 
+        return Zp, atmtlu
 
     if Ut is not None and Vt is not None:
-        # to apply the smw formula
-        Atlu = get_aminv(At, Mt, J, ms[0])
+        # preps to apply the smw formula
+        atmtlu = get_atmtlu(At, Mt, J, ms[0])
 
-        vte = np.vstack([V, np.zeros((J.shape[0], V.shape[1]))])
-        ute = np.hstack([U, np.zeros((U.shape[0], J.shape[0]))])
+        # adding zeros to the coefficients to fit the
+        # saddle point systems
+        vte = np.vstack([Vt, np.zeros((J.shape[0], Vt.shape[1]))])
+        ute = np.hstack([Ut, np.zeros((Ut.shape[0], J.shape[0]))])
         We = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
 
-        Stinv = lau.get_Sinv_smw(Atlu, U=Vte, V=Ute)
-        Z =lau.app_smw_inv(Atlu, U=vte, V=ute, 
+        Stinv = lau.get_Sinv_smw(atmtlu, U=Vte, V=Ute)
+
+        ## Start the ADI iteration
+        Z = lau.app_smw_inv(atmtlu, U=vte, V=ute, 
                                       rhsa=We, Sinv=Stinv)[:NZ,:]
+
         for n in range(nadisteps):
-            Z = (At - ms[0]*Mt)*Z
+            Z = (At - ms[0]*Mt)*Z - np.dot(vte, np.dot(ute, Z))
             Ze = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
-            Z =lau.app_smw_inv(Atlu, U=vte, V=ute, 
+            Z = lau.app_smw_inv(Atlu, U=vte, V=ute, 
                                           rhsa=Ze, Sinv=Sinv)[:NZ,:]
             U = np.hstack([U,Z])
 
@@ -83,12 +89,13 @@ def solve_proj_lyap_stein(At=None, J=None, W=None, Mt=None,
 
 
     else:
-        Z = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
+        Z, atmtlu = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
         U = Z
 
         for n in range(nadisteps):
             Z = (At - ms[0]*Mt)*Z
-            Z = _app_projinvz(Z, At=At, Mt=Mt, J=J, ms=ms[0])
+            Z = _app_projinvz(Z, At=At, Mt=Mt, 
+                              J=J, ms=ms[0], aminv=atmtlu)
             U = np.hstack([U,Z])
 
         rel_err = np.linalg.norm(Z)/np.linalg.norm(U)
