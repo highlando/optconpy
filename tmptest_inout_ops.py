@@ -4,6 +4,7 @@ from dolfin import *
 import numpy as np
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
+import matplotlib.pyplot as plt
 
 import dolfin_to_nparrays as dtn
 import cont_obs_utils as cou
@@ -88,7 +89,6 @@ y4 = Function(Y)
 y5 = Function(Y)
 y6 = Function(Y)
 
-# interactive(True)
 y1.vector().set_local(testy[:NY])
 plot(y1)
 y2.vector().set_local(testy[NY:])
@@ -126,3 +126,4 @@ plot(y6, title='ystar')
 #                             Mt=stokesmatsc['M']).T
 # print np.linalg.norm(np.dot(C,testvi) - np.dot(Ci,testvi))
 
+interactive(True)

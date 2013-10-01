@@ -63,23 +63,38 @@ def apply_invsqrt_fromleft(M, rhsa, output=None):
         return rhsa*np.linalg.inv(Z)
 
 def get_Sinv_smw(Alu, U=None, V=None):
-    """ compute (the small) inverse of I-V.T*Ainv*U
+    """ compute (the small) inverse of I-V*Ainv*U
     """
     aiu = np.zeros(U.shape)
+
     for ccol in range(U.shape[1]):
         try:
             aiu[:,ccol] = Alu.solve(U[:,ccol])
         except AttributeError:
             aiu[:,ccol] = spsla.spsolve(Alu,U[:,ccol])
 
-    return np.linalg.inv(np.eye(U.shape[1])-np.dot(V.T,aiu))
+    return np.linalg.inv(np.eye(U.shape[1])-np.dot(V,aiu))
+
+def app_luinv_to_spmat(Alu, Z):
+    """ compute A.-1*Z  where A comes factored
+
+    and with a solve routine"""
+
+    Z.tocsc()
+    ainvz = np.zeros(Z.shape)
+    for ccol in range(Z.shape[1]):
+        ainvz[:,ccol] = Alu.solve(Z[:,ccol].toarray().flatten())
+
+    return ainvz
+
+
 
 
 def app_smw_inv(Alu, U=None, V=None, rhsa=None, Sinv=None):
     """compute the sherman morrison woodbury inverse 
 
     of 
-        A - np.dot(U,V.T)
+        A - np.dot(U,V)
 
     applied to (array)rhs. 
     """
@@ -90,9 +105,13 @@ def app_smw_inv(Alu, U=None, V=None, rhsa=None, Sinv=None):
             Sinv = get_Sinv_smw(Alu,U,V)
 
         crhs = rhsa[:,rhscol]
-        # the corrected rhs: (I + U*Sinv*VT*Ainv)*rhs
-        crhs = crhs + np.dot(U, np.dot(Sinv, 
-                                    np.dot(V.T, Alu.solve(crhs))))
+        # the corrected rhs: (I + U*Sinv*V*Ainv)*rhs
+        try:
+            crhs = crhs + np.dot(U, np.dot(Sinv, 
+                        np.dot(V, Alu.solve(crhs))))
+        except AttributeError:
+            crhs = crhs + np.dot(U, np.dot(Sinv, 
+                        np.dot(V, spsla.spsolve(Alu, crhs))))
 
         try:
             # if Alu comes with a solve routine, e.g. LU-factored - fine
@@ -125,4 +144,19 @@ def app_schurc_inv(M, J, veca):
 
     return auveca
 
+
+def comp_frobnorm_factored_difference(zone, ztwo):
+    """compute the squared Frobenius norm of z1*z1.T - z2*z2.T
+
+    using the linearity traces and that tr.(z1.dot(z2)) = tr(z2.dot(z1))
+    and that tr(z1.dot(z1.T)) is faster computed via (z1*z1.sum(-1)).sum()
+    """
+
+    ata = np.dot(zone.T, zone)
+    btb = np.dot(ztwo.T, ztwo)
+    atb = np.dot(zone.T, ztwo)
+
+    return (ata*ata).sum(-1).sum() -  \
+            2*(atb*atb).sum(-1).sum() + \
+            (btb*btb).sum(-1).sum()
 
