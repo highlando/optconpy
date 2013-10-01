@@ -62,18 +62,18 @@ def apply_invsqrt_fromleft(M, rhsa, output=None):
     else:
         return rhsa*np.linalg.inv(Z)
 
-def get_Sinv_smw(Alu, U=None, V=None):
+def get_Sinv_smw(amat_lu, umat=None, vmat=None):
     """ compute (the small) inverse of I-V*Ainv*U
     """
-    aiu = np.zeros(U.shape)
+    aiu = np.zeros(umat.shape)
 
-    for ccol in range(U.shape[1]):
+    for ccol in range(umat.shape[1]):
         try:
-            aiu[:,ccol] = Alu.solve(U[:,ccol])
+            aiu[:,ccol] = amat_lu.solve(umat[:,ccol])
         except AttributeError:
-            aiu[:,ccol] = spsla.spsolve(Alu,U[:,ccol])
+            aiu[:,ccol] = spsla.spsolve(amat_lu,umat[:,ccol])
 
-    return np.linalg.inv(np.eye(U.shape[1])-np.dot(V,aiu))
+    return np.linalg.inv(np.eye(umat.shape[1])-np.dot(vmat,aiu))
 
 def app_luinv_to_spmat(Alu, Z):
     """ compute A.-1*Z  where A comes factored
@@ -90,7 +90,7 @@ def app_luinv_to_spmat(Alu, Z):
 
 
 
-def app_smw_inv(Alu, U=None, V=None, rhsa=None, Sinv=None):
+def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
     """compute the sherman morrison woodbury inverse 
 
     of 
@@ -102,16 +102,16 @@ def app_smw_inv(Alu, U=None, V=None, rhsa=None, Sinv=None):
     auvirhs = np.zeros(rhsa.shape)
     for rhscol in range(rhsa.shape[1]):
         if Sinv is None:
-            Sinv = get_Sinv_smw(Alu,U,V)
+            Sinv = get_Sinv_smw(Alu, umat, vmat)
 
         crhs = rhsa[:,rhscol]
         # the corrected rhs: (I + U*Sinv*V*Ainv)*rhs
         try:
-            crhs = crhs + np.dot(U, np.dot(Sinv, 
-                        np.dot(V, Alu.solve(crhs))))
+            crhs = crhs + np.dot(umat, np.dot(Sinv, 
+                        np.dot(vmat, Alu.solve(crhs))))
         except AttributeError:
-            crhs = crhs + np.dot(U, np.dot(Sinv, 
-                        np.dot(V, spsla.spsolve(Alu, crhs))))
+            crhs = crhs + np.dot(umat, np.dot(Sinv, 
+                        np.dot(vmat, spsla.spsolve(Alu, crhs))))
 
         try:
             # if Alu comes with a solve routine, e.g. LU-factored - fine
