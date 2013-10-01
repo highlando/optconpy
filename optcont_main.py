@@ -162,6 +162,8 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
 ###
 ## Prepare for control 
 ###
+    # casting some parameters
+    NY = contp['NY']
 
     # define the control and observation operators
     cdom = cou.ContDomain(contp['cdcoo'])
@@ -173,10 +175,12 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
     MyC, My = cou.get_mout_opa(odom=odom, V=femp['V'],
                                NY=contp['NY'])
     MyC = MyC[:,invinds][:,:]
-    C = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'], 
-                            Mt=stokesmatsc['MT'])
+    # Compute CP - where P is the projector onto div-free elements
+    Mcp = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'], 
+                            Mt=stokesmatsc['MT']).T
 
-    vstar = cou.get_vstar(C, contp['ystar'], odcoo, NY)
+    # get v* = CP+ y* [maybe we will never need it]
+    # vstar = cou.get_vstar(Mcp, contp['ystar'], contp['odcoo'], NY)
 
     # set the weighing matrices
     if contp['R'] is None:
@@ -196,13 +200,16 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
     tB = linsolv_utils.apply_invsqrt_fromleft(contp['R'], Ba,
                                               output='sparse')
     tCT = linsolv_utils.apply_invsqrt_fromleft(My, MyC.T, output='dense')
+    tCpT = linsolv_utils.apply_invsqrt_fromleft(My, Mcp.T, output='dense')
 
+    # initialization of (backward) time integration 
+    # XtE = M.-T*P.T*V*P*M.-1 --> ZtE = M.-T*(My.-1/2*C*P)
     t = tip['tE']
-    Zp = linsolv_utils.apply_massinv(stokesmatsc['M'], tCT)
+    Zc = linsolv_utils.apply_massinv(stokesmatsc['MT'], tCpT)
 
     cdatstr = get_datastr(nwtn=newtk, time=DT, meshp=N, timps=tip)
 
-    dou.save_curv(Zp, fstring=ddir+'Z'+cdatstr) 
+    dou.save_curv(Zc, fstring=ddir+'Z'+cdatstr) 
 
     for t in np.linspace(tip['tE']-DT, tip['t0'],
                             np.round((tip['tE']-tip['t0'])/DT)):
@@ -226,7 +233,8 @@ def optcon_nse(N = 20, Nts = 4, compvels=True):
                                                     femp['diribcs'])
 
         # starting value for Newton-ADI iteration
-        Zcn = np.copy(Zp)
+        # that computes Zp via a sequence Zpn
+        Zpn = np.copy(Zc)
         for nnwtadi in range(tip['nnwtadisteps']):
 
             mTxtb = stokesmatsc['MT']*np.dot(Zcn, Zcn.T*tB)

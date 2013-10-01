@@ -200,10 +200,14 @@ def get_rightinv(C):
     """compute the rightinverse bmo SVD
 
     """
-    # u, s, vt = spsla.svds(C, k=C.shape[0])
-    u, s, vt = np.linalg.svd(np.array(C.todense()), full_matrices=0)
+    # use numpy routine for dense matrices
+    try:
+        u, s, vt = np.linalg.svd(np.array(C.todense()), full_matrices=0)
+    except AttributeError:
+        u, s, vt = np.linalg.svd(C, full_matrices=0)
 
     return np.dot(vt.T, np.dot(np.diag(1.0/s), u.T))
+
 
 def get_vstar(C, ystar, odcoo, NY):
 
