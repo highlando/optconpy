@@ -32,22 +32,22 @@ try:
 except RuntimeError:
     raise Warning('Fail: J is not full rank')
 
-U = 1e-4*U
-V = V.T
-print np.linalg.norm(U)
-
-Z = pru.solve_proj_lyap_stein(A=F, M=M, 
-                                u=U, v=V, 
-                                J=J, W=W,
-                                nadisteps=adisteps)
-
-uvs = sps.csr_matrix(np.dot(U,V))
-Z2 = pru.solve_proj_lyap_stein(A=F-uvs, M=M, 
-                                J=J, W=W,
-                                nadisteps=adisteps)
-
-print 'this should be 0={0}'.format(np.linalg.norm(Z-Z2))
-# pru.proj_alg_ric_newtonadi(mt=M, ft=F, jmat=J, bmat=W, 
-#                             wmat=W, z0=W, 
-#                             newtonadisteps=2, adisteps=20)
+# U = 1e-4*U
+# V = V.T
+# print np.linalg.norm(U)
+# 
+# Z = pru.solve_proj_lyap_stein(A=F, M=M, 
+#                                 u=U, v=V, 
+#                                 J=J, W=W,
+#                                 nadisteps=adisteps)
+# 
+# uvs = sps.csr_matrix(np.dot(U,V))
+# Z2 = pru.solve_proj_lyap_stein(A=F-uvs, M=M, 
+#                                 J=J, W=W,
+#                                 nadisteps=adisteps)
+# 
+# print 'this should be 0={0}'.format(np.linalg.norm(Z-Z2))
+pru.proj_alg_ric_newtonadi(mmat=M, fmat=F, jmat=J, bmat=W, 
+                            wmat=W, z0=W, 
+                            newtonadisteps=2, adisteps=20)
 

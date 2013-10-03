@@ -153,7 +153,8 @@ def get_mTzzTtb(MT, Z, tB, output=None):
 
 def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None, 
                             wmat=None, z0=None, 
-                            newtonadisteps=10, adisteps=100):
+                            newtonadisteps=10, adisteps=100,
+                            transposed=False):
 
     """ solve the projected algebraic ricc via newton adi 
 
@@ -167,10 +168,10 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None,
         mt, ft  = mmat, fmat
     else:
         mt, ft  = mmat.T, fmat.T
+        transposed = True
         
-
-    znn = solve_proj_lyap_stein(At=ft,
-                                Mt=mt,
+    znn = solve_proj_lyap_stein(A=ft,
+                                M=mt,
                                 J=jmat,
                                 W=wmat,
                                 nadisteps=adisteps,
@@ -188,12 +189,13 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None,
         # to compute (A-UV).-1
         # for the factorization mTxg = mTxtb * tbT = U*V
 
-        znn = solve_proj_lyap_stein(At=ft,
-                                    Mt=mt,
+        znn = solve_proj_lyap_stein(A=ft,
+                                    M=mt,
                                     # U=mtxb, V=bmat.T,
                                     J=jmat,
                                     W=rhsadi,
-                                    nadisteps=adisteps)
+                                    nadisteps=adisteps,
+                                    transpose=transpose)
         
         fndif = lau.comp_frobnorm_factored_difference(znc, znn)
         print np.sqrt(fndif)
