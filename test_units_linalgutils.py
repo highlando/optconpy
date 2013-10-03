@@ -26,7 +26,7 @@ class TestLinalgUtils(unittest.TestCase):
         import lin_alg_utils as lau
 
         # check the branch with direct solves
-        AuvInvZ = lau.app_smw_inv(self.A, U=self.U, V=self.V,
+        AuvInvZ = lau.app_smw_inv(self.A, umat=self.U, vmat=self.V,
                                     rhsa=self.Z, Sinv=None)
         AAinvZ = self.A*AuvInvZ - np.dot(self.U, 
                                     np.dot(self.V, AuvInvZ))
@@ -34,7 +34,7 @@ class TestLinalgUtils(unittest.TestCase):
 
         #check the branch where A comes as LU
         Alu = spsla.splu(self.A)
-        AuvInvZ = lau.app_smw_inv(self.A, U=self.U, V=self.V,
+        AuvInvZ = lau.app_smw_inv(self.A, umat=self.U, vmat=self.V,
                                     rhsa=self.Z, Sinv=None)
         AAinvZ = self.A*AuvInvZ - np.dot(self.U, 
                                     np.dot(self.V, AuvInvZ))
@@ -63,11 +63,24 @@ class TestLinalgUtils(unittest.TestCase):
         U = self.U
         Z = self.Z
 
-        my_frob_zmu = lau.comp_frobnorm_factored_difference(U, Z)
-
+        # test the branch that returns only the difference
+        my_frob_zmu = lau.comp_sqrdfrobnorm_factored_difference(U, Z)
         frob_zmu = np.linalg.norm(np.dot(U, U.T) - np.dot(Z, Z.T),'fro')
 
         self.assertTrue(np.allclose(frob_zmu*frob_zmu,my_frob_zmu))
+
+        # test the branch that returns difference, norm z1, norm z2
+        my_frob_zmu, norm_u, norm_z =  \
+                lau.comp_sqrdfrobnorm_factored_difference(U, Z, 
+                        ret_sing_norms=True)
+
+        frob_zmu = np.linalg.norm(np.dot(U, U.T) - np.dot(Z, Z.T),'fro')
+        frob_u   = np.linalg.norm(np.dot(U, U.T))
+        frob_z   = np.linalg.norm(np.dot(Z, Z.T))
+
+        self.assertTrue(np.allclose(frob_zmu*frob_zmu,my_frob_zmu))
+        self.assertTrue(np.allclose(norm_u, frob_u**2))
+        self.assertTrue(np.allclose(norm_z, frob_z**2))
 
 
 suite = unittest.TestLoader().loadTestsFromTestCase(TestLinalgUtils)

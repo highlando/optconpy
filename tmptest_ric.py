@@ -8,9 +8,12 @@ import proj_ric_utils as pru
 Nv = 150
 Np = 40
 Ny = 5 
-adisteps = 150
-newtonadisteps = 14
-
+nwtn_adi_dict = dict(
+            adi_max_steps=150,
+            adi_newZ_reltol=1e-8,
+            nwtn_max_steps=14,
+            nwtn_upd_reltol=1e-12
+                    )
 
 # -F, M spd -- coefficient matrices
 F = -sps.eye(Nv) #- sps.rand(Nv, Nv)*sps.rand(Nv, Nv) 
@@ -52,6 +55,5 @@ print np.linalg.norm(U)
 
 pru.proj_alg_ric_newtonadi(mmat=M, fmat=F, jmat=J, bmat=W, 
                             wmat=W, z0=W, 
-                            newtonadisteps=newtonadisteps, 
-                            adisteps=adisteps)
+                            nwtn_adi_dict=nwtn_adi_dict)
 

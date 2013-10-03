@@ -5,8 +5,12 @@ import lin_alg_utils as lau
 
 def solve_proj_lyap_stein(A=None, J=None, W=None, M=None, 
                            umat=None, vmat=None, 
-                           nadisteps=5,
-                           transposed=False):
+                           transposed=False,
+                           adi_dict=dict(
+                                adi_max_steps=150,
+                                adi_newZ_reltol=1e-8
+                                        )
+                           ):
 
     """ approximates X that solves the projected lyap equation
 
@@ -64,6 +68,10 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
 
         return Zp, atmtlu
 
+
+    adi_step = 0
+    rel_Z_err = 2
+
     if umat is not None and vmat is not None:
         # preps to apply the smw formula
         atmtlu = get_atmtlu(At, Mt, J, ms[0])
@@ -82,42 +90,43 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T, 
                                       rhsa=We, Sinv=Stinv)[:NZ,:]
 
-        print 'SMW norm of iniv: {0}'.format(np.linalg.norm(Z))
-
         ufac = Z
+        while adi_step < adi_dict['adi_max_steps'] and \
+              rel_Z_err > adi_dict['adi_newZ_reltol']:
 
-        for n in range(nadisteps):
             Z = (At - ms[0]*Mt)*Z - np.dot(vmat.T, np.dot(umat.T, Z))
-            # print 'SMW norm {0} of Z: {1}'.format(n, np.linalg.norm(Z))
             Ze = np.vstack([Z, np.zeros((J.shape[0], W.shape[1]))])
-            # Z = _app_projinvz(Z, At=At-uvst, Mt=Mt, 
-            #                   J=J, ms=ms[0])[0]
-            # print 'SMW norm {0} of Zn: {1}'.format(n, np.linalg.norm(Z))
             Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T, 
                                           rhsa=Ze, Sinv=Stinv)[:NZ,:]
-            # print 'SMW norm {0} of Zn: {1}'.format(n, np.linalg.norm(Z))
             ufac = np.hstack([ufac, Z])
+            rel_Z_err = np.linalg.norm(Z)/np.linalg.norm(ufac)
 
-        rel_err = np.linalg.norm(Z)/np.linalg.norm(ufac)
-        print 'Number of ADI steps {0} - Relative norm of the update {1}'.format(nadisteps, rel_err)
+            adi_step += 1
+
+        print ('Number of ADI steps {0} -- \n' + 
+                'Relative norm of the update {1}'
+                    ).format(adi_step, rel_Z_err)
 
         return np.sqrt(-2*ms[0].real)*ufac
 
     else:
         Z, atmtlu = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
-        # print 'CLA norm of iniv: {0}'.format(np.linalg.norm(Z))
         ufac = Z
 
-        for n in range(nadisteps):
+        while adi_step < adi_dict['adi_max_steps'] and \
+              rel_Z_err > adi_dict['adi_newZ_reltol']:
+
             Z = (At - ms[0]*Mt)*Z
-            # print 'CLA norm {0} of Z: {1}'.format(n, np.linalg.norm(Z))
             Z = _app_projinvz(Z, At=At, Mt=Mt, 
                               J=J, ms=ms[0])[0]
-            # print 'CLA norm {0} of Zn: {1}'.format(n, np.linalg.norm(Z))
             ufac = np.hstack([ufac,Z])
+            rel_Z_err = np.linalg.norm(Z)/np.linalg.norm(ufac)
 
-        rel_err = np.linalg.norm(Z)/np.linalg.norm(ufac)
-        print 'Number of ADI steps {0} - Relative error in the update {1}'.format(nadisteps, rel_err)
+            adi_step += 1
+
+        print ('Number of ADI steps {0} -- \n' + 
+                'Relative norm of the update {1}'
+                    ).format(adi_step, rel_Z_err)
 
         return np.sqrt(-2*ms[0].real)*ufac
 
@@ -142,10 +151,16 @@ def get_mTzzTtb(MT, Z, tB, output=None):
     else:
         return MT*(np.dot(Z,(Z.T*tB)))
 
-def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None, 
-                            wmat=None, z0=None, 
-                            newtonadisteps=10, adisteps=100,
-                            transposed=False):
+def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, 
+                            bmat=None, wmat=None, z0=None, 
+                            transposed=False,
+                            nwtn_adi_dict=dict(
+                                        adi_max_steps=150,
+                                        adi_newZ_reltol=1e-8,
+                                        nwtn_max_steps=14,
+                                        nwtn_upd_reltol=1e-12
+                                                )
+                            ):
 
     """ solve the projected algebraic ricc via newton adi 
 
@@ -162,32 +177,32 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None,
         transposed = True
         
     znc = z0
+    nwtn_stp = 0
 
-    for nnwtadi in range(newtonadisteps):
+    while nwtn_stp < adi_dict['nwtn_max_steps'] and \
+          rel_upd_fnorm > adi_dict['nwtn_upd_reltol']:
 
         mtxb = mt*np.dot(znc, np.dot(znc.T, bmat))
         rhsadi = np.hstack([mtxb, wmat])
-        # rhsadi = wmat
 
         # to avoid a dense matrix we use the smw formula
-        # to compute (A-UV).-1
-        # for the factorization mTxg = mTxtb * tbT = U*V
-        # TODO is the -UV for the transposed??
+        # to compute (A-UV).-T
+        # for the factorization mTxg.T =  tb * mTxtb = U*V
 
-        znn = solve_proj_lyap_stein(A=ft,
-                                    M=mt,
-                                    umat=bmat, vmat=mtxb.T,
-                                    J=jmat,
+        znn = solve_proj_lyap_stein(A=ft, M=mt, J=jmat,
                                     W=rhsadi,
-                                    nadisteps=adisteps,
-                                    transposed=transposed)
+                                    umat=bmat, vmat=mtxb.T,
+                                    transposed=transposed,
+                                    adi_dict=nwtn_adi_dict)
 
-    #    print np.linalg.eigvals(np.dot(znn,znn.T))        
+        fndif, fnznc, fnznn = \
+                lau.comp_sqrdfrobnorm_factored_difference(znn, znc,
+                                                    ret_sing_norms=True)
 
-        fndif = lau.comp_frobnorm_factored_difference(znc, znn)
-        print np.sqrt(fndif)
-        print '\ncurrent f norm of newton adi update is {0}\n'.format(fndif)
+        rel_upd_fnorm = np.sqrt(fndif/fnznn)
+        print '\ncurrent f norm of newton adi update is {0}\n'.format(rel_upd_fnorm)
+
         znc = znn
-
+        nwtn_stp += 1
 
 

@@ -145,16 +145,24 @@ def app_schurc_inv(M, J, veca):
     return auveca
 
 
-def comp_frobnorm_factored_difference(zone, ztwo):
+def comp_sqrdfrobnorm_factored_difference(zone, ztwo,
+                                            ret_sing_norms=False):
     """compute the squared Frobenius norm of z1*z1.T - z2*z2.T
 
     using the linearity traces and that tr.(z1.dot(z2)) = tr(z2.dot(z1))
     and that tr(z1.dot(z1.T)) is faster computed via (z1*z1.sum(-1)).sum()
     """
-
+    
     ata = np.dot(zone.T, zone)
     btb = np.dot(ztwo.T, ztwo)
     atb = np.dot(zone.T, ztwo)
+
+    if ret_sing_norms:
+        norm_z1 = (ata*ata).sum(-1).sum()
+        norm_z2 = (btb*btb).sum(-1).sum()
+        return (norm_z1 - 2*(atb*atb).sum(-1).sum() + norm_z2,
+                norm_z1, 
+                norm_z2)
 
     return (ata*ata).sum(-1).sum() -  \
             2*(atb*atb).sum(-1).sum() + \

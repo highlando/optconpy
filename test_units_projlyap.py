@@ -13,7 +13,13 @@ class TestProjLyap(unittest.TestCase):
         self.NV = 200
         self.NP = 150
         self.NY = 3
-        self.adisteps = 120
+
+        self.nwtn_adi_dict = dict(
+                            adi_max_steps=100,
+                            adi_newZ_reltol=1e-6,
+                            nwtn_max_steps=14,
+                            nwtn_upd_reltol=1e-12
+                                    )
 
         # -F, M spd -- coefficient matrices
         self.F = -sps.eye(self.NV) - sps.rand(self.NV, self.NV)*sps.rand(self.NV, self.NV) 
@@ -52,7 +58,7 @@ class TestProjLyap(unittest.TestCase):
 
         Z = pru.solve_proj_lyap_stein(A=self.F, M=self.M, 
                                         J=self.J, W=self.W,
-                                        nadisteps=self.adisteps)
+                                        adi_dict=self.nwtn_adi_dict)
 
         MinvJt = lau.app_luinv_to_spmat(self.Mlu, self.J.T)
         Sinv = np.linalg.inv(self.J*MinvJt)
@@ -65,8 +71,6 @@ class TestProjLyap(unittest.TestCase):
         ProjRes = np.dot(P.T, np.dot(FtXM, P)) + \
                 np.dot( np.dot(P.T, FtXM.T), P) + \
                 np.dot(PtW,PtW.T)
-
-        print np.linalg.norm(MtXM)
 
         self.assertTrue(np.allclose(MtXM,np.dot(P.T,np.dot(MtXM,P))))
 
@@ -82,17 +86,17 @@ class TestProjLyap(unittest.TestCase):
 
         U = self.U
         V = self.V
-        print np.linalg.norm(U)
 
         Z = pru.solve_proj_lyap_stein(A=self.F, M=self.M, 
                                         umat=U, vmat=V, 
                                         J=self.J, W=self.W,
-                                        nadisteps=self.adisteps)
+                                        adi_dict=self.nwtn_adi_dict)
+
 
         uvs = sps.csr_matrix(np.dot(U,V))
         Z2 = pru.solve_proj_lyap_stein(A=self.F-uvs, M=self.M, 
                                         J=self.J, W=self.W,
-                                        nadisteps=self.adisteps)
+                                        adi_dict=self.nwtn_adi_dict)
 
         self.assertTrue(np.allclose(Z,Z2))
 
@@ -111,12 +115,10 @@ class TestProjLyap(unittest.TestCase):
                 np.dot( np.dot(P.T, FtUVXM.T), P) + \
                 np.dot(PtW,PtW.T)
 
-        print np.linalg.norm(MtXM)
-
         self.assertTrue(np.allclose(MtXM,np.dot(P.T,np.dot(MtXM,P))))
 
         self.assertTrue(np.linalg.norm(ProjRes)/np.linalg.norm(MtXM)
-                            < 1e-4 )
+                            < 1e-7 )
 
     def test_proj_alg_ric_sol(self):
         """check the sol of the projected alg. Riccati Eqn
