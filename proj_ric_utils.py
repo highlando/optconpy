@@ -159,23 +159,15 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None,
         mt, ft  = mmat, fmat
     else:
         mt, ft  = mmat.T, fmat.T
-    transposed = True
+        transposed = True
         
-
-    znn = solve_proj_lyap_stein(At=ft,
-                                Mt=mt,
-                                J=jmat,
-                                W=wmat,
-                                nadisteps=adisteps,
-                                transposed=transposed)
-
-    znc = znn
+    znc = z0
 
     for nnwtadi in range(newtonadisteps):
 
         mtxb = mt*np.dot(znc, np.dot(znc.T, bmat))
         rhsadi = np.hstack([mtxb, wmat])
-        rhsadi = wmat
+        # rhsadi = wmat
 
         # to avoid a dense matrix we use the smw formula
         # to compute (A-UV).-1
@@ -184,17 +176,17 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None,
 
         znn = solve_proj_lyap_stein(A=ft,
                                     M=mt,
-
-        znn = solve_proj_lyap_stein(At=ft,
-                                    Mt=mt,
-                                    # U=mtxb, V=bmat.T,
+                                    umat=bmat, vmat=mtxb.T,
                                     J=jmat,
                                     W=rhsadi,
-                                    nadisteps=adisteps)
-        
+                                    nadisteps=adisteps,
+                                    transposed=transposed)
+
+    #    print np.linalg.eigvals(np.dot(znn,znn.T))        
+
         fndif = lau.comp_frobnorm_factored_difference(znc, znn)
         print np.sqrt(fndif)
-        print 'current f norm of newton adi update is {0}'.format(fndif)
+        print '\ncurrent f norm of newton adi update is {0}\n'.format(fndif)
         znc = znn
 
 

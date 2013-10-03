@@ -5,10 +5,12 @@ import scipy.sparse.linalg as spsla
 
 import proj_ric_utils as pru
 
-Nv = 200
-Np = 150
-Ny = 30
-adisteps = 50
+Nv = 150
+Np = 40
+Ny = 5 
+adisteps = 150
+newtonadisteps = 14
+
 
 # -F, M spd -- coefficient matrices
 F = -sps.eye(Nv) #- sps.rand(Nv, Nv)*sps.rand(Nv, Nv) 
@@ -50,5 +52,6 @@ print np.linalg.norm(U)
 
 pru.proj_alg_ric_newtonadi(mmat=M, fmat=F, jmat=J, bmat=W, 
                             wmat=W, z0=W, 
-                            newtonadisteps=10, adisteps=90)
+                            newtonadisteps=newtonadisteps, 
+                            adisteps=adisteps)
 
