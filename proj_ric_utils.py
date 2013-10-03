@@ -4,7 +4,7 @@ import scipy.sparse.linalg as spsla
 import lin_alg_utils as lau
 
 def solve_proj_lyap_stein(A=None, J=None, W=None, M=None, 
-                           v=None, u=None, 
+                           umat=None, vmat=None, 
                            nadisteps=5,
                            transposed=False):
 
@@ -31,11 +31,9 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
     """
 
     if transposed:
-        At, Mt, ut, vt = A, M, u, v 
+        At, Mt = A, M 
     else:
-        At, Mt, ut, vt = A.T, M.T, u, v
-        if u is not None and v is not None:
-            ut, vt = u.T, v.T
+        At, Mt = A.T, M.T
 
     ms = [-10]       
     NZ = W.shape[0]
@@ -66,28 +64,22 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
 
         return Zp, atmtlu
 
-    if ut is not None and vt is not None:
+    if umat is not None and vmat is not None:
         # preps to apply the smw formula
         atmtlu = get_atmtlu(At, Mt, J, ms[0])
 
         # adding zeros to the coefficients to fit the
         # saddle point systems
-        vte = np.vstack([vt, np.zeros((J.shape[0], vt.shape[1]))])
-        ute = np.hstack([ut, np.zeros((ut.shape[0], J.shape[0]))])
+        vmate = np.hstack([vmat, np.zeros((vmat.shape[0], J.shape[0]))])
+        umate = np.vstack([umat, np.zeros((J.shape[0], umat.shape[1]))])
         We = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
 
-        Stinv = lau.get_Sinv_smw(atmtlu, U=vte, V=ute)
+
+        Stinv = lau.get_Sinv_smw(atmtlu, umat=vmate.T, vmat=umate.T)
 
         ## Start the ADI iteration
 
-        # debug
-        uvst = sps.csr_matrix(np.dot(vt,ut))
-        Z = _app_projinvz(W, At=At-uvst, Mt=Mt, 
-                          J=J, ms=ms[0])[0]
-        # /debug
-        print 'SMW norm of iniv: {0}'.format(np.linalg.norm(Z))
-
-        Z = lau.app_smw_inv(atmtlu, U=vte, V=ute, 
+        Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T, 
                                       rhsa=We, Sinv=Stinv)[:NZ,:]
 
         print 'SMW norm of iniv: {0}'.format(np.linalg.norm(Z))
@@ -95,13 +87,13 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         ufac = Z
 
         for n in range(nadisteps):
-            Z = (At - ms[0]*Mt)*Z - np.dot(vt, np.dot(ut, Z))
+            Z = (At - ms[0]*Mt)*Z - np.dot(vmat.T, np.dot(umat.T, Z))
             # print 'SMW norm {0} of Z: {1}'.format(n, np.linalg.norm(Z))
             Ze = np.vstack([Z, np.zeros((J.shape[0], W.shape[1]))])
             # Z = _app_projinvz(Z, At=At-uvst, Mt=Mt, 
             #                   J=J, ms=ms[0])[0]
             # print 'SMW norm {0} of Zn: {1}'.format(n, np.linalg.norm(Z))
-            Z = lau.app_smw_inv(atmtlu, U=vte, V=ute, 
+            Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T, 
                                           rhsa=Ze, Sinv=Stinv)[:NZ,:]
             # print 'SMW norm {0} of Zn: {1}'.format(n, np.linalg.norm(Z))
             ufac = np.hstack([ufac, Z])
@@ -150,7 +142,6 @@ def get_mTzzTtb(MT, Z, tB, output=None):
     else:
         return MT*(np.dot(Z,(Z.T*tB)))
 
-
 def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None, 
                             wmat=None, z0=None, 
                             newtonadisteps=10, adisteps=100,
@@ -168,10 +159,11 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None,
         mt, ft  = mmat, fmat
     else:
         mt, ft  = mmat.T, fmat.T
-        transposed = True
+    transposed = True
         
-    znn = solve_proj_lyap_stein(A=ft,
-                                M=mt,
+
+    znn = solve_proj_lyap_stein(At=ft,
+                                Mt=mt,
                                 J=jmat,
                                 W=wmat,
                                 nadisteps=adisteps,
@@ -188,14 +180,17 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None, bmat=None,
         # to avoid a dense matrix we use the smw formula
         # to compute (A-UV).-1
         # for the factorization mTxg = mTxtb * tbT = U*V
+        # TODO is the -UV for the transposed??
 
         znn = solve_proj_lyap_stein(A=ft,
                                     M=mt,
+
+        znn = solve_proj_lyap_stein(At=ft,
+                                    Mt=mt,
                                     # U=mtxb, V=bmat.T,
                                     J=jmat,
                                     W=rhsadi,
-                                    nadisteps=adisteps,
-                                    transpose=transpose)
+                                    nadisteps=adisteps)
         
         fndif = lau.comp_frobnorm_factored_difference(znc, znn)
         print np.sqrt(fndif)

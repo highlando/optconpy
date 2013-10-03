@@ -85,7 +85,7 @@ class TestProjLyap(unittest.TestCase):
         print np.linalg.norm(U)
 
         Z = pru.solve_proj_lyap_stein(A=self.F, M=self.M, 
-                                        u=U, v=V, 
+                                        umat=U, vmat=V, 
                                         J=self.J, W=self.W,
                                         nadisteps=self.adisteps)
 

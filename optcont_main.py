@@ -169,6 +169,8 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
 ###
 ## Prepare for control 
 ###
+    # casting some parameters
+    NY = contp['NY']
 
     # define the control and observation operators
     cdom = cou.ContDomain(contp['cdcoo'])

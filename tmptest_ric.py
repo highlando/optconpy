@@ -32,12 +32,12 @@ try:
 except RuntimeError:
     raise Warning('Fail: J is not full rank')
 
-# U = 1e-4*U
-# V = V.T
-# print np.linalg.norm(U)
-# 
+U = 1e-4*U
+V = V.T
+print np.linalg.norm(U)
+
 # Z = pru.solve_proj_lyap_stein(A=F, M=M, 
-#                                 u=U, v=V, 
+#                                 umat=U, vmat=V, 
 #                                 J=J, W=W,
 #                                 nadisteps=adisteps)
 # 
@@ -47,7 +47,8 @@ except RuntimeError:
 #                                 nadisteps=adisteps)
 # 
 # print 'this should be 0={0}'.format(np.linalg.norm(Z-Z2))
+
 pru.proj_alg_ric_newtonadi(mmat=M, fmat=F, jmat=J, bmat=W, 
                             wmat=W, z0=W, 
-                            newtonadisteps=2, adisteps=20)
+                            newtonadisteps=10, adisteps=90)
 
