@@ -6,10 +6,8 @@ import lin_alg_utils as lau
 def solve_proj_lyap_stein(A=None, J=None, W=None, M=None, 
                            umat=None, vmat=None, 
                            transposed=False,
-                           adi_dict=dict(
-                                adi_max_steps=150,
-                                adi_newZ_reltol=1e-8
-                                        )
+                           adi_dict=dict(adi_max_steps=150,
+                                         adi_newZ_reltol=1e-8)
                            ):
 
     """ approximates X that solves the projected lyap equation
@@ -158,7 +156,7 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                                         adi_max_steps=150,
                                         adi_newZ_reltol=1e-8,
                                         nwtn_max_steps=14,
-                                        nwtn_upd_reltol=1e-12
+                                        nwtn_upd_reltol=1e-8
                                                 )
                             ):
 
@@ -177,10 +175,10 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
         transposed = True
         
     znc = z0
-    nwtn_stp = 0
+    nwtn_stp, abs_upd_fnorm = 0, 2
 
-    while nwtn_stp < adi_dict['nwtn_max_steps'] and \
-          rel_upd_fnorm > adi_dict['nwtn_upd_reltol']:
+    while nwtn_stp < nwtn_adi_dict['nwtn_max_steps'] and \
+          abs_upd_fnorm > nwtn_adi_dict['nwtn_upd_abstol']:
 
         mtxb = mt*np.dot(znc, np.dot(znc.T, bmat))
         rhsadi = np.hstack([mtxb, wmat])
@@ -195,14 +193,18 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                                     transposed=transposed,
                                     adi_dict=nwtn_adi_dict)
 
-        fndif, fnznc, fnznn = \
+        abs_upd_fnorm, fnznn, fnznc = \
                 lau.comp_sqrdfrobnorm_factored_difference(znn, znc,
                                                     ret_sing_norms=True)
 
-        rel_upd_fnorm = np.sqrt(fndif/fnznn)
-        print '\ncurrent f norm of newton adi update is {0}\n'.format(rel_upd_fnorm)
+        # rel_upd_fnorm = np.sqrt(np.abs(fndif/fnznn))
+        # print fndif, fnznn
+
+        print '\nNewton ADI step: {1} -- f norm of update is {0}\n'.format(abs_upd_fnorm, nwtn_stp+1)
 
         znc = znn
         nwtn_stp += 1
+
+    return znn
 
 

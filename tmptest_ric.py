@@ -5,24 +5,26 @@ import scipy.sparse.linalg as spsla
 
 import proj_ric_utils as pru
 
-Nv = 150
+Nv = 250
 Np = 40
 Ny = 5 
 nwtn_adi_dict = dict(
-            adi_max_steps=150,
-            adi_newZ_reltol=1e-8,
-            nwtn_max_steps=14,
-            nwtn_upd_reltol=1e-12
+            adi_max_steps=250,
+            adi_newZ_reltol=4e-8,
+            nwtn_max_steps=24,
+            nwtn_upd_reltol=4e-8,
+            nwtn_upd_abstol=4e-8
                     )
 
 # -F, M spd -- coefficient matrices
-F = -sps.eye(Nv) #- sps.rand(Nv, Nv)*sps.rand(Nv, Nv) 
-M = sps.eye(Nv) #+ sps.rand(Nv, Nv)*sps.rand(Nv, Nv) 
+F = -sps.eye(Nv) - sps.rand(Nv, Nv)*sps.rand(Nv, Nv) 
+M = sps.eye(Nv) + sps.rand(Nv, Nv)*sps.rand(Nv, Nv) 
 
 # right-handside: C= -W*W.T
 W = np.random.randn(Nv, Ny)
 U = np.random.randn(Nv, Ny)
-V = np.random.randn(Nv, Ny)
+V = np.random.randn(Nv, Ny) 
+bmat = np.random.randn(Nv, Ny+2)
 
 # we need J sparse and of full rank
 for auxk in range(5):
@@ -53,7 +55,7 @@ print np.linalg.norm(U)
 # 
 # print 'this should be 0={0}'.format(np.linalg.norm(Z-Z2))
 
-pru.proj_alg_ric_newtonadi(mmat=M, fmat=F, jmat=J, bmat=W, 
-                            wmat=W, z0=W, 
+Z = pru.proj_alg_ric_newtonadi(mmat=M, fmat=F, jmat=J, bmat=bmat, 
+                            wmat=W, z0=bmat, 
                             nwtn_adi_dict=nwtn_adi_dict)
 
