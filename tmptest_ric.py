@@ -39,23 +39,30 @@ try:
 except RuntimeError:
     raise Warning('Fail: J is not full rank')
 
-U = 1e-4*U
-V = V.T
-print np.linalg.norm(U)
-
-# Z = pru.solve_proj_lyap_stein(A=F, M=M, 
-#                                 umat=U, vmat=V, 
-#                                 J=J, W=W,
-#                                 nadisteps=adisteps)
-# 
-# uvs = sps.csr_matrix(np.dot(U,V))
-# Z2 = pru.solve_proj_lyap_stein(A=F-uvs, M=M, 
-#                                 J=J, W=W,
-#                                 nadisteps=adisteps)
-# 
-# print 'this should be 0={0}'.format(np.linalg.norm(Z-Z2))
+# the Leray projector
+MinvJt = lau.app_luinv_to_spmat(self.Mlu, self.J.T)
+Sinv = np.linalg.inv(self.J*MinvJt)
+self.P = np.eye(self.NV)-np.dot(MinvJt,Sinv*self.J)
 
 Z = pru.proj_alg_ric_newtonadi(mmat=M, fmat=F, jmat=J, bmat=bmat, 
                             wmat=W, z0=bmat, 
                             nwtn_adi_dict=nwtn_adi_dict)
 
+MtXM = M.T*np.dot(Z,Z.T)*M
+MtXb = M.T*np.dot(np.dot(Z, Z.T), bmat)
+
+FtXM = (F.T-uvs.T)*np.dot(Z,Z.T)*M
+PtW = np.dot(P.T,W)
+
+
+ProjRes = np.dot(P.T, np.dot(FtXM, P)) + \
+        np.dot(np.dot(P.T, FtXM.T), P) -\
+        np.dot(MtXb, MtXb.T) + \
+        np.dot(PtW,PtW.T) 
+
+## TEST: result is 'projected' - riccati sol
+assertTrue(np.allclose(MtXM,
+                        np.dot(P.T,np.dot(MtXM,P))))
+
+## TEST: check projected residual - riccati sol
+print 'ric proj res {0}'format(np.linalg.norm(ProjRes))
