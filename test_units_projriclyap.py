@@ -23,7 +23,8 @@ class TestProjLyap(unittest.TestCase):
                             adi_newZ_reltol=1e-8,
                             nwtn_max_steps=24,
                             nwtn_upd_reltol=4e-8,
-                            nwtn_upd_abstol=4e-8
+                            nwtn_upd_abstol=4e-8,
+                            verbose=False
                                     )
 
         # -F, M spd -- coefficient matrices
@@ -75,15 +76,14 @@ class TestProjLyap(unittest.TestCase):
         via ADI iteration"""
 
         Z = pru.solve_proj_lyap_stein(A=self.F, M=self.M, 
-                                        umat=self.U, vmat=self.V, 
-                                        J=self.J, W=self.W,
-                                        adi_dict=self.nwtn_adi_dict)
+                                    umat=self.U, vmat=self.V, 
+                                    J=self.J, W=self.W,
+                                    adi_dict=self.nwtn_adi_dict)['zfac']
 
         MtXM = self.M.T*np.dot(Z,Z.T)*self.M
-
         FtXM = (self.F.T-self.uvs.T)*np.dot(Z,Z.T)*self.M
-        PtW = np.dot(self.P.T,self.W)
 
+        PtW = np.dot(self.P.T,self.W)
 
         ProjRes = np.dot(self.P.T, np.dot(FtXM, self.P)) + \
                 np.dot( np.dot(self.P.T, FtXM.T), self.P) + \
@@ -106,24 +106,26 @@ class TestProjLyap(unittest.TestCase):
         V = self.V
 
         Z = pru.solve_proj_lyap_stein(A=self.F, M=self.M, 
-                                        umat=U, vmat=V, 
-                                        J=self.J, W=self.W,
-                                        adi_dict=self.nwtn_adi_dict)
+                                    umat=U, vmat=V, 
+                                    J=self.J, W=self.W,
+                                    adi_dict=self.nwtn_adi_dict)['zfac']
+        print Z.shape
 
         Z2 = pru.solve_proj_lyap_stein(A=self.F-self.uvs, M=self.M, 
-                                        J=self.J, W=self.W,
-                                        adi_dict=self.nwtn_adi_dict)
+                                    J=self.J, W=self.W,
+                                    adi_dict=self.nwtn_adi_dict)['zfac']
+        print Z2.shape
 
         Z3 = pru.solve_proj_lyap_stein(A=self.F.T-self.uvs.T, M=self.M.T, 
-                                        J=self.J, W=self.W,
-                                        adi_dict=self.nwtn_adi_dict,
-                                        transposed=True)
+                                    J=self.J, W=self.W,
+                                    adi_dict=self.nwtn_adi_dict,
+                                    transposed=True)['zfac']
 
         Z4 = pru.solve_proj_lyap_stein(A=self.F.T, M=self.M.T, 
                                         J=self.J, W=self.W,
                                         umat=U, vmat=V, 
                                         adi_dict=self.nwtn_adi_dict,
-                                        transposed=True)
+                                        transposed=True)['zfac']
 
 ## TEST: {smw} x {transposed}
         self.assertTrue(np.allclose(Z,Z2))
@@ -136,9 +138,9 @@ class TestProjLyap(unittest.TestCase):
 
         via Newton ADI"""
         Z = pru.proj_alg_ric_newtonadi(mmat=self.M, fmat=self.F, 
-                                       jmat=self.J, bmat=self.bmat, 
-                                       wmat=self.W, z0=self.bmat, 
-                                       nwtn_adi_dict=self.nwtn_adi_dict)
+                               jmat=self.J, bmat=self.bmat, 
+                               wmat=self.W, z0=self.bmat, 
+                               nwtn_adi_dict=self.nwtn_adi_dict)['zfac']
 
         MtXM = self.M.T*np.dot(Z,Z.T)*self.M
         MtXb = self.M.T*np.dot(np.dot(Z, Z.T), self.bmat)
@@ -159,7 +161,7 @@ class TestProjLyap(unittest.TestCase):
 ## TEST: check projected residual - riccati sol
         self.assertTrue(np.linalg.norm(ProjRes)/np.linalg.norm(MtXM)
                             < 1e-7 )
-
         
+
 suite = unittest.TestLoader().loadTestsFromTestCase(TestProjLyap)
 unittest.TextTestRunner(verbosity=2).run(suite)

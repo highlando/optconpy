@@ -68,7 +68,8 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
 
 
     adi_step = 0
-    rel_Z_err = 2
+    rel_newZ_norm = 2
+    adi_rel_newZ_norms = []
 
     if umat is not None and vmat is not None:
         # preps to apply the smw formula
@@ -99,39 +100,52 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
             Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T, 
                                           rhsa=Ze, Sinv=Stinv)[:NZ,:]
 
-            z_norm_sqrd = np.linalg.norm(Z)
+            z_norm_sqrd = np.linalg.norm(Z)**2
             u_norm_sqrd = u_norm_sqrd + z_norm_sqrd
 
             ufac = np.hstack([ufac, Z])
-            rel_newZ_norm = np.linalg.norm(Z)/np.linalg.norm(ufac)
+            rel_newZ_norm = np.sqrt(z_norm_sqrd/u_norm_sqrd)
+            # np.linalg.norm(Z)/np.linalg.norm(ufac)
 
             adi_step += 1
+            adi_rel_newZ_norms.append(rel_newZ_norm)
 
-        print ('Number of ADI steps {0} -- \n' + 
-                'Relative norms of the update {1},{2}'
-                    ).format(adi_step, rel_Z_err, np.sqrt(u_norm_sqrd/z_norm_sqrd))
+        try:
+            if adi_dict['verbose']:
+                print ('Number of ADI steps {0} -- \n' + 
+                        'Relative norms of the update {1}'
+                            ).format(adi_step, rel_newZ_norm)
+        except KeyError:
+            pass # no verbosity specified - nothing is shown
 
     else:
         Z, atmtlu = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
         ufac = Z
+        u_norm_sqrd = np.linalg.norm(Z)**2
 
         while adi_step < adi_dict['adi_max_steps'] and \
-              rel_Z_err > adi_dict['adi_newZ_reltol']:
+              rel_newZ_norm > adi_dict['adi_newZ_reltol']:
 
             Z = (At - ms[0]*Mt)*Z
             Z = _app_projinvz(Z, At=At, Mt=Mt, 
                               J=J, ms=ms[0])[0]
             ufac = np.hstack([ufac,Z])
-            rel_Z_err = np.linalg.norm(Z)/np.linalg.norm(ufac)
+
+            z_norm_sqrd = np.linalg.norm(Z)**2
+            u_norm_sqrd = u_norm_sqrd + z_norm_sqrd
+
+            ufac = np.hstack([ufac, Z])
+            rel_newZ_norm = np.sqrt(z_norm_sqrd/u_norm_sqrd)
 
             adi_step += 1
+            adi_rel_newZ_norms.append(rel_newZ_norm)
 
         print ('Number of ADI steps {0} -- \n' + 
                 'Relative norm of the update {1}'
-                    ).format(adi_step, rel_Z_err)
+                    ).format(adi_step, rel_newZ_norm)
 
     return dict(zfac=np.sqrt(-2*ms[0].real)*ufac,
-            adi_errors=
+                adi_rel_newZ_norms=adi_rel_newZ_norms)
 
 def get_mTzzTg(MT, Z, tB):
     """ compute the lyapunov coefficient related to the linearization
@@ -180,10 +194,11 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
         transposed = True
         
     znc = z0
-    nwtn_stp, abs_upd_fnorm = 0, 2
+    nwtn_stp, upd_fnorm = 0, 2
+    nwtn_upd_fnorms = []
 
     while nwtn_stp < nwtn_adi_dict['nwtn_max_steps'] and \
-          abs_upd_fnorm > nwtn_adi_dict['nwtn_upd_abstol']:
+          upd_fnorm > nwtn_adi_dict['nwtn_upd_abstol']:
 
         mtxb = mt*np.dot(znc, np.dot(znc.T, bmat))
         rhsadi = np.hstack([mtxb, wmat])
@@ -196,20 +211,26 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                                     W=rhsadi,
                                     umat=bmat, vmat=mtxb.T,
                                     transposed=transposed,
-                                    adi_dict=nwtn_adi_dict)
+                                    adi_dict=nwtn_adi_dict)['zfac']
 
-        abs_upd_fnorm, fnznn, fnznc = \
+        upd_fnorm, fnznn, fnznc = \
                 lau.comp_sqrdfrobnorm_factored_difference(znn, znc,
                                                     ret_sing_norms=True)
 
-        # rel_upd_fnorm = np.sqrt(np.abs(fndif/fnznn))
-        # print fndif, fnznn
+        nwtn_upd_fnorms.append(upd_fnorm)
 
-        print '\nNewton ADI step: {1} -- f norm of update is {0}\n'.format(abs_upd_fnorm, nwtn_stp+1)
+        try:
+            if nwtn_adi_dict['verbose']:
+                print ('Newton ADI step: {1} --' +
+                'f norm of update is {0}\n').format(upd_fnorm, nwtn_stp+1)
+        except KeyError:
+            pass # no verbosity specified - nothing is shown
+
 
         znc = znn
         nwtn_stp += 1
 
-    return znn
+    return dict(zfac=znn,
+                nwtn_upd_fnorms=nwtn_upd_fnorms)
 
 
