@@ -89,23 +89,27 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
                                       rhsa=We, Sinv=Stinv)[:NZ,:]
 
         ufac = Z
+        u_norm_sqrd = np.linalg.norm(Z)**2
+
         while adi_step < adi_dict['adi_max_steps'] and \
-              rel_Z_err > adi_dict['adi_newZ_reltol']:
+              rel_newZ_norm > adi_dict['adi_newZ_reltol']:
 
             Z = (At - ms[0]*Mt)*Z - np.dot(vmat.T, np.dot(umat.T, Z))
             Ze = np.vstack([Z, np.zeros((J.shape[0], W.shape[1]))])
             Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T, 
                                           rhsa=Ze, Sinv=Stinv)[:NZ,:]
+
+            z_norm_sqrd = np.linalg.norm(Z)
+            u_norm_sqrd = u_norm_sqrd + z_norm_sqrd
+
             ufac = np.hstack([ufac, Z])
-            rel_Z_err = np.linalg.norm(Z)/np.linalg.norm(ufac)
+            rel_newZ_norm = np.linalg.norm(Z)/np.linalg.norm(ufac)
 
             adi_step += 1
 
         print ('Number of ADI steps {0} -- \n' + 
-                'Relative norm of the update {1}'
-                    ).format(adi_step, rel_Z_err)
-
-        return np.sqrt(-2*ms[0].real)*ufac
+                'Relative norms of the update {1},{2}'
+                    ).format(adi_step, rel_Z_err, np.sqrt(u_norm_sqrd/z_norm_sqrd))
 
     else:
         Z, atmtlu = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
@@ -126,7 +130,8 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
                 'Relative norm of the update {1}'
                     ).format(adi_step, rel_Z_err)
 
-        return np.sqrt(-2*ms[0].real)*ufac
+    return dict(zfac=np.sqrt(-2*ms[0].real)*ufac,
+            adi_errors=
 
 def get_mTzzTg(MT, Z, tB):
     """ compute the lyapunov coefficient related to the linearization
