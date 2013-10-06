@@ -113,10 +113,11 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         try:
             if adi_dict['verbose']:
                 print ('Number of ADI steps {0} -- \n' + 
-                        'Relative norms of the update {1}'
+                        'Relative norm of the update {1}'
                             ).format(adi_step, rel_newZ_norm)
         except KeyError:
             pass # no verbosity specified - nothing is shown
+
 
     else:
         Z, atmtlu = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
@@ -134,15 +135,18 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
             z_norm_sqrd = np.linalg.norm(Z)**2
             u_norm_sqrd = u_norm_sqrd + z_norm_sqrd
 
-            ufac = np.hstack([ufac, Z])
             rel_newZ_norm = np.sqrt(z_norm_sqrd/u_norm_sqrd)
 
             adi_step += 1
             adi_rel_newZ_norms.append(rel_newZ_norm)
 
-        print ('Number of ADI steps {0} -- \n' + 
-                'Relative norm of the update {1}'
-                    ).format(adi_step, rel_newZ_norm)
+        try:
+            if adi_dict['verbose']:
+                print ('Number of ADI steps {0} -- \n' + 
+                        'Relative norm of the update {1}'
+                            ).format(adi_step, rel_newZ_norm)
+        except KeyError:
+            pass # no verbosity specified - nothing is shown
 
     return dict(zfac=np.sqrt(-2*ms[0].real)*ufac,
                 adi_rel_newZ_norms=adi_rel_newZ_norms)

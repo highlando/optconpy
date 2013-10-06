@@ -5,7 +5,7 @@ import scipy.sparse.linalg as spsla
 
 import proj_ric_utils as pru
 
-Nv = 250
+Nv = 150
 Np = 40
 Ny = 5 
 nwtn_adi_dict = dict(
@@ -14,7 +14,7 @@ nwtn_adi_dict = dict(
             nwtn_max_steps=24,
             nwtn_upd_reltol=4e-8,
             nwtn_upd_abstol=4e-8,
-            verbosity=True
+            verbose=True
                     )
 
 # -F, M spd -- coefficient matrices
@@ -23,8 +23,9 @@ M = sps.eye(Nv) + sps.rand(Nv, Nv)*sps.rand(Nv, Nv)
 
 # right-handside: C= -W*W.T
 W = np.random.randn(Nv, Ny)
-U = np.random.randn(Nv, Ny)
-V = np.random.randn(Nv, Ny) 
+U = 1e-4*np.random.randn(Nv, Ny)
+V = np.random.randn(Nv, Ny).T
+uvs = sps.csr_matrix(np.dot(U, V))
 bmat = np.random.randn(Nv, Ny+2)
 
 # we need J sparse and of full rank
@@ -44,11 +45,21 @@ except RuntimeError:
 # MinvJt = lau.app_luinv_to_spmat(self.Mlu, self.J.T)
 # Sinv = np.linalg.inv(self.J*MinvJt)
 # self.P = np.eye(self.NV)-np.dot(MinvJt,Sinv*self.J)
+Z = pru.solve_proj_lyap_stein(A=F, M=M, 
+                            umat=U, vmat=V, 
+                            J=J, W=W,
+                            adi_dict=nwtn_adi_dict)['zfac']
+print Z.shape
 
-Z = pru.proj_alg_ric_newtonadi(mmat=M, fmat=F, jmat=J, bmat=bmat, 
-                            wmat=W, z0=bmat, 
-                            nwtn_adi_dict=nwtn_adi_dict,
-                            )['zfac']
+Z2 = pru.solve_proj_lyap_stein(A=F-uvs, M=M, 
+                            J=J, W=W,
+                            adi_dict=nwtn_adi_dict)['zfac']
+print Z2.shape
+
+# Z = pru.proj_alg_ric_newtonadi(mmat=M, fmat=F, jmat=J, bmat=bmat, 
+#                             wmat=W, z0=bmat, 
+#                             nwtn_adi_dict=nwtn_adi_dict,
+#                             )['zfac']
 
 # MtXM = M.T*np.dot(Z,Z.T)*M
 # MtXb = M.T*np.dot(np.dot(Z, Z.T), bmat)

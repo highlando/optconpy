@@ -11,6 +11,8 @@ import proj_ric_utils as pru
 
 #### unittests for the helper functions
 
+verbose = False
+
 class TestProjLyap(unittest.TestCase):
 
     def setUp(self):
@@ -24,7 +26,7 @@ class TestProjLyap(unittest.TestCase):
                             nwtn_max_steps=24,
                             nwtn_upd_reltol=4e-8,
                             nwtn_upd_abstol=4e-8,
-                            verbose=False
+                            verbose=verbose
                                     )
 
         # -F, M spd -- coefficient matrices
@@ -54,11 +56,13 @@ class TestProjLyap(unittest.TestCase):
         # we need J sparse and of full rank
         for auxk in range(10):
             try:
-                self.J = sps.rand(self.NP, self.NV, density=0.03, format='csr')
+                self.J = sps.rand(self.NP, self.NV, 
+                        density=0.03, format='csr')
                 spsla.splu(self.J*self.J.T)
                 break
             except RuntimeError:
-                print 'J not full row-rank.. I make another try'
+                if verbose:
+                    print 'J not full row-rank.. I make another try'
         try:
             spsla.splu(self.J*self.J.T)
         except RuntimeError:
@@ -109,12 +113,10 @@ class TestProjLyap(unittest.TestCase):
                                     umat=U, vmat=V, 
                                     J=self.J, W=self.W,
                                     adi_dict=self.nwtn_adi_dict)['zfac']
-        print Z.shape
 
         Z2 = pru.solve_proj_lyap_stein(A=self.F-self.uvs, M=self.M, 
                                     J=self.J, W=self.W,
                                     adi_dict=self.nwtn_adi_dict)['zfac']
-        print Z2.shape
 
         Z3 = pru.solve_proj_lyap_stein(A=self.F.T-self.uvs.T, M=self.M.T, 
                                     J=self.J, W=self.W,
@@ -122,10 +124,10 @@ class TestProjLyap(unittest.TestCase):
                                     transposed=True)['zfac']
 
         Z4 = pru.solve_proj_lyap_stein(A=self.F.T, M=self.M.T, 
-                                        J=self.J, W=self.W,
-                                        umat=U, vmat=V, 
-                                        adi_dict=self.nwtn_adi_dict,
-                                        transposed=True)['zfac']
+                                    J=self.J, W=self.W,
+                                    umat=U, vmat=V, 
+                                    adi_dict=self.nwtn_adi_dict,
+                                    transposed=True)['zfac']
 
 ## TEST: {smw} x {transposed}
         self.assertTrue(np.allclose(Z,Z2))
