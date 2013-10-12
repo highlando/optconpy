@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import os, glob
 
 import dolfin_to_nparrays as dtn
-import linsolv_utils
+import lin_alg_utils as lau
 import data_output_utils as dou
 import cont_obs_utils as cou
 import proj_ric_utils as pru
@@ -24,11 +24,16 @@ def time_int_params(Nts):
             Residuals = NseResiduals(), 
             ParaviewOutput = True, 
             nu = 1e-3,
-            nnewtsteps = 1,
-            norm_nwtnupd = [],
-            # parameters for the Newton-ADI
-            nnwtadisteps = 2,
-            nadisteps = 10
+            nnewtsteps = 5, # n nwtn stps for vel comp
+            # parameters for newton adi iteration
+            nwtn_adi_dict = dict(
+                            adi_max_steps=120,
+                            adi_newZ_reltol=1e-8,
+                            nwtn_max_steps=24,
+                            nwtn_upd_reltol=4e-8,
+                            nwtn_upd_abstol=4e-8,
+                            verbose=True
+                                    )
             )
 
     return tip
@@ -44,7 +49,7 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
     try:
         os.chdir(ddir)
     except OSError:
-        raise Warning('need "' + ddir + '" subdirectory for storing the data')
+        raise Warning('need "' + ddir + '" subdir for storing the data')
     os.chdir('..')
 
     #if tip['ParaviewOutput']:
@@ -59,6 +64,7 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
 
     stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'],
                                          tip['nu'])
+
     rhsd_vf = dtn.setget_rhs(femp['V'], femp['Q'], 
                             femp['fv'], femp['fp'], t=0)
 
@@ -72,7 +78,8 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
             rhsd_stbc, 
             invinds, 
             bcinds, 
-            bcvals) = dtn.condense_sysmatsbybcs(stokesmats, femp['diribcs'])
+            bcvals) = dtn.condense_sysmatsbybcs(stokesmats,
+                                                femp['diribcs'])
     # we will need transposes, and explicit is better than implicit
     # here, the coefficient matrices are symmetric
     stokesmatsc.update(dict(MT=stokesmatsc['M'],
@@ -93,28 +100,27 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
     rhsd_vfstbc = dict(fv=rhsd_stbc['fv']+
                             rhsd_vf['fv'][INVINDS,],
                        fp=rhsd_stbc['fp']+rhsd_vf['fp'])
-    vp = linsolv_utils.stokes_steadystate(matdict=stokesmatsc,
+
+    vp = lau.stokes_steadystate(matdict=stokesmatsc,
                                         rhsdict=rhsd_vfstbc)
 
     # save the data
     curdatname = get_datastr(nwtn=newtk, time=t, 
                               meshp=N, timps=tip)
     dou.save_curv(vp[:NV,], fstring=ddir+'vel'+curdatname)
-
     dou.output_paraview(femp, vp=vp, 
-                    fstring='results/'+
-                            'NewtonIt{0}'.format(newtk))
-
-    # Stokes solution as initial value
-    inivalvec = vp[:NV,]
+                    fstring='results/NewtonIt{0}'.format(newtk))
 
 ###
 ## Compute the time-dependent flow
 ###
 
+    # Stokes solution as initial value
+    inivalvec = vp[:NV,]
+
     if compvels:
         for newtk in range(1, tip['nnewtsteps']+1):
-            v_old = inivalvec
+            v_old = inivalvec   #start vector in every Newtonit
             norm_nwtnupd = 0
             for t in np.arange(tip['t0'], tip['tE'], DT):
                 cdatstr = get_datastr(nwtn=newtk, time=t+DT, 
@@ -143,22 +149,23 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
                                             femp['diribcs'])
 
                 rhsd_cur = dict(fv=stokesmatsc['M']*v_old+
-                                    DT*(rhs_con[INVINDS,:]+
-                                    rhsv_conbc+rhsd_vfstbc['fv']),
+                                DT*(rhs_con[INVINDS,:]+
+                                rhsv_conbc+rhsd_vfstbc['fv']),
                                 fp=rhsd_vfstbc['fp'])
 
                 matd_cur = dict(A=stokesmatsc['M']+
-                                            DT*(stokesmatsc['A']+Nc),
+                                        DT*(stokesmatsc['A']+Nc),
                                 JT=stokesmatsc['JT'],
                                 J=stokesmatsc['J'])
 
-                vp = linsolv_utils.stokes_steadystate(matdict=matd_cur,
+                vp = lau.stokes_steadystate(matdict=matd_cur,
                                                       rhsdict=rhsd_cur)
 
                 v_old = vp[:NV,]
 
                 dou.save_curv(v_old, fstring=ddir+'vel'+cdatstr)
 
+                # integrate the Newton error
                 norm_nwtnupd += DT*np.dot((v_old-prev_v).T, 
                                     stokesmatsc['M']*(v_old-prev_v))
 
@@ -208,16 +215,16 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
     ystar = contp['ystar']
 
     # tB = BR^{-1/2}
-    tB = linsolv_utils.apply_invsqrt_fromleft(contp['R'], Ba,
+    tB = lau.apply_invsqrt_fromleft(contp['R'], Ba,
                                               output='sparse')
-    tCT = linsolv_utils.apply_invsqrt_fromleft(My, MyC.T, 
+    tCT = lau.apply_invsqrt_fromleft(My, MyC.T, 
                                                 output='dense')
 
     t = tip['tE']
 
     # set/compute the terminal values
-    Zc = linsolv_utils.apply_massinv(stokesmatsc['M'], tCT)
-    wc = -linsolv_utils.apply_massinv(stokesmatsc['MT'], MyC.T*ystar)
+    Zc = lau.apply_massinv(stokesmatsc['M'], tCT)
+    wc = -lau.apply_massinv(stokesmatsc['MT'], MyC.T*ystar)
 
     cdatstr = get_datastr(nwtn=newtk, time=DT, meshp=N, timps=tip)
 
