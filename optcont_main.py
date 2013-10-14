@@ -20,11 +20,14 @@ def time_int_params(Nts):
             tE = tE,
             dt = dt, 
             Nts = Nts,
-            # vpfiles = def_vpfiles(), 
+            vfile = None, 
+            pfile = None,
             Residuals = NseResiduals(), 
             ParaviewOutput = True, 
             nu = 1e-3,
             nnewtsteps = 5, # n nwtn stps for vel comp
+            vel_nwtn_tol=1e-14,
+            norm_nwtnupd_list = [],
             # parameters for newton adi iteration
             nwtn_adi_dict = dict(
                             adi_max_steps=120,
@@ -38,13 +41,13 @@ def time_int_params(Nts):
 
     return tip
 
-def optcon_nse(N = 20, Nts = 4, compvels=False):
+def optcon_nse(N = 10, Nts = 3, compvels=True):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
     contp = cont_params()
 
-    ### Output
+    ### output
     ddir = 'data/'
     try:
         os.chdir(ddir)
@@ -52,11 +55,11 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
         raise Warning('need "' + ddir + '" subdir for storing the data')
     os.chdir('..')
 
-    #if tip['ParaviewOutput']:
-    #    os.chdir('results/')
-    #    for fname in glob.glob(TsP.method + '*'):
-    #        os.remove( fname )
-    #    os.chdir('..')
+    if tip['ParaviewOutput']:
+        os.chdir('results/')
+        for fname in glob.glob('NewtonIt' + '*'):
+            os.remove( fname )
+        os.chdir('..')
 
 ###
 ## start with the Stokes problem for initialization
@@ -80,6 +83,7 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
             bcinds, 
             bcvals) = dtn.condense_sysmatsbybcs(stokesmats,
                                                 femp['diribcs'])
+
     # we will need transposes, and explicit is better than implicit
     # here, the coefficient matrices are symmetric
     stokesmatsc.update(dict(MT=stokesmatsc['M'],
@@ -87,8 +91,8 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
 
     # add the info on boundary and inner nodes 
     bcdata = {'bcinds':bcinds,
-            'bcvals':bcvals,
-            'invinds':invinds}
+              'bcvals':bcvals,
+              'invinds':invinds}
     femp.update(bcdata)
 
     # casting some parameters 
@@ -108,8 +112,9 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
     curdatname = get_datastr(nwtn=newtk, time=t, 
                               meshp=N, timps=tip)
     dou.save_curv(vp[:NV,], fstring=ddir+'vel'+curdatname)
-    dou.output_paraview(femp, vp=vp, 
-                    fstring='results/NewtonIt{0}'.format(newtk))
+    dou.set_vpfiles(tip, fstring=('results/' + \
+                                   'NewtonIt{0}').format(newtk))
+    dou.output_paraview(tip, femp, vp=vp, t=t)
 
 ###
 ## Compute the time-dependent flow
@@ -119,15 +124,21 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
     inivalvec = vp[:NV,]
 
     if compvels:
-        for newtk in range(1, tip['nnewtsteps']+1):
-            v_old = inivalvec   #start vector in every Newtonit
+        norm_nwtnupd, newtk = 1, 1
+        while (newtk < tip['nnewtsteps'] and 
+               norm_nwtnupd > tip['vel_nwtn_tol']):
+
+            dou.set_vpfiles(tip, fstring=('results/' + \
+                                          'NewtonIt{0}').format(newtk))
+
             norm_nwtnupd = 0
-            for t in np.arange(tip['t0'], tip['tE'], DT):
-                cdatstr = get_datastr(nwtn=newtk, time=t+DT, 
+            v_old = inivalvec   #start vector in every Newtonit
+            for t in np.linspace(tip['t0']+DT, tip['tE'], Nts):
+                cdatstr = get_datastr(nwtn=newtk, time=t, 
                                       meshp=N, timps=tip)
 
-                # t+DT for implicit scheme
-                pdatstr = get_datastr(nwtn=newtk-1, time=t+DT, 
+                # t for implicit scheme
+                pdatstr = get_datastr(nwtn=newtk-1, time=t, 
                                          meshp=N, timps=tip)
 
                 # try - except for linearizations about stationary sols
@@ -165,13 +176,17 @@ def optcon_nse(N = 20, Nts = 4, compvels=False):
 
                 dou.save_curv(v_old, fstring=ddir+'vel'+cdatstr)
 
+
+                dou.output_paraview(tip, femp, vp=vp, t=t),
+
                 # integrate the Newton error
                 norm_nwtnupd += DT*np.dot((v_old-prev_v).T, 
                                     stokesmatsc['M']*(v_old-prev_v))
 
-            tip['norm_nwtnupd'].append(norm_nwtnupd)
+            newtk += 1
+            tip['norm_nwtnupd_list'].append(norm_nwtnupd)
 
-        print tip['norm_nwtnupd']
+        print tip['norm_nwtnupd_list']
 
 ###
 ## Prepare for control 
@@ -345,15 +360,15 @@ class NseResiduals(object):
         self.PEr = []
 
 
-#def def_vpfiles(name=None):
-#    if name is not None:
-#        vpf = {'vfile':File("results/%s_velocity.pvd" % name), 
-#                'pfile':File("results/%s_pressure.pvd" % name)}
-#    else:
-#        vpf = {'vfile':File("results/velocity.pvd"), 
-#                'pfile':File("results/pressure.pvd")}
-#
-#    return vpf
+# def def_vpfiles(name=None):
+#     if name is not None:
+#         vpf = {'vfile':File("results/%s_velocity.pvd" % name), 
+#                 'pfile':File("results/%s_pressure.pvd" % name)}
+#     else:
+#         vpf = {'vfile':File("results/velocity.pvd"), 
+#                 'pfile':File("results/pressure.pvd")}
+# 
+#     return vpf
 
 def get_datastr(nwtn=None, time=None, 
                             meshp=None, timps=None):
