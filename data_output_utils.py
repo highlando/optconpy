@@ -16,6 +16,10 @@ def output_paraview(tip, femp, vp=None, t=None):
     v, p = expand_vp_dolfunc(V=femp['V'], Q=femp['Q'], vp=vp,
                              invinds=femp['invinds'], 
                              diribcs=femp['diribcs'])
+
+    v.rename('v', 'velocity')
+    p.rename('p', 'pressure')
+    print t
     
     tip['vfile'] << v, t
     tip['pfile'] << p, t

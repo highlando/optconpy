@@ -25,7 +25,7 @@ def time_int_params(Nts):
             Residuals = NseResiduals(), 
             ParaviewOutput = True, 
             nu = 1e-3,
-            nnewtsteps = 5, # n nwtn stps for vel comp
+            nnewtsteps = 2, # n nwtn stps for vel comp
             vel_nwtn_tol=1e-14,
             norm_nwtnupd_list = [],
             # parameters for newton adi iteration
@@ -41,7 +41,7 @@ def time_int_params(Nts):
 
     return tip
 
-def optcon_nse(N = 10, Nts = 3, compvels=True):
+def optcon_nse(N = 30, Nts = 100, compvels=True):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
@@ -108,13 +108,11 @@ def optcon_nse(N = 10, Nts = 3, compvels=True):
     vp = lau.stokes_steadystate(matdict=stokesmatsc,
                                         rhsdict=rhsd_vfstbc)
 
+
     # save the data
     curdatname = get_datastr(nwtn=newtk, time=t, 
                               meshp=N, timps=tip)
     dou.save_curv(vp[:NV,], fstring=ddir+'vel'+curdatname)
-    dou.set_vpfiles(tip, fstring=('results/' + \
-                                   'NewtonIt{0}').format(newtk))
-    dou.output_paraview(tip, femp, vp=vp, t=t)
 
 ###
 ## Compute the time-dependent flow
@@ -125,11 +123,12 @@ def optcon_nse(N = 10, Nts = 3, compvels=True):
 
     if compvels:
         norm_nwtnupd, newtk = 1, 1
-        while (newtk < tip['nnewtsteps'] and 
+        while (newtk <= tip['nnewtsteps'] and 
                norm_nwtnupd > tip['vel_nwtn_tol']):
 
             dou.set_vpfiles(tip, fstring=('results/' + \
                                           'NewtonIt{0}').format(newtk))
+            dou.output_paraview(tip, femp, vp=vp, t=0)
 
             norm_nwtnupd = 0
             v_old = inivalvec   #start vector in every Newtonit

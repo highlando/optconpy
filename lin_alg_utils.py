@@ -4,6 +4,9 @@ import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 import krypy.linsys
 
+def solve_sadpnt(amat, j1t=None, j2=None, f1=None, f2=None):
+    """TODO more explicit method for the stokes problem
+    """
 
 def stokes_steadystate(matdict=None, rhsdict=None, add_a=None):
     """solve for the steady state
@@ -86,8 +89,6 @@ def app_luinv_to_spmat(Alu, Z):
         ainvz[:,ccol] = Alu.solve(Z[:,ccol].toarray().flatten())
 
     return ainvz
-
-
 
 
 def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
