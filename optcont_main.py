@@ -12,6 +12,7 @@ import proj_ric_utils as pru
 
 parameters.linear_algebra_backend = 'uBLAS'
 
+
 def time_int_params(Nts):
     t0 = 0.0
     tE = 1.0
