@@ -4,7 +4,8 @@ import scipy.sparse as sps
 
 parameters.linear_algebra_backend = "uBLAS"
 
-def get_stokessysmats( V, Q, nu): # , velbcs ):
+
+def get_stokessysmats(V, Q, nu=1):
     """ Assembles the system matrices for Stokes equation
 
     in mixed FEM formulation, namely
