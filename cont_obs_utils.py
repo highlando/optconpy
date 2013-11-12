@@ -76,43 +76,57 @@ def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
     domains.set_all(0)
     odom_thick.mark(domains, 1)
 
-    dx = dolfin.Measure('dx')[domains]
+    subdx = dolfin.Measure('dx')[domains]
 
     # factor to compute the average via \bar u = 1/h \int_0^h u(x) dx
     Ci = 1.0 / (odcoo['xmax'] - odcoo['xmin'])
 
     YX, YY = [], []
 
-    for nbf in range(NY):
-        ybf = L2abLinBas(nbf, NY, a=odcoo['ymin'], b=odcoo['ymax'])
-        yx = Cast1Dto2D(ybf, odom, vcomp=0, xcomp=1)
-        yy = Cast1Dto2D(ybf, odom, vcomp=1, xcomp=1)
+    omega_y = dolfin.RectangleMesh(odcoo['xmin'], odcoo['ymin'],
+                                   odcoo['xmax'], odcoo['ymax'],
+                                   5, NY-1)
 
-        yxf = Ci * inner(v, yx) * dx(1)
-        yyf = Ci * inner(v, yy) * dx(1)
+    y_y = dolfin.VectorFunctionSpace(omega_y, 'CG', 1)
 
-        yxone = inner(vone, yx) * dx(1)
-        yyone = inner(vone, yy) * dx(1)
+    obdom_dofs = extract_dofs_subdomain(V, odom)
 
-        Yx = dolfin.assemble(yxf)
-        # ,
-        #                      form_compiler_parameters={
-        #                          'quadrature_rule': 'canonical',
-        #                          'quadrature_degree': 2})
-        Yy = dolfin.assemble(yyf)
-        # ,
-        #                      form_compiler_parameters={
-        #                          'quadrature_rule': 'default',
-        #                          'quadrature_degree': 2})
+    for curdof in obdom_dofs:
+        vcur = dolfin.Function(V)
+        vcur.vector()[:] = 0
+        vcur.vector()[curdof] = 1
+        vone_y = dolfin.interpolate(vcur, y_y)
 
-        print dolfin.assemble(yxone), dolfin.assemble(yyone)
+        for nbf in range(NY):
+            ybf = L2abLinBas(nbf, NY, a=odcoo['ymin'], b=odcoo['ymax'])
+            yx = Cast1Dto2D(ybf, odom, vcomp=0, xcomp=1)
+            yy = Cast1Dto2D(ybf, odom, vcomp=1, xcomp=1)
 
-        Yx = Yx.array()
-        Yy = Yy.array()
-        Yx = Yx.reshape(1, len(Yx))
-        Yy = Yy.reshape(1, len(Yy))
-        YX.append(sps.csc_matrix(Yx))
-        YY.append(sps.csc_matrix(Yy))
+            yxf = Ci * inner(v, yx) * subdx(1)
+            yyf = Ci * inner(v, yy) * subdx(1)
+
+            yxone = inner(vone_y, yx) * dx
+            yyone = inner(vone, yy) * subdx(1)
+
+            Yx = dolfin.assemble(yxf)
+            # ,
+            #                      form_compiler_parameters={
+            #                          'quadrature_rule': 'canonical',
+            #                          'quadrature_degree': 2})
+            Yy = dolfin.assemble(yyf)
+            # ,
+            #                      form_compiler_parameters={
+            #                          'quadrature_rule': 'default',
+            #                          'quadrature_degree': 2})
+
+            print dolfin.assemble(yxone), dolfin.assemble(yyone)
+
+            Yx = Yx.array()
+            Yy = Yy.array()
+            Yx = Yx.reshape(1, len(Yx))
+            Yy = Yy.reshape(1, len(Yy))
+            YX.append(sps.csc_matrix(Yx))
+            YY.append(sps.csc_matrix(Yy))
 
     My = ybf.massmat()
 
@@ -220,7 +234,7 @@ class Cast1Dto2D(dolfin.Expression):
     and simply extruding into the other direction
     """
 
-    def __init__(self, u, cdom, vcomp=0, xcomp=0):
+    def __init__(self, u, cdom, vcomp=None, xcomp=0):
         # control 1D basis function
         self.u = u
         # domain of control
@@ -236,10 +250,14 @@ class Cast1Dto2D(dolfin.Expression):
         self.d = self.u.b - self.m * cdom.maxxy[self.xcomp]
 
     def eval(self, value, x):
-        value[:] = 0
         if self.cdom.inside(x, False):
-            value[self.vcomp] = self.u.evaluate(
-                self.m * x[self.xcomp] + self.d)
+            if self.xcomp is None:
+                value[:] = self.u.evaluate(
+                    self.m * x[self.xcomp] + self.d)
+            else:
+                value[:] = 0
+                value[self.vcomp] = self.u.evaluate(
+                    self.m * x[self.xcomp] + self.d)
 
     def value_shape(self):
         return (2,)
@@ -279,3 +297,18 @@ def get_ystarvec(ystar, odcoo, NY):
         ystarvec[k * NY:(k + 1) * NY, 0] = cyv.vector().array()
 
     return ystarvec
+
+
+def extract_dofs_subdomain(V, subd):
+    mesh = V.mesh()
+    dofs_of_V = V.dofmap().vertex_to_dof_map(mesh)
+    # in 1.3: dofs_of_V = dof_to_vertex_map(V)
+    coord_of_dofs = V.mesh().coordinates()
+    ncords = coord_of_dofs.shape[0]
+
+    subd_bools = np.zeros(V.dim())
+    for inds in dofs_of_V:
+        subd_bools[inds] = subd.inside(coord_of_dofs[np.mod(inds, ncords)],
+                                       False)
+
+    return np.arange(V.dim())[subd_bools.astype(bool)]

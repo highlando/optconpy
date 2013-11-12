@@ -90,16 +90,16 @@ testy = spsla.spsolve(My, MyC * testvi)
 
 # print "||C v_df - C_df v|| = {0}".format(np.linalg.norm(testyv0 - testry))
 
-y1.vector().set_local(testy[:NY])
-dolfin.plot(y1, title="x-comp of C*v")
-
-y2.vector().set_local(testy[NY:])
-dolfin.plot(y2, title="y-comp of C*v")
-
-# y2.vector().set_local(testyv0[:NY])
-# dolfin.plot(y2, title="x-comp of $C*(P_{df}v)$")
-
-# y3.vector().set_local(testyg[:NY])
-# dolfin.plot(y3, title="x-comp of $C*(v - P_{df}v)$")
-
-dolfin.interactive(True)
+# y1.vector().set_local(testy[:NY])
+# dolfin.plot(y1, title="x-comp of C*v")
+#
+# y2.vector().set_local(testy[NY:])
+# dolfin.plot(y2, title="y-comp of C*v")
+# 
+# # y2.vector().set_local(testyv0[:NY])
+# # dolfin.plot(y2, title="x-comp of $C*(P_{df}v)$")
+# 
+# # y3.vector().set_local(testyg[:NY])
+# # dolfin.plot(y3, title="x-comp of $C*(v - P_{df}v)$")
+# 
+# dolfin.interactive(True)
