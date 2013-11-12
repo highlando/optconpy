@@ -1,4 +1,5 @@
 import dolfin
+from dolfin import dx, inner
 
 class LocFun(dolfin.Expression):
     """ a locally defined 1D function"""
@@ -18,3 +19,25 @@ class LocFuncDom(dolfin.SubDomain):
         self.xmin, self.xmax = xmin, xmax
     def inside(self, x, on_boundary):
         return (dolfin.between(x[0], (self.xmin, self.xmax)))
+
+smin, smax = 0.2, 0.3
+
+mesh = dolfin.IntervalMesh(5, 1, 0)
+dolfin.plot(mesh)
+
+Y = dolfin.FunctionSpace(mesh, 'CG', 1)
+
+y = dolfin.Expression('1')
+y = dolfin.interpolate(y, Y)
+
+domains = dolfin.CellFunction('uint', Y.mesh())
+domains.set_all(0)
+
+ffunc = LocFun(smin, smax)
+funcdom = LocFuncDom(smin, smax)
+funcdom.mark(domains, 1)
+
+y1 = inner(y, ffunc) * dx
+y2 = inner(y, ffunc) * dx(1)
+
+print dolfin.assemble(y1), dolfin.assemble(y2)
