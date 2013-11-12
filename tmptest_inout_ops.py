@@ -16,9 +16,17 @@ Q = dolfin.FunctionSpace(mesh, "CG", 1)
 
 # test velocity
 # case 1 -- not div free
-exv = dolfin.Expression(('x[1]', 'x[1]'))
+# exv = dolfin.Expression(('x[0]', '-x[1]'))
 # case 2 -- div free
-exv = dolfin.Expression(('1', '1'))
+# exv = dolfin.Expression(('1', '1'))
+
+import sympy as smp
+x, y = smp.symbols('x[0], x[1]')
+u_x = x*x*(1-x)*(1-x)*2*y*(1-y)*(2*y-1)
+u_y = y*y*(1-y)*(1-y)*2*x*(1-x)*(1-2*x)
+from sympy.printing import ccode
+exv = dolfin.Expression((ccode(u_x), ccode(u_y)))
+
 
 testv = dolfin.interpolate(exv, V)
 
@@ -78,15 +86,15 @@ MyCv = MyC * testv.vector().array()[invinds]
 testy = spsla.spsolve(My, MyCv)
 
 # target signal
-ystar1 = dolfin.Expression('x[0]')
-ystar2 = dolfin.Expression('x[0]')
-ystar = [ystar1, ystar2]
+# ystar1 = dolfin.Expression('x[0]')
+# ystar2 = dolfin.Expression('x[0]')
+# ystar = [ystar1, ystar2]
 
 # gives a target velocity
-vstar = cou.get_vstar(MyC, ystar, odcoo, NY)
+# vstar = cou.get_vstar(MyC, ystar, odcoo, NY)
 
-print np.linalg.norm(vstar)
-print np.linalg.norm(MyC * vstar)
+# print np.linalg.norm(vstar)
+# print np.linalg.norm(MyC * vstar)
 
 # signal space
 ymesh = dolfin.IntervalMesh(NY - 1, odcoo['ymin'], odcoo['ymax'])
@@ -100,12 +108,12 @@ y5 = dolfin.Function(Y)
 y6 = dolfin.Function(Y)
 
 y1.vector().set_local(testy[:NY])
-y1.rename("x-comp of testsignal", "signal")
+y1.rename("x-comp of C*v", "signal")
 dolfin.plot(y1)
 
-y2.vector().set_local(testy[NY:])
-y2.rename("y-comp of testsignal", "signal")
-dolfin.plot(y2)
+# y2.vector().set_local(testy[NY:])
+# y2.rename("y-comp of testsignal", "signal")
+# dolfin.plot(y2)
 
 # check the regularization of C
 rC = cou.get_regularized_c(MyC.T, J=stokesmatsc['J'], Mt=stokesmatsc['M']).T
@@ -123,25 +131,21 @@ testyv0 = spsla.spsolve(My, MyC * testvi0)
 testyg = spsla.spsolve(My, MyC * (testvi.flatten() - testvi0))
 testry = spsla.spsolve(My, np.dot(rC, testvi))
 
-testystar = MyC * vstar
+# testystar = MyC * vstar
 
 print np.linalg.norm(testyv0 - testry)
 
 y3.vector().set_local(testry[NY:])
-# y3.rename("x-comp of $(C*P_{df})v$", "signal")
 dolfin.plot(y3, title='x-comp of $(C*P_{df})v$')
 
 y4.vector().set_local(testyv0[NY:])
 dolfin.plot(y4, title="x-comp of $C*(P_{df}v)$")
-# y4.rename("x-comp of $C*(P_{df}v)$", "signal")
 
 y5.vector().set_local(testyg[NY:])
 dolfin.plot(y5, title="x-comp of $C*(v - P_{df}v)$")
-# y5.rename("x-comp of $C*(v - P_{df}v)$", "signal")
 
-y6.vector().set_local(testystar[NY:])
-dolfin.plot(y6, title="x-comp of $C*C^+y^*$")
-# y6.rename("x-comp of $C*C^+y^*$", "signal")
+# y6.vector().set_local(testystar[NY:])
+# dolfin.plot(y6, title="x-comp of $C*C^+y^*$")
 
 # check if the projection is indeed a projection
 # os.remove('data/regCNY14vdim3042.npy')

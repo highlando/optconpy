@@ -1,17 +1,20 @@
-from dolfin import *
+import dolfin
 import numpy as np
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 
-import linsolv_utils 
+import lin_alg_utils as lau
 
-def get_inp_opa(cdom=None, NU=8, V=None): 
-    """assemble the 'B' matrix
+from dolfin import dx, inner
 
-    the findim array representation 
+
+def get_inp_opa(cdom=None, NU=8, V=None):
+    """dolfin.assemble the 'B' matrix
+
+    the findim array representation
     of the input operator """
 
-    v = TrialFunction(V)
+    v = dolfin.dolfin.TrialFunction(V)
 
     BX, BY = [], []
 
@@ -19,10 +22,10 @@ def get_inp_opa(cdom=None, NU=8, V=None):
         ubf = L2abLinBas(nbf, NU)
         bux = Cast1Dto2D(ubf, cdom, vcomp=0, xcomp=0)
         buy = Cast1Dto2D(ubf, cdom, vcomp=1, xcomp=0)
-        bx = inner(v,bux)*dx
-        by = inner(v,buy)*dx
-        Bx = assemble(bx)
-        By = assemble(by)
+        bx = inner(v, bux) * dx
+        by = inner(v, buy) * dx
+        Bx = dolfin.assemble(bx)
+        By = dolfin.assemble(by)
         Bx = Bx.array()
         By = By.array()
         Bx = Bx.reshape(len(Bx), 1)
@@ -32,13 +35,17 @@ def get_inp_opa(cdom=None, NU=8, V=None):
 
     Mu = ubf.massmat()
 
-    return sps.hstack([sps.hstack(BX), sps.hstack(BY)], format='csc'), sps.block_diag([Mu,Mu])
+    return (
+        sps.hstack([sps.hstack(BX), sps.hstack(BY)],
+                   format='csc'), sps.block_diag([Mu, Mu])
+    )
 
-def get_mout_opa(odom=None, NY=8, V=None): 
-    """assemble the 'MyC' matrix
 
-    the find an array representation 
-    of the output operator 
+def get_mout_opa(odom=None, NY=8, V=None):
+    """dolfin.assemble the 'MyC' matrix
+
+    the find an array representation
+    of the output operator
 
     the considered output is y(s) = 1/C int_x[1] v(s,x[1]) dx[1]
     it is computed by testing computing my_i = 1/C int y_i v d(x)
@@ -47,14 +54,16 @@ def get_mout_opa(odom=None, NY=8, V=None):
     cf. doku
     """
 
-    v = TestFunction(V)
-    domains = CellFunction('uint', V.mesh())
+    # v = dolfin.TestFunction(V)
+    v = dolfin.Expression(('1', '1'))
+    v = dolfin.interpolate(v, V)
+    domains = dolfin.CellFunction('uint', V.mesh())
     domains.set_all(0)
     odom.mark(domains, 1)
 
-    dx = Measure('dx')[domains]
+    dx = dolfin.Measure('dx')[domains]
 
-    Ci = 1.0/(odom.maxxy[0] - odom.minxy[0])
+    Ci = 1.0 / (odom.maxxy[0] - odom.minxy[0])
 
     YX, YY = [], []
 
@@ -62,33 +71,72 @@ def get_mout_opa(odom=None, NY=8, V=None):
         ybf = L2abLinBas(nbf, NY, a=odom.minxy[1], b=odom.maxxy[1])
         yx = Cast1Dto2D(ybf, odom, vcomp=0, xcomp=1)
         yy = Cast1Dto2D(ybf, odom, vcomp=1, xcomp=1)
-        # if nbf == 1:
-        #     raise Warning('TODO: debug') 
-        # plot(yx, V.mesh())
-        yx = Ci*inner(v,yx)*dx(1)
-        yy = Ci*inner(v,yy)*dx(1)
-        Yx = assemble(yx)
-        Yy = assemble(yy)
-        Yx = Yx.array()
-        Yy = Yy.array()
-        Yx = Yx.reshape(1, len(Yx))
-        Yy = Yy.reshape(1, len(Yy))
-        YX.append(sps.csc_matrix(Yx))
-        YY.append(sps.csc_matrix(Yy))
+
+        # the (2D) domain of support in Omega of the current basis function
+        cursuppp = ContDomain(dict(xmin=odom.minxy[0],
+                                   xmax=odom.maxxy[0],
+                                   ymin=ybf.vertex-ybf.dist,
+                                   ymax=ybf.vertex+ybf.dist))
+        # print cursuppp.minxy, cursuppp.maxxy
+
+        cursuppn = ContDomain(dict(xmin=odom.minxy[0],
+                                   xmax=odom.maxxy[0],
+                                   ymin=ybf.vertex,
+                                   ymax=ybf.vertex+ybf.dist))
+
+        debugdom = ContDomain(dict(xmin=odom.minxy[0],
+                                   xmax=odom.maxxy[0],
+                                   ymin=odom.minxy[1],
+                                   ymax=odom.maxxy[1]))
+
+        # print cursuppn.minxy, cursuppn.maxxy
+
+        cursuppp.mark(domains, 2)
+        cursuppn.mark(domains, 2+1)
+        debugdom.mark(domains, 2+2)
+
+        dx = dolfin.Measure('dx')[domains]
+
+        yx = Ci * (inner(v, yx) * dx(4) + inner(v, yx) * dx(2+1))
+        yy = Ci * inner(v, yy) * dx(4)
+
+        Yx = dolfin.assemble(yx)
+        # ,
+        #                      form_compiler_parameters={
+        #                          'quadrature_rule': 'canonical',
+        #                          'quadrature_degree': 2})
+        Yy = dolfin.assemble(yy)
+        # ,
+        #                      form_compiler_parameters={
+        #                          'quadrature_rule': 'default',
+        #                          'quadrature_degree': 2})
+
+        print Yx, Yy
+
+        # Yx = Yx.array()
+        # Yy = Yy.array()
+        # Yx = Yx.reshape(1, len(Yx))
+        # Yy = Yy.reshape(1, len(Yy))
+        # YX.append(sps.csc_matrix(Yx))
+        # YY.append(sps.csc_matrix(Yy))
 
     My = ybf.massmat()
 
-    return sps.vstack([sps.vstack(YX), sps.vstack(YY)], format='csc'), sps.block_diag([My,My])
+    return (
+        sps.vstack([sps.vstack(YX), sps.vstack(YY)],
+                   format='csc'), sps.block_diag([My, My])
+    )
+
 
 def app_difffreeproj(v=None, J=None, M=None):
     """apply the regularization (projection to divfree vels)
 
-    i.e. compute v = [I-M^-1*J.T*S^-1*J]v 
+    i.e. compute v = [I-M^-1*J.T*S^-1*J]v
     """
 
-    vg = linsolv_utils.app_schurc_inv(M,J, np.atleast_2d(J*v).T)
+    vg = lau.app_schurc_inv(M, J, np.atleast_2d(J * v).T)
 
-    vg = spsla.spsolve(M,J.T*vg)
+    vg = spsla.spsolve(M, J.T * vg)
 
     return v - vg
 
@@ -109,27 +157,30 @@ def get_regularized_c(Ct=None, J=None, Mt=None):
         auCt = np.zeros(Ct.shape)
         # M.-T*C.T
         for ccol in range(NY):
-            auCt[:,ccol] = MTlu.solve(np.array(Ct[:,ccol].todense())[:,0])
+            auCt[:, ccol] = MTlu.solve(np.array(Ct[:, ccol].todense())[:, 0])
         # J*M.-T*C.T
-        auCt = J*auCt
+        auCt = J * auCt
         # S.-T*J*M.-T*C.T
-        auCt = linsolv_utils.app_schurc_inv(MTlu, J, auCt)
-        rCt = Ct - J.T*auCt
+        auCt = lau.app_schurc_inv(MTlu, J, auCt)
+        rCt = Ct - J.T * auCt
         np.save('data/regCNY{0}vdim{1}.npy'.format(NY, Nv), rCt)
 
     return np.array(rCt)
 
 
 # Subdomains of Control and Observation
-class ContDomain(SubDomain):
+class ContDomain(dolfin.SubDomain):
+
     def __init__(self, ddict):
-        SubDomain.__init__(self)
+        dolfin.SubDomain.__init__(self)
         self.minxy = [ddict['xmin'], ddict['ymin']]
         self.maxxy = [ddict['xmax'], ddict['ymax']]
+
     def inside(self, x, on_boundary):
-        epps = 3e-16
-        return ( between(x[0], (self.minxy[0]-epps, self.maxxy[0]+epps)) and
-                 between(x[1], (self.minxy[1]-epps, self.maxxy[1]+epps)) )
+        return (dolfin.between(x[0], (self.minxy[0], self.maxxy[0]))
+                and
+                dolfin.between(x[1], (self.minxy[1], self.maxxy[1])))
+
 
 class L2abLinBas():
     """ return the hat function related to the num-th vertex
@@ -138,37 +189,39 @@ class L2abLinBas():
     of N vertices """
 
     def __init__(self, num, N, a=0.0, b=1.0):
-        self.dist = (b-a)/(N-1)
-        self.vertex = a + num*self.dist
+        self.dist = (b - a) / (N - 1)
+        self.vertex = a + num * self.dist
         self.num, self.N = num, N
         self.a, self.b = a, b
 
     def evaluate(self, s):
         # print s
         if self.vertex - self.dist <= s <= self.vertex:
-            sval = 1.0 - 1.0/self.dist*(self.vertex - s)
+            sval = 1.0 - 1.0 / self.dist * (self.vertex - s)
         elif self.vertex <= s <= self.vertex + self.dist:
-            sval = 1.0 - 1.0/self.dist*(s - self.vertex)
+            sval = 1.0 - 1.0 / self.dist * (s - self.vertex)
         else:
             sval = 0
-        return sval
+
+        return 1
 
     def massmat(self):
-        """ return the mass matrix 
+        """ return the mass matrix
         """
-        mesh = IntervalMesh(self.N-1, self.a, self.b)
-        Y = FunctionSpace(mesh, 'CG', 1)
-        yv = TestFunction(Y)
-        yu = TrialFunction(Y)
-        my = yv*yu*dx
-        my = assemble(my)
+        mesh = dolfin.IntervalMesh(self.N - 1, self.a, self.b)
+        Y = dolfin.FunctionSpace(mesh, 'CG', 1)
+        yv = dolfin.TestFunction(Y)
+        yu = dolfin.TrialFunction(Y)
+        my = yv * yu * dx
+        my = dolfin.assemble(my)
         rows, cols, values = my.data()
         return sps.csr_matrix((values, cols, rows))
 
-class Cast1Dto2D(Expression):
+
+class Cast1Dto2D(dolfin.Expression):
     """ casts a function u defined on [u.a, u.b]
 
-    into the f[comp] of an expression 
+    into the f[comp] of an expression
     defined on a 2D domain cdom by
     by scaling to fit the xcomp extension
     and simply extruding into the other direction
@@ -176,25 +229,28 @@ class Cast1Dto2D(Expression):
 
     def __init__(self, u, cdom, vcomp=0, xcomp=0):
         # control 1D basis function
-        self.u = u 
+        self.u = u
         # domain of control
         self.cdom = cdom
         # component of the value to be set as u(s)
         self.vcomp = vcomp
-        # component of x to be considered as s coordinate 
+        # component of x to be considered as s coordinate
         self.xcomp = xcomp
         # transformation of the intervals [cd.xmin, cd.xmax] -> [a, b]
         # via s = m*x + d
-        self.m = (self.u.b - self.u.a)/(cdom.maxxy[self.xcomp] - cdom.minxy[self.xcomp])
-        self.d = self.u.b - self.m*cdom.maxxy[self.xcomp]
+        self.m = (self.u.b - self.u.a) / \
+            (cdom.maxxy[self.xcomp] - cdom.minxy[self.xcomp])
+        self.d = self.u.b - self.m * cdom.maxxy[self.xcomp]
 
     def eval(self, value, x):
         value[:] = 0
         if self.cdom.inside(x, False):
-            value[self.vcomp] = self.u.evaluate(self.m*x[self.xcomp]+self.d)
+            value[self.vcomp] = self.u.evaluate(
+                self.m * x[self.xcomp] + self.d)
 
     def value_shape(self):
         return (2,)
+
 
 def get_rightinv(C):
     """compute the rightinverse bmo SVD
@@ -206,7 +262,7 @@ def get_rightinv(C):
     except AttributeError:
         u, s, vt = np.linalg.svd(C, full_matrices=0)
 
-    return np.dot(vt.T, np.dot(np.diag(1.0/s), u.T))
+    return np.dot(vt.T, np.dot(np.diag(1.0 / s), u.T))
 
 
 def get_vstar(C, ystar, odcoo, NY):
@@ -214,20 +270,19 @@ def get_vstar(C, ystar, odcoo, NY):
     ystarvec = get_ystarvec(ystar, odcoo, NY)
     Cgeninv = get_rightinv(C)
 
-    return np.dot(Cgeninv,ystarvec)
+    return np.dot(Cgeninv, ystarvec)
 
 
-def get_ystarvec(ystar, odcoo, NY): 
+def get_ystarvec(ystar, odcoo, NY):
     """get the vector of the current target signal
 
     """
-    ymesh = IntervalMesh(NY-1, odcoo['ymin'], odcoo['ymax'])
-    Y = FunctionSpace(ymesh, 'CG', 1)
+    ymesh = dolfin.IntervalMesh(NY - 1, odcoo['ymin'], odcoo['ymax'])
+    Y = dolfin.FunctionSpace(ymesh, 'CG', 1)
 
-    ystarvec = np.zeros((NY*len(ystar), 1))
+    ystarvec = np.zeros((NY * len(ystar), 1))
     for k, ysc in enumerate(ystar):
-        cyv = interpolate(ysc, Y)
-        ystarvec[k*NY:(k+1)*NY,0] = cyv.vector().array()
+        cyv = dolfin.interpolate(ysc, Y)
+        ystarvec[k * NY:(k + 1) * NY, 0] = cyv.vector().array()
 
-    return ystarvec 
-
+    return ystarvec
