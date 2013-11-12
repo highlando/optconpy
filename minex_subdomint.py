@@ -1,8 +1,7 @@
 import dolfin
-from dolfin import dx, inner
 
 class LocFun(dolfin.Expression):
-    """ a locally defined 1D function"""
+    """ a locally defined constant function"""
     def __init__(self, xmin, xmax, fvalue=1):
         self.xmin = xmin
         self.xmax = xmax
@@ -18,28 +17,34 @@ class LocFuncDom(dolfin.SubDomain):
     def inside(self, x, on_boundary):
         return (dolfin.between(x[0], (self.xmin, self.xmax)))
 
-smin, smax = 0.1, 0.2
+# extension of the domain where ffunc is not 0
+smin, smax = 0.1, 0.3
 
-mesh = dolfin.IntervalMesh(11, 0, 1)
-dolfin.plot(mesh)
+mesh = dolfin.IntervalMesh(5, 0, 1)
+# dolfin.plot(mesh)
 
 Y = dolfin.FunctionSpace(mesh, 'CG', 1)
 
 y = dolfin.Expression('1')
 y = dolfin.interpolate(y, Y)
-dolfin.plot(y)
+# dolfin.plot(y)
 
 domains = dolfin.CellFunction('uint', Y.mesh())
 domains.set_all(0)
 
+# the support of ffunc as subdomain
 ffunc = LocFun(smin, smax)
 funcdom = LocFuncDom(smin, smax)
 funcdom.mark(domains, 1)
 
-dolfin.plot(ffunc, mesh)
-dolfin.interactive(True)
+dx = dolfin.Measure('dx')[domains]
 
-y1 = inner(y, ffunc) * dx
-y2 = inner(y, ffunc) * dx(1)
+# dolfin.plot(ffunc, mesh)
+# dolfin.interactive(True)
+
+# ffunc integrated over the whole domain
+y1 = dolfin.inner(y, ffunc) * dolfin.dx
+# ffunc integrated on over its support
+y2 = dolfin.inner(y, ffunc) * dx(1)
 
 print dolfin.assemble(y1), dolfin.assemble(y2)
