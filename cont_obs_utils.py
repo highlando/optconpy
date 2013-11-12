@@ -41,7 +41,7 @@ def get_inp_opa(cdom=None, NU=8, V=None):
     )
 
 
-def get_mout_opa(odom=None, NY=8, V=None):
+def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
     """dolfin.assemble the 'MyC' matrix
 
     the find an array representation
@@ -54,71 +54,65 @@ def get_mout_opa(odom=None, NY=8, V=None):
     cf. doku
     """
 
-    # v = dolfin.TestFunction(V)
-    v = dolfin.Expression(('1', '1'))
-    v = dolfin.interpolate(v, V)
+    if thicken is not None:
+        # thickening of the control domain.
+        # this is needed since FEniCS integration only
+        # considers complete cells
+        odcoopl = dict(xmin=odcoo['xmin']-thicken,
+                       xmax=odcoo['xmax']+thicken,
+                       ymin=odcoo['ymin']-thicken,
+                       ymax=odcoo['ymax']+thicken)
+    else:
+        odcoopl = odcoo
+
+    odom_thick = ContDomain(odcoopl)
+    odom = ContDomain(odcoo)
+
+    v = dolfin.TestFunction(V)
+    vone = dolfin.Expression(('1', '1'))
+    vone = dolfin.interpolate(vone, V)
+
     domains = dolfin.CellFunction('uint', V.mesh())
     domains.set_all(0)
-    odom.mark(domains, 1)
+    odom_thick.mark(domains, 1)
 
     dx = dolfin.Measure('dx')[domains]
 
-    Ci = 1.0 / (odom.maxxy[0] - odom.minxy[0])
+    # factor to compute the average via \bar u = 1/h \int_0^h u(x) dx
+    Ci = 1.0 / (odcoo['xmax'] - odcoo['xmin'])
 
     YX, YY = [], []
 
     for nbf in range(NY):
-        ybf = L2abLinBas(nbf, NY, a=odom.minxy[1], b=odom.maxxy[1])
+        ybf = L2abLinBas(nbf, NY, a=odcoo['ymin'], b=odcoo['ymax'])
         yx = Cast1Dto2D(ybf, odom, vcomp=0, xcomp=1)
         yy = Cast1Dto2D(ybf, odom, vcomp=1, xcomp=1)
 
-        # the (2D) domain of support in Omega of the current basis function
-        cursuppp = ContDomain(dict(xmin=odom.minxy[0],
-                                   xmax=odom.maxxy[0],
-                                   ymin=ybf.vertex-ybf.dist,
-                                   ymax=ybf.vertex+ybf.dist))
-        # print cursuppp.minxy, cursuppp.maxxy
+        yxf = Ci * inner(v, yx) * dx(1)
+        yyf = Ci * inner(v, yy) * dx(1)
 
-        cursuppn = ContDomain(dict(xmin=odom.minxy[0],
-                                   xmax=odom.maxxy[0],
-                                   ymin=ybf.vertex,
-                                   ymax=ybf.vertex+ybf.dist))
+        yxone = inner(vone, yx) * dx(1)
+        yyone = inner(vone, yy) * dx(1)
 
-        debugdom = ContDomain(dict(xmin=odom.minxy[0],
-                                   xmax=odom.maxxy[0],
-                                   ymin=odom.minxy[1],
-                                   ymax=odom.maxxy[1]))
-
-        # print cursuppn.minxy, cursuppn.maxxy
-
-        cursuppp.mark(domains, 2)
-        cursuppn.mark(domains, 2+1)
-        debugdom.mark(domains, 2+2)
-
-        dx = dolfin.Measure('dx')[domains]
-
-        yx = Ci * (inner(v, yx) * dx(4) + inner(v, yx) * dx(2+1))
-        yy = Ci * inner(v, yy) * dx(4)
-
-        Yx = dolfin.assemble(yx)
+        Yx = dolfin.assemble(yxf)
         # ,
         #                      form_compiler_parameters={
         #                          'quadrature_rule': 'canonical',
         #                          'quadrature_degree': 2})
-        Yy = dolfin.assemble(yy)
+        Yy = dolfin.assemble(yyf)
         # ,
         #                      form_compiler_parameters={
         #                          'quadrature_rule': 'default',
         #                          'quadrature_degree': 2})
 
-        print Yx, Yy
+        print dolfin.assemble(yxone), dolfin.assemble(yyone)
 
-        # Yx = Yx.array()
-        # Yy = Yy.array()
-        # Yx = Yx.reshape(1, len(Yx))
-        # Yy = Yy.reshape(1, len(Yy))
-        # YX.append(sps.csc_matrix(Yx))
-        # YY.append(sps.csc_matrix(Yy))
+        Yx = Yx.array()
+        Yy = Yy.array()
+        Yx = Yx.reshape(1, len(Yx))
+        Yy = Yy.reshape(1, len(Yy))
+        YX.append(sps.csc_matrix(Yx))
+        YY.append(sps.csc_matrix(Yy))
 
     My = ybf.massmat()
 
@@ -196,14 +190,13 @@ class L2abLinBas():
 
     def evaluate(self, s):
         # print s
-        if self.vertex - self.dist <= s <= self.vertex:
+        if max(self.a, self.vertex - self.dist) <= s <= self.vertex:
             sval = 1.0 - 1.0 / self.dist * (self.vertex - s)
-        elif self.vertex <= s <= self.vertex + self.dist:
+        elif self.vertex <= s <= min(self.b, self.vertex + self.dist):
             sval = 1.0 - 1.0 / self.dist * (s - self.vertex)
         else:
             sval = 0
-
-        return 1
+        return sval
 
     def massmat(self):
         """ return the mass matrix

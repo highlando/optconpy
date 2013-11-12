@@ -1,6 +1,5 @@
 # this is rather optical checking
 import dolfin
-import numpy as np
 import scipy.sparse.linalg as spsla
 
 import dolfin_to_nparrays as dtn
@@ -10,7 +9,8 @@ from optcont_main import drivcav_fems
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
 N = 20
-NY = 13
+NY = 7
+thicken = 0.1
 
 mesh = dolfin.UnitSquareMesh(N, N)
 V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
@@ -41,8 +41,6 @@ odcoo = dict(xmin=0.45,
              ymin=0.6,
              ymax=0.8)
 
-odom = cou.ContDomain(odcoo)
-
 # get the system matrices
 femp = drivcav_fems(N)
 stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], nu=1)
@@ -60,7 +58,7 @@ bc = dolfin.DirichletBC(V, exv, 'on_boundary')
  bcvals) = dtn.condense_sysmatsbybcs(stokesmats, [bc])
 
 # check the C
-MyC, My = cou.get_mout_opa(odom=odom, V=V, NY=NY)
+MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY, thicken=thicken)
 MyC = MyC[:, invinds][:, :]
 
 
@@ -80,17 +78,16 @@ testvi = testv.vector().array()[invinds]
 #     M=stokesmatsc['M'],
 #     J=stokesmatsc['J'],
 #     v=testvi)
-# 
+
 # print "||J*v|| = {0}".format(np.linalg.norm(stokesmatsc['J'] * testvi))
 # print "||J* v_df|| = {0}".format(np.linalg.norm(stokesmatsc['J'] * testvi0))
-# 
+
 # # testsignals from the test velocities
 testy = spsla.spsolve(My, MyC * testvi)
 # testyv0 = spsla.spsolve(My, MyC * testvi0)
 # testyg = spsla.spsolve(My, MyC * (testvi.flatten() - testvi0))
 # testry = spsla.spsolve(My, np.dot(rC, testvi))
-# 
-# 
+
 # print "||C v_df - C_df v|| = {0}".format(np.linalg.norm(testyv0 - testry))
 
 y1.vector().set_local(testy[:NY])
@@ -101,7 +98,7 @@ dolfin.plot(y2, title="y-comp of C*v")
 
 # y2.vector().set_local(testyv0[:NY])
 # dolfin.plot(y2, title="x-comp of $C*(P_{df}v)$")
-# 
+
 # y3.vector().set_local(testyg[:NY])
 # dolfin.plot(y3, title="x-comp of $C*(v - P_{df}v)$")
 
