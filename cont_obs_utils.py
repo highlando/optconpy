@@ -7,6 +7,8 @@ import lin_alg_utils as lau
 
 from dolfin import dx, inner
 
+dolfin.parameters.linear_algebra_backend = "uBLAS"
+
 
 def get_inp_opa(cdom=None, NU=8, V=None):
     """dolfin.assemble the 'B' matrix
@@ -41,7 +43,7 @@ def get_inp_opa(cdom=None, NU=8, V=None):
     )
 
 
-def get_mout_opa(odcoo=None, NY=8, V=None):
+def get_mout_opa(odcoo=None, NY=8, V=None, NV=20):
     """dolfin.assemble the 'MyC' matrix
 
     the find an array representation
@@ -67,17 +69,28 @@ def get_mout_opa(odcoo=None, NY=8, V=None):
 
     omega_y = dolfin.RectangleMesh(odcoo['xmin'], odcoo['ymin'],
                                    odcoo['xmax'], odcoo['ymax'],
-                                   1, NY-1)
+                                   NV/5, NY-1)
 
     y_y = dolfin.VectorFunctionSpace(omega_y, 'CG', 1)
-    vone_yx = dolfin.interpolate(vonex, y_y)
-    vone_yy = dolfin.interpolate(voney, y_y)
+    # vone_yx = dolfin.interpolate(vonex, y_y)
+    # vone_yy = dolfin.interpolate(voney, y_y)
+
+    # charfun = CharactFun(odom)
+    # v = dolfin.TestFunction(V)
+    # checkf = dolfin.assemble(inner(v, charfun) * dx)
+    # dofs_on_subd = np.where(checkf.array() > 0)[0]
 
     charfun = CharactFun(odom)
     v = dolfin.TestFunction(V)
     u = dolfin.TrialFunction(V)
-    checkf = dolfin.assemble(inner(v, u) * charfun * dx)
-    dofs_on_subd = np.where(checkf.array() > 0)[0]
+
+    MP = dolfin.assemble(inner(v, u) * charfun * dx)
+
+    rows, cols, values = MP.data()
+    MPa = sps.dia_matrix(sps.csr_matrix((values, cols, rows)))
+
+    checkf = MPa.diagonal()
+    dofs_on_subd = np.where(checkf > 0)[0]
 
     # set up the numbers of zero columns to be inserted
     # between the nonzeros, i.e. the columns corresponding
@@ -107,15 +120,15 @@ def get_mout_opa(odcoo=None, NY=8, V=None):
             yyf = Ci * inner(vdof_y, yy) * dx
 
             # if kkk < 3:
-            curvyx = inner(vdof_y, yx) * dx
-            curvyy = inner(vdof_y, yy) * dx
-            vdofonex = inner(vdof_y, vone_yx) * dx
-            vdofoney = inner(vdof_y, vone_yy) * dx
-            print 'DOF number {0}: {1}'.format(curdof,
-                                               [dolfin.assemble(curvyx),
-                                                dolfin.assemble(curvyy),
-                                                dolfin.assemble(vdofonex),
-                                                dolfin.assemble(vdofoney)])
+            # curvyx = inner(vdof_y, yx) * dx
+            # curvyy = inner(vdof_y, yy) * dx
+            # vdofonex = inner(vdof_y, vone_yx) * dx
+            # vdofoney = inner(vdof_y, vone_yy) * dx
+            # print 'DOF number {0}: {1}'.format(curdof,
+            #                                    [dolfin.assemble(curvyx),
+            #                                     dolfin.assemble(curvyy),
+            #                                     dolfin.assemble(vdofonex),
+            #                                     dolfin.assemble(vdofoney)])
             # if kkk == 3:
                 # raise Warning('TODO: debug')
 
@@ -141,18 +154,18 @@ def get_mout_opa(odcoo=None, NY=8, V=None):
             YX.append(sps.csc_matrix((NY, curzeros)))
             YY.append(sps.csc_matrix((NY, curzeros)))
 
-    print 'number of subdofs: {0}'.format(dofs_on_subd.shape[0])
+    # print 'number of subdofs: {0}'.format(dofs_on_subd.shape[0])
     My = ybf.massmat()
     YYX = sps.hstack(YX)
     YYY = sps.hstack(YY)
     MyC = sps.vstack([YYX, YYY], format='csc')
 
-    basfun = dolfin.Function(V)
-    basfun.vector()[dofs_on_subd] = 0.2
-    basfun.vector()[0] = 1  # for scaling the others only
-    dolfin.plot(basfun)
+    # basfun = dolfin.Function(V)
+    # basfun.vector()[dofs_on_subd] = 0.2
+    # basfun.vector()[0] = 1  # for scaling the others only
+    # dolfin.plot(basfun)
 
-    return (MyC, sps.block_diag([My, My]))
+    return (MyC, sps.block_diag([My, My], format='csc'))
 
 
 def app_difffreeproj(v=None, J=None, M=None):
@@ -329,5 +342,5 @@ class CharactFun(dolfin.Expression):
         else:
             value[:] = 0
 
-    def value_shape(self):
-        return (0,)
+    # def value_shape(self):
+    #     return (2,)

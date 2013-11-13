@@ -28,14 +28,14 @@ class CharactFun(dolfin.Expression):
     # def value_shape(self):
     #     return (2,)
 
-epsil = 0.0
+epsil = -0.00
 odcoo = dict(xmin=0.45-epsil,
              xmax=0.55+epsil,
              ymin=0.6-epsil,
              ymax=0.8+epsil)
 
 mesh = UnitSquareMesh(10, 10)
-V = VectorFunctionSpace(mesh, "CG", 1)
+V = VectorFunctionSpace(mesh, "CG", 2)
 plot(mesh)
 
 odom = ContDomain(odcoo)
@@ -44,9 +44,7 @@ charfun = CharactFun(odom)
 v = TestFunction(V)
 u = TrialFunction(V)
 
-MP = assemble(inner(v, u) * charfun * dx ,
-                                 form_compiler_parameters={
-                                     'quadrature_degree': 3})
+MP = assemble(inner(v, u) * charfun * dx)
 
 rows, cols, values = MP.data()
 MPa = sps.dia_matrix(sps.csr_matrix((values, cols, rows)))
@@ -58,7 +56,7 @@ print dofs_on_subd.shape
 
 basfun = Function(V)
 basfun.vector()[dofs_on_subd] = 0.2
-basfun.vector()[-2] = 1  # for scaling the others only 
+basfun.vector()[0] = 1  # for scaling the others only 
 plot(basfun)
 
 interactive(True)

@@ -8,11 +8,11 @@ import cont_obs_utils as cou
 from optcont_main import drivcav_fems
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
-N = 10
-NY = 3
+NV = 25
+NY = 9
 
-mesh = dolfin.UnitSquareMesh(N, N)
-V = dolfin.VectorFunctionSpace(mesh, "CG", 1)
+mesh = dolfin.UnitSquareMesh(NV, NV)
+V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
 Q = dolfin.FunctionSpace(mesh, "CG", 1)
 
 dolfin.plot(mesh)
@@ -38,11 +38,11 @@ testv = dolfin.interpolate(exv, V)
 
 odcoo = dict(xmin=0.45,
              xmax=0.55,
-             ymin=0.601,
-             ymax=0.798)
+             ymin=0.6,
+             ymax=0.8)
 
 # get the system matrices
-femp = drivcav_fems(N)
+femp = drivcav_fems(NV)
 stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], nu=1)
 # remove the freedom in the pressure
 stokesmats['J'] = stokesmats['J'][:-1, :][:, :]
@@ -58,7 +58,7 @@ bc = dolfin.DirichletBC(V, exv, 'on_boundary')
  bcvals) = dtn.condense_sysmatsbybcs(stokesmats, [bc])
 
 # check the C
-MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY)
+MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY, NV=NV)
 # MyC = MyC[:, invinds][:, :]
 
 

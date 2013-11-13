@@ -9,8 +9,8 @@ import cont_obs_utils as cou
 from optcont_main import drivcav_fems
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
-N = 20
-mesh = dolfin.UnitSquareMesh(N, N)
+NV = 24
+mesh = dolfin.UnitSquareMesh(NV, NV)
 V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
 Q = dolfin.FunctionSpace(mesh, "CG", 1)
 
@@ -27,10 +27,9 @@ u_y = y*y*(1-y)*(1-y)*2*x*(1-x)*(1-2*x)
 from sympy.printing import ccode
 exv = dolfin.Expression((ccode(u_x), ccode(u_y)))
 
-
 testv = dolfin.interpolate(exv, V)
 
-NU, NY = 12, 7
+NU, NY = 12, 8
 
 cdcoo = dict(xmin=0.4,
              xmax=0.6,
@@ -46,7 +45,7 @@ cdom = cou.ContDomain(cdcoo)
 odom = cou.ContDomain(odcoo)
 
 # get the system matrices
-femp = drivcav_fems(N)
+femp = drivcav_fems(NV)
 stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], nu=1)
 # remove the freedom in the pressure
 stokesmats['J'] = stokesmats['J'][:-1, :][:, :]
@@ -78,7 +77,7 @@ bu.vector().set_local(Bu)
 dolfin.plot(bu, title='plot of Bu')
 
 # check the C
-MyC, My = cou.get_mout_opa(odom=odom, V=V, NY=NY)
+MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY, NV=NV)
 MyC = MyC[:, invinds][:, :]
 
 # testsignal from the test velocity
