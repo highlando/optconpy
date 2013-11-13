@@ -8,14 +8,14 @@ import cont_obs_utils as cou
 from optcont_main import drivcav_fems
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
-N = 32
-NY = 7
-thicken = 0.1
+N = 10
+NY = 3
 
 mesh = dolfin.UnitSquareMesh(N, N)
 V = dolfin.VectorFunctionSpace(mesh, "CG", 1)
 Q = dolfin.FunctionSpace(mesh, "CG", 1)
 
+dolfin.plot(mesh)
 
 testcase = 2  # 2,3
 # testvelocities
@@ -38,8 +38,8 @@ testv = dolfin.interpolate(exv, V)
 
 odcoo = dict(xmin=0.45,
              xmax=0.55,
-             ymin=0.6,
-             ymax=0.8)
+             ymin=0.601,
+             ymax=0.798)
 
 # get the system matrices
 femp = drivcav_fems(N)
@@ -58,7 +58,7 @@ bc = dolfin.DirichletBC(V, exv, 'on_boundary')
  bcvals) = dtn.condense_sysmatsbybcs(stokesmats, [bc])
 
 # check the C
-MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY, thicken=thicken)
+MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY)
 # MyC = MyC[:, invinds][:, :]
 
 

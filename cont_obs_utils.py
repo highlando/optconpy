@@ -41,7 +41,7 @@ def get_inp_opa(cdom=None, NU=8, V=None):
     )
 
 
-def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
+def get_mout_opa(odcoo=None, NY=8, V=None):
     """dolfin.assemble the 'MyC' matrix
 
     the find an array representation
@@ -54,41 +54,29 @@ def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
     cf. doku
     """
 
-    if thicken is not None:
-        # thickening of the control domain.
-        # this is needed since FEniCS integration only
-        # considers complete cells
-        odcoopl = dict(xmin=odcoo['xmin']-thicken,
-                       xmax=odcoo['xmax']+thicken,
-                       ymin=odcoo['ymin']-thicken,
-                       ymax=odcoo['ymax']+thicken)
-    else:
-        odcoopl = odcoo
-
-    odom_thick = ContDomain(odcoopl)
     odom = ContDomain(odcoo)
 
     v = dolfin.TestFunction(V)
-    vone = dolfin.Expression(('1', '1'))
-    vone = dolfin.interpolate(vone, V)
-
-    domains = dolfin.CellFunction('uint', V.mesh())
-    domains.set_all(0)
-    odom_thick.mark(domains, 1)
+    voney = dolfin.Expression(('0', '1'))
+    vonex = dolfin.Expression(('1', '0'))
+    voney = dolfin.interpolate(voney, V)
+    vonex = dolfin.interpolate(vonex, V)
 
     # factor to compute the average via \bar u = 1/h \int_0^h u(x) dx
     Ci = 1.0 / (odcoo['xmax'] - odcoo['xmin'])
 
     omega_y = dolfin.RectangleMesh(odcoo['xmin'], odcoo['ymin'],
                                    odcoo['xmax'], odcoo['ymax'],
-                                   2*5, 2*(NY-1))
+                                   1, NY-1)
 
     y_y = dolfin.VectorFunctionSpace(omega_y, 'CG', 1)
-    vone_y = dolfin.interpolate(vone, y_y)
+    vone_yx = dolfin.interpolate(vonex, y_y)
+    vone_yy = dolfin.interpolate(voney, y_y)
 
     charfun = CharactFun(odom)
     v = dolfin.TestFunction(V)
-    checkf = dolfin.assemble(inner(v, charfun) * dx)
+    u = dolfin.TrialFunction(V)
+    checkf = dolfin.assemble(inner(v, u) * charfun * dx)
     dofs_on_subd = np.where(checkf.array() > 0)[0]
 
     # set up the numbers of zero columns to be inserted
@@ -118,13 +106,18 @@ def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
             yxf = Ci * inner(vdof_y, yx) * dx
             yyf = Ci * inner(vdof_y, yy) * dx
 
-            if kkk < 3: 
-                curvyx = inner(vdof_y, yx) * dx
-                curvyy = inner(vdof_y, yy) * dx
-                yxone = inner(yx, vone_y) * dx
-                print dolfin.assemble(curvyx), dolfin.assemble(curvyy), dolfin.assemble(yxone)
-            if kkk == 3:
-                raise Warning('TODO: debug') 
+            # if kkk < 3:
+            curvyx = inner(vdof_y, yx) * dx
+            curvyy = inner(vdof_y, yy) * dx
+            vdofonex = inner(vdof_y, vone_yx) * dx
+            vdofoney = inner(vdof_y, vone_yy) * dx
+            print 'DOF number {0}: {1}'.format(curdof,
+                                               [dolfin.assemble(curvyx),
+                                                dolfin.assemble(curvyy),
+                                                dolfin.assemble(vdofonex),
+                                                dolfin.assemble(vdofoney)])
+            # if kkk == 3:
+                # raise Warning('TODO: debug')
 
             Yx.append(dolfin.assemble(yxf))
             # ,
@@ -137,7 +130,6 @@ def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
             #                          'quadrature_rule': 'default',
             #                          'quadrature_degree': 2})
 
-
         Yx = np.array(Yx)
         Yy = np.array(Yy)
         Yx = Yx.reshape(NY, 1)
@@ -149,11 +141,16 @@ def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
             YX.append(sps.csc_matrix((NY, curzeros)))
             YY.append(sps.csc_matrix((NY, curzeros)))
 
+    print 'number of subdofs: {0}'.format(dofs_on_subd.shape[0])
     My = ybf.massmat()
     YYX = sps.hstack(YX)
     YYY = sps.hstack(YY)
     MyC = sps.vstack([YYX, YYY], format='csc')
-    raise Warning('TODO: debug') 
+
+    basfun = dolfin.Function(V)
+    basfun.vector()[dofs_on_subd] = 0.2
+    basfun.vector()[0] = 1  # for scaling the others only
+    dolfin.plot(basfun)
 
     return (MyC, sps.block_diag([My, My]))
 
@@ -333,4 +330,4 @@ class CharactFun(dolfin.Expression):
             value[:] = 0
 
     def value_shape(self):
-        return (2,)
+        return (0,)
