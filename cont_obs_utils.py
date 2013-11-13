@@ -81,35 +81,46 @@ def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
     # factor to compute the average via \bar u = 1/h \int_0^h u(x) dx
     Ci = 1.0 / (odcoo['xmax'] - odcoo['xmin'])
 
-    YX, YY = [], []
 
     omega_y = dolfin.RectangleMesh(odcoo['xmin'], odcoo['ymin'],
                                    odcoo['xmax'], odcoo['ymax'],
-                                   5, NY-1)
+                                   2*5, 2*(NY-1))
 
     y_y = dolfin.VectorFunctionSpace(omega_y, 'CG', 1)
+    vone_y = dolfin.interpolate(vone, y_y)
 
-    mesh = dolfin.UnitSquareMesh(2, 5)
-    V1 = dolfin.VectorFunctionSpace(mesh, "CG", 1)
+    charfun = CharactFun(odom)
+    v = dolfin.TestFunction(V)
+    checkf = dolfin.assemble(inner(v, charfun) * dx)
+    dofs_on_subd = np.where(checkf.array() > 0)[0]
 
-    obdom_dofs = extract_dofs_subdomain(V, V1, odom)
+    # set up the numbers of zero columns to be inserted
+    # between the nonzeros, i.e. the columns corresponding
+    # to the dofs of V outside the observation domain
+    # e.g. if there are 7 dofs and dofs_on_subd = [1,4,5], then
+    # we compute the numbers [1,2,0,1] to assemble C = [0,*,0,0,*,*,0]
+    indist_subddofs = dofs_on_subd[1:] - (dofs_on_subd[:-1]+1) 
+    indist_subddofs = np.r_[indist_subddofs, V.dim() - dofs_on_subd[-1]]
 
-    for curdof in obdom_dofs:
+    YX = [sps.csc_matrix((dofs_on_subd[0], NY))]
+    YY = [sps.csc_matrix((dofs_on_subd[0], NY))]
+
+    for curdof in dofs_on_subd:
         vcur = dolfin.Function(V)
         vcur.vector()[:] = 0
         vcur.vector()[curdof] = 1
-        vone_y = dolfin.interpolate(vcur, y_y)
+        vdof_y = dolfin.interpolate(vcur, y_y)
 
         for nbf in range(NY):
             ybf = L2abLinBas(nbf, NY, a=odcoo['ymin'], b=odcoo['ymax'])
             yx = Cast1Dto2D(ybf, odom, vcomp=0, xcomp=1)
             yy = Cast1Dto2D(ybf, odom, vcomp=1, xcomp=1)
 
-            yxf = Ci * inner(v, yx) * subdx(1)
-            yyf = Ci * inner(v, yy) * subdx(1)
+            yxf = Ci * inner(vcur, yx) * dx
+            yyf = Ci * inner(vcur, yy) * dx
 
-            yxone = inner(vone_y, yx) * dx
-            yyone = inner(vone, yy) * subdx(1)
+            yxone = inner(vdof_y, yx) * dx
+            yyone = inner(vdof_y, vone_y) * dx
 
             Yx = dolfin.assemble(yxf)
             # ,
@@ -302,17 +313,16 @@ def get_ystarvec(ystar, odcoo, NY):
     return ystarvec
 
 
-def extract_dofs_subdomain(V, V1, subd):
-    raise Warning('TODO: debug')
-    mesh = V.mesh()
-    dofs_of_V = V.dofmap().vertex_to_dof_map(mesh)
-    # in 1.3: dofs_of_V = dof_to_vertex_map(V)
-    coord_of_dofs = V.mesh().coordinates()
-    ncords = coord_of_dofs.shape[0]
+class CharactFun(dolfin.Expression):
+    """ characteristic function of subdomain """
+    def __init__(self, subdom):
+        self.subdom = subdom
 
-    subd_bools = np.zeros(V.dim())
-    for inds in dofs_of_V:
-        subd_bools[inds] = subd.inside(coord_of_dofs[np.mod(inds, ncords)],
-                                       False)
+    def eval(self, value, x):
+        if self.subdom.inside(x, False):
+            value[:] = 1
+        else:
+            value[:] = 0
 
-    return np.arange(V.dim())[subd_bools.astype(bool)]
+    def value_shape(self):
+        return (2,)

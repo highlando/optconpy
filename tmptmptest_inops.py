@@ -8,7 +8,7 @@ import cont_obs_utils as cou
 from optcont_main import drivcav_fems
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
-N = 20
+N = 12
 NY = 7
 thicken = 0.1
 
