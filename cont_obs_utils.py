@@ -89,7 +89,10 @@ def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
 
     y_y = dolfin.VectorFunctionSpace(omega_y, 'CG', 1)
 
-    obdom_dofs = extract_dofs_subdomain(V, odom)
+    mesh = dolfin.UnitSquareMesh(2, 5)
+    V1 = dolfin.VectorFunctionSpace(mesh, "CG", 1)
+
+    obdom_dofs = extract_dofs_subdomain(V, V1, odom)
 
     for curdof in obdom_dofs:
         vcur = dolfin.Function(V)
@@ -299,7 +302,8 @@ def get_ystarvec(ystar, odcoo, NY):
     return ystarvec
 
 
-def extract_dofs_subdomain(V, subd):
+def extract_dofs_subdomain(V, V1, subd):
+    raise Warning('TODO: debug')
     mesh = V.mesh()
     dofs_of_V = V.dofmap().vertex_to_dof_map(mesh)
     # in 1.3: dofs_of_V = dof_to_vertex_map(V)
