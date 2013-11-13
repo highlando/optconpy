@@ -76,11 +76,8 @@ def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
     domains.set_all(0)
     odom_thick.mark(domains, 1)
 
-    subdx = dolfin.Measure('dx')[domains]
-
     # factor to compute the average via \bar u = 1/h \int_0^h u(x) dx
     Ci = 1.0 / (odcoo['xmax'] - odcoo['xmin'])
-
 
     omega_y = dolfin.RectangleMesh(odcoo['xmin'], odcoo['ymin'],
                                    odcoo['xmax'], odcoo['ymax'],
@@ -99,55 +96,66 @@ def get_mout_opa(odcoo=None, NY=8, V=None, thicken=None):
     # to the dofs of V outside the observation domain
     # e.g. if there are 7 dofs and dofs_on_subd = [1,4,5], then
     # we compute the numbers [1,2,0,1] to assemble C = [0,*,0,0,*,*,0]
-    indist_subddofs = dofs_on_subd[1:] - (dofs_on_subd[:-1]+1) 
-    indist_subddofs = np.r_[indist_subddofs, V.dim() - dofs_on_subd[-1]]
+    indist_subddofs = dofs_on_subd[1:] - (dofs_on_subd[:-1]+1)
+    indist_subddofs = np.r_[indist_subddofs, V.dim() - dofs_on_subd[-1] - 1]
 
-    YX = [sps.csc_matrix((dofs_on_subd[0], NY))]
-    YY = [sps.csc_matrix((dofs_on_subd[0], NY))]
-
-    for curdof in dofs_on_subd:
+    YX = [sps.csc_matrix((NY, dofs_on_subd[0]))]
+    YY = [sps.csc_matrix((NY, dofs_on_subd[0]))]
+    kkk = 0
+    for curdof, curzeros in zip(dofs_on_subd, indist_subddofs):
+        kkk += 1
         vcur = dolfin.Function(V)
         vcur.vector()[:] = 0
         vcur.vector()[curdof] = 1
         vdof_y = dolfin.interpolate(vcur, y_y)
 
+        Yx, Yy = [], []
         for nbf in range(NY):
             ybf = L2abLinBas(nbf, NY, a=odcoo['ymin'], b=odcoo['ymax'])
             yx = Cast1Dto2D(ybf, odom, vcomp=0, xcomp=1)
             yy = Cast1Dto2D(ybf, odom, vcomp=1, xcomp=1)
 
-            yxf = Ci * inner(vcur, yx) * dx
-            yyf = Ci * inner(vcur, yy) * dx
+            yxf = Ci * inner(vdof_y, yx) * dx
+            yyf = Ci * inner(vdof_y, yy) * dx
 
-            yxone = inner(vdof_y, yx) * dx
-            yyone = inner(vdof_y, vone_y) * dx
+            if kkk < 3: 
+                curvyx = inner(vdof_y, yx) * dx
+                curvyy = inner(vdof_y, yy) * dx
+                yxone = inner(yx, vone_y) * dx
+                print dolfin.assemble(curvyx), dolfin.assemble(curvyy), dolfin.assemble(yxone)
+            if kkk == 3:
+                raise Warning('TODO: debug') 
 
-            Yx = dolfin.assemble(yxf)
+            Yx.append(dolfin.assemble(yxf))
             # ,
             #                      form_compiler_parameters={
             #                          'quadrature_rule': 'canonical',
             #                          'quadrature_degree': 2})
-            Yy = dolfin.assemble(yyf)
+            Yy.append(dolfin.assemble(yyf))
             # ,
             #                      form_compiler_parameters={
             #                          'quadrature_rule': 'default',
             #                          'quadrature_degree': 2})
 
-            print dolfin.assemble(yxone), dolfin.assemble(yyone)
 
-            Yx = Yx.array()
-            Yy = Yy.array()
-            Yx = Yx.reshape(1, len(Yx))
-            Yy = Yy.reshape(1, len(Yy))
-            YX.append(sps.csc_matrix(Yx))
-            YY.append(sps.csc_matrix(Yy))
+        Yx = np.array(Yx)
+        Yy = np.array(Yy)
+        Yx = Yx.reshape(NY, 1)
+        Yy = Yy.reshape(NY, 1)
+        # append the columns to z
+        YX.append(sps.csc_matrix(Yx))
+        YY.append(sps.csc_matrix(Yy))
+        if curzeros > 0:
+            YX.append(sps.csc_matrix((NY, curzeros)))
+            YY.append(sps.csc_matrix((NY, curzeros)))
 
     My = ybf.massmat()
+    YYX = sps.hstack(YX)
+    YYY = sps.hstack(YY)
+    MyC = sps.vstack([YYX, YYY], format='csc')
+    raise Warning('TODO: debug') 
 
-    return (
-        sps.vstack([sps.vstack(YX), sps.vstack(YY)],
-                   format='csc'), sps.block_diag([My, My])
-    )
+    return (MyC, sps.block_diag([My, My]))
 
 
 def app_difffreeproj(v=None, J=None, M=None):

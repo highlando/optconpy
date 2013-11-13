@@ -8,12 +8,12 @@ import cont_obs_utils as cou
 from optcont_main import drivcav_fems
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
-N = 12
+N = 32
 NY = 7
 thicken = 0.1
 
 mesh = dolfin.UnitSquareMesh(N, N)
-V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
+V = dolfin.VectorFunctionSpace(mesh, "CG", 1)
 Q = dolfin.FunctionSpace(mesh, "CG", 1)
 
 
@@ -59,7 +59,7 @@ bc = dolfin.DirichletBC(V, exv, 'on_boundary')
 
 # check the C
 MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY, thicken=thicken)
-MyC = MyC[:, invinds][:, :]
+# MyC = MyC[:, invinds][:, :]
 
 
 # signal space
@@ -73,7 +73,9 @@ y3 = dolfin.Function(Y)
 # check the regularization of C
 # rC = cou.get_regularized_c(MyC.T, J=stokesmatsc['J'], Mt=stokesmatsc['M']).T
 
-testvi = testv.vector().array()[invinds]
+# testvi = testv.vector().array()[invinds]
+testvi = testv.vector().array()
+
 # testvi0 = cou.app_difffreeproj(
 #     M=stokesmatsc['M'],
 #     J=stokesmatsc['J'],
@@ -90,16 +92,16 @@ testy = spsla.spsolve(My, MyC * testvi)
 
 # print "||C v_df - C_df v|| = {0}".format(np.linalg.norm(testyv0 - testry))
 
-# y1.vector().set_local(testy[:NY])
-# dolfin.plot(y1, title="x-comp of C*v")
-#
-# y2.vector().set_local(testy[NY:])
-# dolfin.plot(y2, title="y-comp of C*v")
-# 
-# # y2.vector().set_local(testyv0[:NY])
-# # dolfin.plot(y2, title="x-comp of $C*(P_{df}v)$")
-# 
-# # y3.vector().set_local(testyg[:NY])
-# # dolfin.plot(y3, title="x-comp of $C*(v - P_{df}v)$")
-# 
-# dolfin.interactive(True)
+y1.vector().set_local(testy[:NY])
+dolfin.plot(y1, title="x-comp of C*v")
+
+y2.vector().set_local(testy[NY:])
+dolfin.plot(y2, title="y-comp of C*v")
+
+# y2.vector().set_local(testyv0[:NY])
+# dolfin.plot(y2, title="x-comp of $C*(P_{df}v)$")
+
+# y3.vector().set_local(testyg[:NY])
+# dolfin.plot(y3, title="x-comp of $C*(v - P_{df}v)$")
+
+dolfin.interactive(True)
