@@ -5,7 +5,7 @@ import cont_obs_utils as cou
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
 
-def check_outop(NV=12, NY=8, odcoo=dict(xmin=0.45,
+def check_outop(NV=20, NY=8, odcoo=dict(xmin=0.45,
                                         xmax=0.55,
                                         ymin=0.6,
                                         ymax=0.8)):

@@ -16,7 +16,7 @@ dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 def time_int_params(Nts):
     t0 = 0.0
-    tE = 10.0
+    tE = 1.0
     dt = (tE - t0) / Nts
     tip = dict(t0=t0,
                tE=tE,
@@ -24,9 +24,9 @@ def time_int_params(Nts):
                Nts=Nts,
                vfile=None,
                pfile=None,
-               Residuals=NseResiduals(),
+               Residuals=[],
                ParaviewOutput=True,
-               nu=1e-2,
+               nu=1e-3,
                nnewtsteps=3,  # n nwtn stps for vel comp
                vel_nwtn_tol=1e-14,
                norm_nwtnupd_list=[],
@@ -48,8 +48,92 @@ def set_vpfiles(tip, fstring='not specified'):
     tip['pfile'] = dolfin.File(fstring+'_p.pvd')
     tip['vfile'] = dolfin.File(fstring+'_vel.pvd')
 
+def cont_params():
+    """define the parameters of the control problem
 
-def optcon_nse(N=24, Nts=100, compvels=True):
+    as there are
+    - dimensions of in and output space
+    - extensions of the subdomains of control and observation
+    - weighting matrices (if None, then massmatrix)
+    - desired output
+    """
+
+    ystar1 = dolfin.Expression('1')
+    ystar2 = dolfin.Expression('1')
+
+    ystar = [ystar1, ystar2]
+
+    NU, NY = 10, 7
+    odcoo = dict(xmin=0.45,
+                 xmax=0.55,
+                 ymin=0.5,
+                 ymax=0.7)
+
+    cdcoo = dict(xmin=0.4,
+                 xmax=0.6,
+                 ymin=0.2,
+                 ymax=0.3)
+
+    return dict(NU=NU,
+                NY=NY,
+                cdcoo=cdcoo,
+                odcoo=odcoo,
+                R=None,
+                # regularization parameter
+                alphau=1e-4,
+                ystar=ystar,
+                V=None,
+                W=None)
+
+
+def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
+    return 'Nwit{0}Time{1}Nu{2}Mesh{3}NTs{4}Dt{5}'.format(
+        nwtn, time, timps['nu'], meshp,
+        timps['Nts'], timps['dt']
+    )
+
+
+def drivcav_fems(N, NU=None, NY=None):
+    """dictionary for the fem items of the (unit) driven cavity
+
+    """
+    mesh = dolfin.UnitSquareMesh(N, N)
+    V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
+    Q = dolfin.FunctionSpace(mesh, "CG", 1)
+    # pressure node that is set to zero
+
+    # Boundaries
+    def top(x, on_boundary):
+        return x[1] > 1.0 - dolfin.DOLFIN_EPS
+
+    def leftbotright(x, on_boundary):
+        return (x[0] > 1.0 - dolfin.DOLFIN_EPS
+                or x[1] < dolfin.DOLFIN_EPS
+                or x[0] < dolfin.DOLFIN_EPS)
+
+    # No-slip boundary condition for velocity
+    noslip = dolfin.Constant((0.0, 0.0))
+    bc0 = dolfin.DirichletBC(V, noslip, leftbotright)
+    # Boundary condition for velocity at the lid
+    lid = dolfin.Constant(("1", "0.0"))
+    bc1 = dolfin.DirichletBC(V, lid, top)
+    # Collect boundary conditions
+    diribcs = [bc0, bc1]
+    # rhs of momentum eqn
+    fv = dolfin.Constant((0.0, 0.0))
+    # rhs of the continuity eqn
+    fp = dolfin.Constant(0.0)
+
+    dfems = dict(mesh=mesh,
+                 V=V,
+                 Q=Q,
+                 diribcs=diribcs,
+                 fv=fv,
+                 fp=fp)
+
+    return dfems
+
+def optcon_nse(N=24, Nts=10):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
@@ -215,31 +299,48 @@ def optcon_nse(N=24, Nts=100, compvels=True):
 
         print 'norm of current Newton update: {}'.format(norm_nwtnupd)
 
-    raise Warning('TODO: debug')
 #
 # Prepare for control
 #
+
     # casting some parameters
-    NY = contp['NY']
+    NY, NU = contp['NY'], contp['NU']
 
-    # define the control and observation operators
-    Ba, Mu = cou.get_inp_opa(cdcoo=contp['cdcoo'], V=femp['V'],
-                             NU=contp['NU'])
-    Ba = Ba[invinds, :][:, :]
+    contsetupstr = 'NV{0}NU{1}NY{2}'.format(NV, NU, NY)
 
-    MyC, My = cou.get_mout_opa(odcoo=contp['odcoo'], V=femp['V'],
-                               NY=contp['NY'])
+    # get the control and observation operators
+    try:
+        b_mat = dou.load_spa(ddir + 'b_mat' + contsetupstr)
+        u_masmat = dou.load_spa(ddir + 'u_masmat' + contsetupstr)
+        print 'loaded `b_mat`'
+    except IOError:
+        print 'computing `b_mat`...'
+        b_mat, u_masmat = cou.get_inp_opa(cdcoo=contp['cdcoo'],
+                                          V=femp['V'], NU=contp['NU'])
+        dou.save_spa(b_mat, ddir + 'b_mat' + contsetupstr)
+        dou.save_spa(u_masmat, ddir + 'u_masmat' + contsetupstr)
+    try:
+        MyC = dou.load_spa(ddir + 'MyC' + contsetupstr)
+        My = dou.load_spa(ddir + 'My' + contsetupstr)
+        print 'loaded `c_mat`'
+    except IOError:
+        print 'computing `c_mat`...'
+        MyC, My = cou.get_mout_opa(odcoo=contp['odcoo'],
+                                   V=femp['V'], NY=contp['NY'])
 
+        dou.save_spa(MyC, ddir + 'MyC' + contsetupstr)
+        dou.save_spa(My, ddir + 'My' + contsetupstr)
+
+    # restrict the operators to the inner nodes
     MyC = MyC[:, invinds][:, :]
-    C = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'],
-                              Mt=stokesmatsc['MT'])
+    b_mat = b_mat[invinds, :][:, :]
 
-    # we never need vstar, do we?
-    # vstar = cou.get_vstar(C, contp['ystar'], contp['odcoo'], NY)
+    reg_c = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'],
+                                  Mt=stokesmatsc['MT'])
 
     # set the weighing matrices
     if contp['R'] is None:
-        contp['R'] = contp['alphau'] * Mu
+        contp['R'] = contp['alphau'] * u_masmat
     # TODO: by now we tacitly assume that V, W = MyC.T My^-1 MyC
     # if contp['V'] is None:
     #     contp['V'] = My
@@ -257,23 +358,22 @@ def optcon_nse(N=24, Nts=100, compvels=True):
     ystar = contp['ystar']
 
     # tB = BR^{-1/2}
-    tB = lau.apply_invsqrt_fromleft(contp['R'], Ba,
+    tB = lau.apply_invsqrt_fromleft(contp['R'], b_mat,
                                     output='sparse')
-    tCT = lau.apply_invsqrt_fromleft(My, MyC.T,
-                                     output='dense')
+    trct = lau.apply_invsqrt_fromleft(My, reg_c.T,
+                                      output='dense')
 
     t = tip['tE']
 
-    # set/compute the terminal values
-    Zc = lau.apply_massinv(stokesmatsc['M'], tCT)
-    wc = -lau.apply_massinv(stokesmatsc['MT'], MyC.T * ystar)
+    # set/compute the terminal values aka starting point
+    Zc = lau.apply_massinv(stokesmatsc['M'], trct)
+    wc = -lau.apply_massinv(stokesmatsc['MT'], reg_c.T * ystar)
 
     cdatstr = get_datastr(nwtn=newtk, time=DT, meshp=N, timps=tip)
 
     dou.save_npa(Zc, fstring=ddir + 'Z' + cdatstr)
 
-    for t in np.linspace(tip['tE'] - DT, tip['t0'],
-                         np.round((tip['tE'] - tip['t0']) / DT)):
+    for t in np.linspace(tip['tE'] - DT, tip['t0'], Nts):
         # get the previous time convection matrices
         pdatstr = get_datastr(nwtn=newtk, time=t,
                               meshp=N, timps=tip)
@@ -285,6 +385,7 @@ def optcon_nse(N=24, Nts=100, compvels=True):
             pdatstr = get_datastr(nwtn=newtk, time=None,
                                   meshp=N, timps=tip)
             prev_v = dou.load_npa(ddir + 'vel' + pdatstr)
+
         # get and condense the linearized convection
         # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
         N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
@@ -301,110 +402,6 @@ def optcon_nse(N=24, Nts=100, compvels=True):
     dou.save_npa(Zpn, fstring=ddir + 'Z' + cdatstr)
     Zc = Zpn
 
-
-def drivcav_fems(N, NU=None, NY=None):
-    """dictionary for the fem items of the (unit) driven cavity
-
-    """
-    mesh = dolfin.UnitSquareMesh(N, N)
-    V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
-    Q = dolfin.FunctionSpace(mesh, "CG", 1)
-    # pressure node that is set to zero
-
-    # Boundaries
-    def top(x, on_boundary):
-        return x[1] > 1.0 - dolfin.DOLFIN_EPS
-
-    def leftbotright(x, on_boundary):
-        return (x[0] > 1.0 - dolfin.DOLFIN_EPS
-                or x[1] < dolfin.DOLFIN_EPS
-                or x[0] < dolfin.DOLFIN_EPS)
-
-    # No-slip boundary condition for velocity
-    noslip = dolfin.Constant((0.0, 0.0))
-    bc0 = dolfin.DirichletBC(V, noslip, leftbotright)
-    # Boundary condition for velocity at the lid
-    lid = dolfin.Constant(("1", "0.0"))
-    bc1 = dolfin.DirichletBC(V, lid, top)
-    # Collect boundary conditions
-    diribcs = [bc0, bc1]
-    # rhs of momentum eqn
-    fv = dolfin.Constant((0.0, 0.0))
-    # rhs of the continuity eqn
-    fp = dolfin.Constant(0.0)
-
-    dfems = dict(mesh=mesh,
-                 V=V,
-                 Q=Q,
-                 diribcs=diribcs,
-                 fv=fv,
-                 fp=fp)
-
-    return dfems
-
-
-def cont_params():
-    """define the parameters of the control problem
-
-    as there are
-    - dimensions of in and output space
-    - extensions of the subdomains of control and observation
-    - weighting matrices (if None, then massmatrix)
-    - desired output
-    """
-
-    ystar1 = dolfin.Expression('1')
-    ystar2 = dolfin.Expression('1')
-
-    ystar = [ystar1, ystar2]
-
-    NU, NY = 10, 7
-    odcoo = dict(xmin=0.45,
-                 xmax=0.55,
-                 ymin=0.5,
-                 ymax=0.7)
-
-    cdcoo = dict(xmin=0.4,
-                 xmax=0.6,
-                 ymin=0.2,
-                 ymax=0.3)
-
-    return dict(NU=NU,
-                NY=NY,
-                cdcoo=cdcoo,
-                odcoo=odcoo,
-                R=None,
-                # regularization parameter
-                alphau=1e-4,
-                ystar=ystar,
-                V=None,
-                W=None)
-
-
-class NseResiduals(object):
-
-    def __init__(self):
-        self.ContiRes = []
-        self.VelEr = []
-        self.PEr = []
-
-
-# def def_vpfiles(name=None):
-#     if name is not None:
-#         vpf = {'vfile':File("results/%s_velocity.pvd" % name),
-#                 'pfile':File("results/%s_pressure.pvd" % name)}
-#     else:
-#         vpf = {'vfile':File("results/velocity.pvd"),
-#                 'pfile':File("results/pressure.pvd")}
-#
-#     return vpf
-
-def get_datastr(nwtn=None, time=None,
-                meshp=None, timps=None):
-    return 'Nwit{0}Time{1}Nu{2}Mesh{3}NTs{4}Dt{5}'.format(
-        nwtn, time, timps['nu'], meshp,
-        timps['Nts'], timps['dt']
-    )
 
 if __name__ == '__main__':
     optcon_nse()
