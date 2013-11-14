@@ -16,7 +16,9 @@ def get_inp_opa(cdom=None, NU=8, V=None):
     the findim array representation
     of the input operator """
 
-    v = dolfin.dolfin.TrialFunction(V)
+    v = dolfin.TestFunction(V)
+    v_one = dolfin.Expression(('1', '1'))
+    v_one = dolfin.interpolate(v_one, V)
 
     BX, BY = [], []
 
@@ -242,6 +244,7 @@ class L2abLinBas():
             sval = 1.0 - 1.0 / self.dist * (s - self.vertex)
         else:
             sval = 0
+        print s, sval
         return sval
 
     def massmat(self):
@@ -283,13 +286,14 @@ class Cast1Dto2D(dolfin.Expression):
 
     def eval(self, value, x):
         if self.cdom.inside(x, False):
-            if self.xcomp is None:
-                value[:] = self.u.evaluate(
-                    self.m * x[self.xcomp] + self.d)
-            else:
-                value[:] = 0
-                value[self.vcomp] = self.u.evaluate(
-                    self.m * x[self.xcomp] + self.d)
+            # if self.xcomp is None:
+            value[:] = self.u.evaluate(self.m * x[self.xcomp] + self.d)
+            # else:
+            #     value[:] = 0
+            #     value[self.vcomp] = self.u.evaluate(
+            #         self.m * x[self.xcomp] + self.d)
+        else:
+            value[:] = 0
 
     def value_shape(self):
         return (2,)
