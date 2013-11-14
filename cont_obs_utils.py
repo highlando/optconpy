@@ -10,11 +10,13 @@ from dolfin import dx, inner
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
 
-def get_inp_opa(cdom=None, NU=8, V=None):
+def get_inp_opa(cdcoo=None, NU=8, V=None):
     """dolfin.assemble the 'B' matrix
 
     the findim array representation
     of the input operator """
+
+    cdom = ContDomain(cdcoo)
 
     v = dolfin.TestFunction(V)
     v_one = dolfin.Expression(('1', '1'))
