@@ -5,7 +5,7 @@ import cont_obs_utils as cou
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
 
-def check_outop(NV=25, NY=8, odcoo=dict(xmin=0.45,
+def check_outop(NV=12, NY=8, odcoo=dict(xmin=0.45,
                                         xmax=0.55,
                                         ymin=0.6,
                                         ymax=0.8)):
@@ -18,11 +18,12 @@ def check_outop(NV=25, NY=8, odcoo=dict(xmin=0.45,
     V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
     dolfin.plot(mesh)
 
-    exv = dolfin.Expression(('1', '1'))
+    exv = dolfin.Expression(('1', '2'))
     testv = dolfin.interpolate(exv, V)
 
     # check the C
-    print 'assembling the output operator...'
+    print ('assembling the output operator... ' +
+           '(NV = {0}, NY = {1})').format(NV, NY)
     MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY, NV=NV)
     print 'done!'
     testvi = testv.vector().array()

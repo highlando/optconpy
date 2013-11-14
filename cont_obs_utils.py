@@ -244,7 +244,6 @@ class L2abLinBas():
             sval = 1.0 - 1.0 / self.dist * (s - self.vertex)
         else:
             sval = 0
-        print s, sval
         return sval
 
     def massmat(self):
@@ -286,12 +285,12 @@ class Cast1Dto2D(dolfin.Expression):
 
     def eval(self, value, x):
         if self.cdom.inside(x, False):
-            # if self.xcomp is None:
-            value[:] = self.u.evaluate(self.m * x[self.xcomp] + self.d)
-            # else:
-            #     value[:] = 0
-            #     value[self.vcomp] = self.u.evaluate(
-            #         self.m * x[self.xcomp] + self.d)
+            if self.xcomp is None:
+                value[:] = self.u.evaluate(self.m * x[self.xcomp] + self.d)
+            else:
+                value[:] = 0
+                value[self.vcomp] = self.u.evaluate(
+                    self.m * x[self.xcomp] + self.d)
         else:
             value[:] = 0
 
