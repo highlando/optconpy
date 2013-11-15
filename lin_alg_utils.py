@@ -81,7 +81,10 @@ def get_Sinv_smw(amat_lu, umat=None, vmat=None):
         except AttributeError:
             aiu[:, ccol] = spsla.spsolve(amat_lu, umat[:, ccol])
 
-    return np.linalg.inv(np.eye(umat.shape[1]) - np.dot(vmat, aiu))
+    if sps.isspmatrix(vmat):
+        return np.linalg.inv(np.eye(umat.shape[1]) - vmat * aiu)
+    else:
+        return np.linalg.inv(np.eye(umat.shape[1]) - np.dot(vmat, aiu))
 
 
 def app_luinv_to_spmat(Alu, Z):
@@ -114,16 +117,17 @@ def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
         crhs = rhsa[:, rhscol]
         # the corrected rhs: (I + U*Sinv*V*Ainv)*rhs
         try:
-            crhs = crhs + np.dot(umat, np.dot(Sinv,
-                                              np.dot(vmat, Alu.solve(crhs))))
+            # if Alu comes with a solve routine, e.g. LU-factored - fine
+            aicrhs = Alu.solve(crhs)
         except AttributeError:
-            crhs = crhs + np.dot(umat,
-                                 np.dot(Sinv,
-                                        np.dot(vmat,
-                                               spsla.spsolve(Alu, crhs))))
+            aicrhs = spsla.spsolve(Alu, crhs)
+
+        if sps.isspmatrix(vmat):
+            crhs = crhs + np.dot(umat, np.dot(Sinv, vmat * aicrhs))
+        else:
+            crhs = crhs + np.dot(umat, np.dot(Sinv, np.dot(vmat, aicrhs)))
 
         try:
-            # if Alu comes with a solve routine, e.g. LU-factored - fine
             auvirhs[:, rhscol] = Alu.solve(crhs)
         except AttributeError:
             auvirhs[:, rhscol] = spsla.spsolve(Alu, crhs)

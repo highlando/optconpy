@@ -43,8 +43,10 @@ class TestProjLyap(unittest.TestCase):
 
         # smw formula Asmw = A - UV
         self.U = 1e-4 * np.random.randn(self.NV, self.NY)
+        self.Usp = 1e-4 * sps.rand(self.NV, self.NY)
         self.V = np.random.randn(self.NY, self.NV)
         self.uvs = sps.csr_matrix(np.dot(self.U, self.V))
+        self.uvssp = sps.csr_matrix(self.Usp * self.V)
 
         # initial value for newton adi
         self.Z0 = np.random.randn(self.NV, self.NY)
@@ -81,6 +83,33 @@ class TestProjLyap(unittest.TestCase):
 
         MtXM = self.M.T * np.dot(Z, Z.T) * self.M
         FtXM = (self.F.T - self.uvs.T) * np.dot(Z, Z.T) * self.M
+
+        PtW = np.dot(self.P.T, self.W)
+
+        ProjRes = np.dot(self.P.T, np.dot(FtXM, self.P)) + \
+            np.dot(np.dot(self.P.T, FtXM.T), self.P) + \
+            np.dot(PtW, PtW.T)
+
+# TEST: result is 'projected'
+        self.assertTrue(np.allclose(MtXM,
+                                    np.dot(self.P.T, np.dot(MtXM, self.P))))
+
+# TEST: check projected residual
+        self.assertTrue(np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
+                        < 1e-8)
+
+    def test_proj_lyap_sol_sparseu(self):
+        """check the solution of the projected lyap eqn
+
+        via ADI iteration"""
+
+        Z = pru.solve_proj_lyap_stein(A=self.F, M=self.M,
+                                      umat=self.Usp, vmat=self.V,
+                                      J=self.J, W=self.W,
+                                      adi_dict=self.nwtn_adi_dict)['zfac']
+
+        MtXM = self.M.T * np.dot(Z, Z.T) * self.M
+        FtXM = (self.F.T - self.uvssp.T) * np.dot(Z, Z.T) * self.M
 
         PtW = np.dot(self.P.T, self.W)
 

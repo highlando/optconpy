@@ -77,8 +77,12 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         # adding zeros to the coefficients to fit the
         # saddle point systems
         vmate = np.hstack([vmat, np.zeros((vmat.shape[0], J.shape[0]))])
-        raise Warning('TODO: debug')
-        umate = np.vstack([umat, np.zeros((J.shape[0], umat.shape[1]))])
+        if sps.isspmatrix(umat):
+            umate = sps.vstack([umat, sps.csr_matrix((J.shape[0],
+                                                     umat.shape[1]))])
+        else:
+            umate = np.vstack([umat, np.zeros((J.shape[0], umat.shape[1]))])
+
         We = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
 
         Stinv = lau.get_Sinv_smw(atmtlu, umat=vmate.T, vmat=umate.T)
@@ -93,8 +97,11 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
 
         while adi_step < adi_dict['adi_max_steps'] and \
                 rel_newZ_norm > adi_dict['adi_newZ_reltol']:
+            if sps.isspmatrix(umat):
+                Z = (At - ms[0] * Mt) * Z - np.dot(vmat.T, umat.T * Z)
+            else:
+                Z = (At - ms[0] * Mt) * Z - np.dot(vmat.T, np.dot(umat.T, Z))
 
-            Z = (At - ms[0] * Mt) * Z - np.dot(vmat.T, np.dot(umat.T, Z))
             Ze = np.vstack([Z, np.zeros((J.shape[0], W.shape[1]))])
             Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T,
                                 rhsa=Ze, Sinv=Stinv)[:NZ, :]
