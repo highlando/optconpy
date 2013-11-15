@@ -92,8 +92,8 @@ class TestInoutOpas(unittest.TestCase):
         # exv = dolfin.Expression(('x[1]', 'x[1]'))
         import sympy as smp
         x, y = smp.symbols('x[0], x[1]')
-        u_x = x*x*(1-x)*(1-x)*2*y*(1-y)*(2*y-1)
-        u_y = y*y*(1-y)*(1-y)*2*x*(1-x)*(1-2*x)
+        u_x = x * x * (1 - x) * (1 - x) * 2 * y * (1 - y) * (2 * y - 1)
+        u_y = y * y * (1 - y) * (1 - y) * 2 * x * (1 - x) * (1 - 2 * x)
         from sympy.printing import ccode
         exv = dolfin.Expression((ccode(u_x), ccode(u_y)))
         testv = dolfin.interpolate(exv, V)

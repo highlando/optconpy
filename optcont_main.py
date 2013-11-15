@@ -9,7 +9,7 @@ import dolfin_to_nparrays as dtn
 import lin_alg_utils as lau
 import data_output_utils as dou
 import cont_obs_utils as cou
-# import proj_ric_utils as pru
+import proj_ric_utils as pru
 
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
@@ -48,7 +48,8 @@ def set_vpfiles(tip, fstring='not specified'):
     tip['pfile'] = dolfin.File(fstring+'_p.pvd')
     tip['vfile'] = dolfin.File(fstring+'_vel.pvd')
 
-def cont_params():
+
+class ContParams():
     """define the parameters of the control problem
 
     as there are
@@ -57,33 +58,49 @@ def cont_params():
     - weighting matrices (if None, then massmatrix)
     - desired output
     """
+    def __init__(self):
 
-    ystar1 = dolfin.Expression('1')
-    ystar2 = dolfin.Expression('1')
+        ystar1 = dolfin.Expression('1', t=0)
+        ystar2 = dolfin.Expression('1', t=0)
 
-    ystar = [ystar1, ystar2]
+        self.ystar = [ystar1, ystar2]
+        self.NU, self.NY = 10, 7
 
-    NU, NY = 10, 7
-    odcoo = dict(xmin=0.45,
-                 xmax=0.55,
-                 ymin=0.5,
-                 ymax=0.7)
+        self.odcoo = dict(xmin=0.45,
+                          xmax=0.55,
+                          ymin=0.5,
+                          ymax=0.7)
+        self.cdcoo = dict(xmin=0.4,
+                          xmax=0.6,
+                          ymin=0.2,
+                          ymax=0.3)
 
-    cdcoo = dict(xmin=0.4,
-                 xmax=0.6,
-                 ymin=0.2,
-                 ymax=0.3)
+        self.R = None,
+        # regularization parameter
+        self.alphau = 1e-4
+        self.V = None
+        self.W = None
 
-    return dict(NU=NU,
-                NY=NY,
-                cdcoo=cdcoo,
-                odcoo=odcoo,
-                R=None,
-                # regularization parameter
-                alphau=1e-4,
-                ystar=ystar,
-                V=None,
-                W=None)
+    def ystarvec(self, t=None):
+        """return the current value of ystar
+
+        as np array [ystar1
+                     ystar2] """
+        if t is not None:
+            try:
+                self.ystar1.t, self.ystar2.t = t, t
+                raise Warning('You need provide a time for ystar')
+            except AttributeError:
+                pass  # everything's cool - ystar does not dep on t
+        else:
+            try:
+                self.ystar1.t, self.ystar2.t = t, t
+            except AttributeError:
+                raise UserWarning('no time dependency of ystar' +
+                                  'the provided t is ignored')
+
+        return np.vstack([self.ystar1.vector(),
+                          self.ystar2.vector()])
 
 
 def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
@@ -133,11 +150,12 @@ def drivcav_fems(N, NU=None, NY=None):
 
     return dfems
 
+
 def optcon_nse(N=24, Nts=10):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
-    contp = cont_params()
+    contp = ContParams()
 
     # output
     ddir = 'data/'
@@ -320,23 +338,23 @@ def optcon_nse(N=24, Nts=10):
         dou.save_spa(b_mat, ddir + 'b_mat' + contsetupstr)
         dou.save_spa(u_masmat, ddir + 'u_masmat' + contsetupstr)
     try:
-        MyC = dou.load_spa(ddir + 'MyC' + contsetupstr)
-        My = dou.load_spa(ddir + 'My' + contsetupstr)
+        mc_mat = dou.load_spa(ddir + 'mc_mat' + contsetupstr)
+        y_masmat = dou.load_spa(ddir + 'y_masmat' + contsetupstr)
         print 'loaded `c_mat`'
     except IOError:
         print 'computing `c_mat`...'
-        MyC, My = cou.get_mout_opa(odcoo=contp['odcoo'],
-                                   V=femp['V'], NY=contp['NY'])
+        MyC, y_masmat = cou.get_mout_opa(odcoo=contp['odcoo'],
+                                         V=femp['V'], NY=contp['NY'])
 
-        dou.save_spa(MyC, ddir + 'MyC' + contsetupstr)
-        dou.save_spa(My, ddir + 'My' + contsetupstr)
+        dou.save_spa(mc_mat, ddir + 'mc_mat' + contsetupstr)
+        dou.save_spa(y_masmat, ddir + 'y_masmat' + contsetupstr)
 
     # restrict the operators to the inner nodes
-    MyC = MyC[:, invinds][:, :]
+    mc_mat = mc_mat[:, invinds][:, :]
     b_mat = b_mat[invinds, :][:, :]
 
-    reg_c = cou.get_regularized_c(Ct=MyC.T, J=stokesmatsc['J'],
-                                  Mt=stokesmatsc['MT'])
+    mct_mat_reg = cou.get_regularized_c(Ct=mc_mat.T, J=stokesmatsc['J'],
+                                        Mt=stokesmatsc['MT'])
 
     # set the weighing matrices
     if contp['R'] is None:
@@ -357,21 +375,21 @@ def optcon_nse(N=24, Nts=10):
     # cast some values from the dics
     ystar = contp['ystar']
 
-    # tB = BR^{-1/2}
-    tB = lau.apply_invsqrt_fromleft(contp['R'], b_mat,
-                                    output='sparse')
-    trct = lau.apply_invsqrt_fromleft(My, reg_c.T,
-                                      output='dense')
+    # tilde B = BR^{-1/2}
+    tb_mat = lau.apply_invsqrt_fromleft(contp['R'], b_mat,
+                                        output='sparse')
 
-    t = tip['tE']
+    trct_mat = lau.apply_invsqrt_fromleft(y_masmat, mct_mat_reg,
+                                          output='dense')
 
     # set/compute the terminal values aka starting point
-    Zc = lau.apply_massinv(stokesmatsc['M'], trct)
-    wc = -lau.apply_massinv(stokesmatsc['MT'], reg_c.T * ystar)
+    Zc = lau.apply_massinv(stokesmatsc['M'], trct_mat)
+    wc = -lau.apply_massinv(stokesmatsc['MT'], np.dot(mct_mat_reg, ystar))
 
-    cdatstr = get_datastr(nwtn=newtk, time=DT, meshp=N, timps=tip)
+    cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, timps=tip)
 
     dou.save_npa(Zc, fstring=ddir + 'Z' + cdatstr)
+    dou.save_npa(wc, fstring=ddir + 'w' + cdatstr)
 
     for t in np.linspace(tip['tE'] - DT, tip['t0'], Nts):
         # get the previous time convection matrices
@@ -396,11 +414,21 @@ def optcon_nse(N=24, Nts=10):
 
         lyapAT = 0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] + Nc.T)
 
-        # starting value for Newton-ADI iteration
-        Zpn = np.copy(Zc)
+        # rhs for nwtn adi
+        w_mat = np.vstack([stokesmatsc['MT'] * Zc, np.sqrt(DT) * trct_mat])
 
-    dou.save_npa(Zpn, fstring=ddir + 'Z' + cdatstr)
-    Zc = Zpn
+        Zp = pru.proj_alg_ric_newtonadi(mmat=stokesmatsc['MT'],
+                                        fmat=lyapAT,
+                                        transposed=True,
+                                        jmat=stokesmatsc['J'],
+                                        bmat=np.sqrt(DT)*tb_mat,
+                                        wmat=w_mat,
+                                        z0=Zc,
+                                        nwtn_adi_dict=tip['nwtn_adi_dict']
+                                        )['zfac']
+
+    dou.save_npa(Zp, fstring=ddir + 'Z' + cdatstr)
+    Zc = Zp
 
 
 if __name__ == '__main__':

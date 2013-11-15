@@ -1,5 +1,5 @@
 import numpy as np
-import scipy
+import scipy.io
 from dolfin_to_nparrays import expand_vp_dolfunc
 
 
