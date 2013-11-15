@@ -60,10 +60,10 @@ class ContParams():
     """
     def __init__(self):
 
-        ystar1 = dolfin.Expression('1', t=0)
-        ystar2 = dolfin.Expression('1', t=0)
+        self.ystarx = dolfin.Expression('t*1', t=0)
+        self.ystary = dolfin.Expression('1', t=0)
+        # if t, then add t=0 to both comps !!1!!11
 
-        self.ystar = [ystar1, ystar2]
         self.NU, self.NY = 10, 7
 
         self.odcoo = dict(xmin=0.45,
@@ -75,36 +75,44 @@ class ContParams():
                           ymin=0.2,
                           ymax=0.3)
 
-        self.R = None,
+        self.R = None
         # regularization parameter
         self.alphau = 1e-4
         self.V = None
         self.W = None
+
+        self.ymesh = dolfin.IntervalMesh(self.NY-1, self.odcoo['ymin'],
+                                         self.odcoo['ymax'])
+        self.Y = dolfin.FunctionSpace(self.ymesh, 'CG', 1)
+        # TODO: pass Y to cou.get_output_operator
 
     def ystarvec(self, t=None):
         """return the current value of ystar
 
         as np array [ystar1
                      ystar2] """
-        if t is not None:
+        if t is None:
             try:
-                self.ystar1.t, self.ystar2.t = t, t
-                raise Warning('You need provide a time for ystar')
+                self.ystarx.t, self.ystary.t = t, t
             except AttributeError:
                 pass  # everything's cool - ystar does not dep on t
+            else:
+                raise Warning('You need provide a time for ystar')
         else:
             try:
-                self.ystar1.t, self.ystar2.t = t, t
+                self.ystarx.t, self.ystary.t = t, t
             except AttributeError:
                 raise UserWarning('no time dependency of ystar' +
                                   'the provided t is ignored')
 
-        return np.vstack([self.ystar1.vector(),
-                          self.ystar2.vector()])
+        ysx = dolfin.interpolate(self.ystarx, self.Y)
+        ysy = dolfin.interpolate(self.ystary, self.Y)
+        return np.vstack([np.atleast_2d(ysx.vector().array()).T,
+                          np.atleast_2d(ysy.vector().array()).T])
 
 
 def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
-    return 'Nwit{0}Time{1}Nu{2}Mesh{3}NTs{4}Dt{5}'.format(
+    return 'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}'.format(
         nwtn, time, timps['nu'], meshp,
         timps['Nts'], timps['dt']
     )
@@ -230,8 +238,9 @@ def optcon_nse(N=24, Nts=10):
     # Stokes solution as initial value
     inivalvec = vp_stokes[:NV, ]
 
-    norm_nwtnupd, newtk = 1, 1
-    while newtk <= tip['nnewtsteps']:
+    norm_nwtnupd, newtk = 1, 0
+    while newtk < tip['nnewtsteps']:
+        newtk += 1
         # check for previously computed velocities
         try:
             cdatstr = get_datastr(nwtn=newtk, time=tip['tE'],
@@ -242,15 +251,15 @@ def optcon_nse(N=24, Nts=10):
 
             tip['norm_nwtnupd_list'].append(norm_nwtnupd)
             print 'loaded files of Newton iteration {0}'.format(newtk)
-            print 'norm of current Newton update: {0}'.format(norm_nwtnupd[0])
-
-            newtk += 1
+            print 'norm of current Nwtn update: {0}'.format(norm_nwtnupd[0])
 
         except IOError:
+            newtk -= 1
             break
 
-    while (newtk <= tip['nnewtsteps'] and
+    while (newtk < tip['nnewtsteps'] and
            norm_nwtnupd > tip['vel_nwtn_tol']):
+        newtk += 1
 
         set_vpfiles(tip, fstring=('results/' +
                                   'NewtonIt{0}').format(newtk))
@@ -311,7 +320,6 @@ def optcon_nse(N=24, Nts=10):
                                         stokesmatsc['M'] *
                                         (v_old - prev_v))
 
-        newtk += 1
         dou.save_npa(norm_nwtnupd, ddir + 'norm_nwtnupd' + cdatstr)
         tip['norm_nwtnupd_list'].append(norm_nwtnupd[0])
 
@@ -322,7 +330,7 @@ def optcon_nse(N=24, Nts=10):
 #
 
     # casting some parameters
-    NY, NU = contp['NY'], contp['NU']
+    NY, NU = contp.NY, contp.NU
 
     contsetupstr = 'NV{0}NU{1}NY{2}'.format(NV, NU, NY)
 
@@ -333,8 +341,8 @@ def optcon_nse(N=24, Nts=10):
         print 'loaded `b_mat`'
     except IOError:
         print 'computing `b_mat`...'
-        b_mat, u_masmat = cou.get_inp_opa(cdcoo=contp['cdcoo'],
-                                          V=femp['V'], NU=contp['NU'])
+        b_mat, u_masmat = cou.get_inp_opa(cdcoo=contp.cdcoo,
+                                          V=femp['V'], NU=contp.NU)
         dou.save_spa(b_mat, ddir + 'b_mat' + contsetupstr)
         dou.save_spa(u_masmat, ddir + 'u_masmat' + contsetupstr)
     try:
@@ -343,8 +351,8 @@ def optcon_nse(N=24, Nts=10):
         print 'loaded `c_mat`'
     except IOError:
         print 'computing `c_mat`...'
-        MyC, y_masmat = cou.get_mout_opa(odcoo=contp['odcoo'],
-                                         V=femp['V'], NY=contp['NY'])
+        mc_mat, y_masmat = cou.get_mout_opa(odcoo=contp.odcoo,
+                                            V=femp['V'], NY=contp.NY)
 
         dou.save_spa(mc_mat, ddir + 'mc_mat' + contsetupstr)
         dou.save_spa(y_masmat, ddir + 'y_masmat' + contsetupstr)
@@ -357,13 +365,13 @@ def optcon_nse(N=24, Nts=10):
                                         Mt=stokesmatsc['MT'])
 
     # set the weighing matrices
-    if contp['R'] is None:
-        contp['R'] = contp['alphau'] * u_masmat
+    if contp.R is None:
+        contp.R = contp.alphau * u_masmat
     # TODO: by now we tacitly assume that V, W = MyC.T My^-1 MyC
-    # if contp['V'] is None:
-    #     contp['V'] = My
-    # if contp['W'] is None:
-    #     contp['W'] = My
+    # if contp.V is None:
+    #     contp.V = My
+    # if contp.W is None:
+    #     contp.W = My
 
 #
 # solve the differential-alg. Riccati eqn for the feedback gain X
@@ -372,11 +380,8 @@ def optcon_nse(N=24, Nts=10):
 # at the same time we solve for the affine-linear correction w
 #
 
-    # cast some values from the dics
-    ystar = contp['ystar']
-
     # tilde B = BR^{-1/2}
-    tb_mat = lau.apply_invsqrt_fromleft(contp['R'], b_mat,
+    tb_mat = lau.apply_invsqrt_fromleft(contp.R, b_mat,
                                         output='sparse')
 
     trct_mat = lau.apply_invsqrt_fromleft(y_masmat, mct_mat_reg,
@@ -384,7 +389,8 @@ def optcon_nse(N=24, Nts=10):
 
     # set/compute the terminal values aka starting point
     Zc = lau.apply_massinv(stokesmatsc['M'], trct_mat)
-    wc = -lau.apply_massinv(stokesmatsc['MT'], np.dot(mct_mat_reg, ystar))
+    wc = -lau.apply_massinv(stokesmatsc['MT'],
+                            np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
 
     cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, timps=tip)
 
@@ -415,7 +421,7 @@ def optcon_nse(N=24, Nts=10):
         lyapAT = 0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] + Nc.T)
 
         # rhs for nwtn adi
-        w_mat = np.vstack([stokesmatsc['MT'] * Zc, np.sqrt(DT) * trct_mat])
+        w_mat = np.hstack([stokesmatsc['MT'] * Zc, np.sqrt(DT) * trct_mat])
 
         Zp = pru.proj_alg_ric_newtonadi(mmat=stokesmatsc['MT'],
                                         fmat=lyapAT,

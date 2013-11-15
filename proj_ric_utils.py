@@ -77,6 +77,7 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         # adding zeros to the coefficients to fit the
         # saddle point systems
         vmate = np.hstack([vmat, np.zeros((vmat.shape[0], J.shape[0]))])
+        raise Warning('TODO: debug')
         umate = np.vstack([umat, np.zeros((J.shape[0], umat.shape[1]))])
         We = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
 
@@ -200,7 +201,11 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
     while nwtn_stp < nwtn_adi_dict['nwtn_max_steps'] and \
             upd_fnorm > nwtn_adi_dict['nwtn_upd_abstol']:
 
-        mtxb = mt * np.dot(znc, np.dot(znc.T, bmat))
+        try:
+            mtxb = mt * np.dot(znc, np.dot(znc.T, bmat))
+        except ValueError:  # if bmat is sparse
+            mtxb = mt * np.dot(znc, znc.T * bmat)
+
         rhsadi = np.hstack([mtxb, wmat])
 
         # to avoid a dense matrix we use the smw formula
