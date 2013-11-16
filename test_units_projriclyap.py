@@ -16,7 +16,7 @@ class TestProjLyap(unittest.TestCase):
         self.NV = 100
         self.NP = 20
         self.NY = 5
-        self.verbose = False
+        self.verbose = True
 
         self.nwtn_adi_dict = dict(adi_max_steps=120,
                                   adi_newZ_reltol=1e-8,
@@ -31,7 +31,7 @@ class TestProjLyap(unittest.TestCase):
         self.M = sps.eye(self.NV) + \
             sps.rand(self.NV, self.NV) * sps.rand(self.NV, self.NV)
         try:
-            self.Mlu = spsla.splu(self.M)
+            self.Mlu = spsla.splu(self.M.tocsc())
         except RuntimeError:
             print 'M is not full rank'
 
@@ -56,13 +56,13 @@ class TestProjLyap(unittest.TestCase):
             try:
                 self.J = sps.rand(self.NP, self.NV,
                                   density=0.03, format='csr')
-                spsla.splu(self.J * self.J.T)
+                spsla.splu((self.J * self.J.T).tocsc())
                 break
             except RuntimeError:
                 if self.verbose:
                     print 'J not full row-rank.. I make another try'
         try:
-            spsla.splu(self.J * self.J.T)
+            spsla.splu((self.J * self.J.T).tocsc())
         except RuntimeError:
             raise Warning('Fail: J is not full rank')
 

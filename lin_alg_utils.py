@@ -45,7 +45,7 @@ def apply_massinv(M, rhsa, output=None):
         return spsla.spsolve(M, rhsa)
 
     else:
-        mlu = spsla.splu(M)
+        mlu = spsla.splu(M.tocsc())
         try:
             mirhs = np.copy(rhsa.todense())
         except AttributeError:

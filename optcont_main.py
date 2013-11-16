@@ -16,7 +16,7 @@ dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 def time_int_params(Nts):
     t0 = 0.0
-    tE = 1.0
+    tE = 0.1
     dt = (tE - t0) / Nts
     tip = dict(t0=t0,
                tE=tE,
@@ -26,15 +26,15 @@ def time_int_params(Nts):
                pfile=None,
                Residuals=[],
                ParaviewOutput=True,
-               nu=1e-3,
+               nu=1e-2,
                nnewtsteps=3,  # n nwtn stps for vel comp
                vel_nwtn_tol=1e-14,
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
-                   adi_max_steps=120,
+                   adi_max_steps=10,
                    adi_newZ_reltol=1e-8,
-                   nwtn_max_steps=24,
+                   nwtn_max_steps=5,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=4e-8,
                    verbose=True
@@ -64,7 +64,7 @@ class ContParams():
         self.ystary = dolfin.Expression('1', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
-        self.NU, self.NY = 10, 7
+        self.NU, self.NY = 5, 3
 
         self.odcoo = dict(xmin=0.45,
                           xmax=0.55,
@@ -159,7 +159,7 @@ def drivcav_fems(N, NU=None, NY=None):
     return dfems
 
 
-def optcon_nse(N=24, Nts=10):
+def optcon_nse(N=10, Nts=10):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
@@ -250,7 +250,7 @@ def optcon_nse(N=24, Nts=10):
             prev_v = dou.load_npa(ddir + 'vel' + cdatstr)
 
             tip['norm_nwtnupd_list'].append(norm_nwtnupd)
-            print 'loaded files of Newton iteration {0}'.format(newtk)
+            print 'found vel files of Newton iteration {0}'.format(newtk)
             print 'norm of current Nwtn update: {0}'.format(norm_nwtnupd[0])
 
         except IOError:
@@ -398,6 +398,7 @@ def optcon_nse(N=24, Nts=10):
     dou.save_npa(wc, fstring=ddir + 'w' + cdatstr)
 
     for t in np.linspace(tip['tE'] - DT, tip['t0'], Nts):
+    # for t in np.linspace(tip['tE'] - DT, tip['tE'] - DT, 1):
         # get the previous time convection matrices
         pdatstr = get_datastr(nwtn=newtk, time=t,
                               meshp=N, timps=tip)
@@ -418,13 +419,13 @@ def optcon_nse(N=24, Nts=10):
         Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1 + N2,
                                                    femp['diribcs'])
 
-        lyapAT = 0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] + Nc.T)
-
+        # coeffmat for nwtn adi
+        ft_mat = -(0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] + Nc.T))
         # rhs for nwtn adi
         w_mat = np.hstack([stokesmatsc['MT'] * Zc, np.sqrt(DT) * trct_mat])
 
         Zp = pru.proj_alg_ric_newtonadi(mmat=stokesmatsc['MT'],
-                                        fmat=lyapAT,
+                                        fmat=ft_mat,
                                         transposed=True,
                                         jmat=stokesmatsc['J'],
                                         bmat=np.sqrt(DT)*tb_mat,
@@ -433,9 +434,9 @@ def optcon_nse(N=24, Nts=10):
                                         nwtn_adi_dict=tip['nwtn_adi_dict']
                                         )['zfac']
 
-    dou.save_npa(Zp, fstring=ddir + 'Z' + cdatstr)
-    Zc = Zp
+        dou.save_npa(Zp, fstring=ddir + 'Z' + cdatstr)
+        Zc = Zp
 
 
 if __name__ == '__main__':
-    optcon_nse()
+    optcon_nse(N=10, Nts=100)
