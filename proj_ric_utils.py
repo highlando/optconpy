@@ -226,8 +226,7 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                                     adi_dict=nwtn_adi_dict)['zfac']
 
         upd_fnorm, fnznn, fnznc = \
-            lau.comp_sqrdfrobnorm_factored_difference(znn, znc,
-                                                      ret_sing_norms=True)
+            lau.comp_sqfnrm_factrd_diff(znn, znc, ret_sing_norms=True)
 
         nwtn_upd_fnorms.append(upd_fnorm)
 
@@ -244,3 +243,18 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
 
     return dict(zfac=znn,
                 nwtn_upd_fnorms=nwtn_upd_fnorms)
+
+
+def compress_Z(Z, k=None, tol=None):
+    """routine that compresses the columns Z by means of a truncated SVD
+
+    such that it ZZ.T is still well approximated"""
+
+    nny = Z.shape[1]
+    U, s, V = np.linalg.svd(Z, full_matrices=False)
+
+    S = sps.dia_matrix((s, 0), (nny, nny)).tocsr()
+
+    svred = S[:k, :][:, :k] * V[:k, :k]
+
+    return np.dot(U[:, :k], svred)

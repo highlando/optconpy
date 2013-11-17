@@ -86,15 +86,14 @@ class TestLinalgUtils(unittest.TestCase):
         Z = self.Z
 
         # test the branch that returns only the difference
-        my_frob_zmu = lau.comp_sqrdfrobnorm_factored_difference(U, Z)
+        my_frob_zmu = lau.comp_sqfnrm_factrd_diff(U, Z)
         frob_zmu = np.linalg.norm(np.dot(U, U.T) - np.dot(Z, Z.T), 'fro')
 
         self.assertTrue(np.allclose(frob_zmu * frob_zmu, my_frob_zmu))
 
         # test the branch that returns difference, norm z1, norm z2
         my_frob_zmu, norm_u, norm_z =  \
-            lau.comp_sqrdfrobnorm_factored_difference(U, Z,
-                                                      ret_sing_norms=True)
+            lau.comp_sqfnrm_factrd_diff(U, Z, ret_sing_norms=True)
 
         frob_zmu = np.linalg.norm(np.dot(U, U.T) - np.dot(Z, Z.T), 'fro')
         frob_u = np.linalg.norm(np.dot(U, U.T))

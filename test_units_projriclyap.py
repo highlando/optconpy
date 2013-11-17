@@ -13,12 +13,14 @@ import proj_ric_utils as pru
 class TestProjLyap(unittest.TestCase):
 
     def setUp(self):
-        self.NV = 100
-        self.NP = 20
+        self.NV = 200
+        self.NP = 40
         self.NY = 5
-        self.verbose = True
+        self.NU = self.NY+3
+        self.verbose = False
+        self.compn = 15  # factor for comp Z ~~> compn*W.shape[1]
 
-        self.nwtn_adi_dict = dict(adi_max_steps=120,
+        self.nwtn_adi_dict = dict(adi_max_steps=180,
                                   adi_newZ_reltol=1e-8,
                                   nwtn_max_steps=24,
                                   nwtn_upd_reltol=4e-8,
@@ -36,7 +38,7 @@ class TestProjLyap(unittest.TestCase):
             print 'M is not full rank'
 
         # bmatrix that appears in the nonliner ric term X*B*B.T*X
-        self.bmat = np.random.randn(self.NV, self.NY + 3)
+        self.bmat = np.random.randn(self.NV, self.NU)
 
         # right-handside: C= -W*W.T
         self.W = np.random.randn(self.NV, self.NY)
@@ -187,6 +189,32 @@ class TestProjLyap(unittest.TestCase):
         self.assertTrue(np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
                         < 1e-7)
 
+    def test_compress_algric_Z(self):
+        Z = pru.proj_alg_ric_newtonadi(mmat=self.M, fmat=self.F,
+                                       jmat=self.J, bmat=self.bmat,
+                                       wmat=self.W, z0=self.bmat,
+                                       nwtn_adi_dict=
+                                       self.nwtn_adi_dict)['zfac']
+
+        print '\ncompressing Z from {0} to {1} columns:'.\
+            format(Z.shape[1], self.compn*self.W.shape[1])
+
+        Zred = pru.compress_Z(Z, k=self.compn*self.W.shape[1])
+
+        difn, zzn, zzrn = \
+            lau.comp_sqfnrm_factrd_diff(Z, Zred, ret_sing_norms=True)
+
+        print '\n || ZZ - ZZred||_F || / ||ZZ|| = {0}\n'.\
+            format(np.sqrt(difn/zzn))
+
+        vec = np.random.randn(Z.shape[0], 1)
+
+        print '||(ZZ_red - ZZ )*testvec|| / ||testvec|| = {0}'.\
+            format(np.linalg.norm(np.dot(Z, np.dot(Z.T, vec)) -
+                   np.dot(Zred, np.dot(Zred.T, vec))) /
+                   np.linalg.norm(vec))
+
+        self.assertTrue(True)
 
 suite = unittest.TestLoader().loadTestsFromTestCase(TestProjLyap)
 unittest.TextTestRunner(verbosity=2).run(suite)

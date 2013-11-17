@@ -158,8 +158,7 @@ def app_schurc_inv(M, J, veca):
     return auveca
 
 
-def comp_sqrdfrobnorm_factored_difference(zone, ztwo,
-                                          ret_sing_norms=False):
+def comp_sqfnrm_factrd_diff(zone, ztwo, ret_sing_norms=False):
     """compute the squared Frobenius norm of z1*z1.T - z2*z2.T
 
     using the linearity traces and that tr.(z1.dot(z2)) = tr(z2.dot(z1))
