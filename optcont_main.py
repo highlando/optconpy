@@ -32,13 +32,16 @@ def time_int_params(Nts):
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
-                   adi_max_steps=10,
-                   adi_newZ_reltol=1e-8,
+                   adi_max_steps=150,
+                   adi_newZ_reltol=1e-6,
                    nwtn_max_steps=5,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=4e-8,
                    verbose=True
-               )
+               ),
+               compress_z=True,  # whether or not to compress Z
+               comprzfac=35,  # compression of the columns of Z to c*NY
+               save_full_z=True,  # whether or not to save the uncompressed Z
                )
 
     return tip
@@ -398,6 +401,7 @@ def optcon_nse(N=10, Nts=10):
     dou.save_npa(wc, fstring=ddir + 'w' + cdatstr)
 
     for t in np.linspace(tip['tE'] - DT, tip['t0'], Nts):
+        print 'Time is {0}'.format(t)
     # for t in np.linspace(tip['tE'] - DT, tip['tE'] - DT, 1):
         # get the previous time convection matrices
         pdatstr = get_datastr(nwtn=newtk, time=t,
@@ -434,8 +438,21 @@ def optcon_nse(N=10, Nts=10):
                                         nwtn_adi_dict=tip['nwtn_adi_dict']
                                         )['zfac']
 
-        dou.save_npa(Zp, fstring=ddir + 'Z' + cdatstr)
-        Zc = Zp
+        if tip['compress_z']:
+            Zc = pru.compress_Z(Zp, k=tip['comprzfac']*contp.NY)
+
+            # monitor the compression
+            vec = np.random.randn(Zp.shape[0], 1)
+            print '||(ZZ_red - ZZ )*testvec|| / ||testvec|| = {0}'.\
+                format(np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec)) -
+                       np.dot(Zc, np.dot(Zc.T, vec))) /
+                       np.linalg.norm(vec))
+        else:
+            Zc = Zp
+        if tip['save_full_z']:
+            dou.save_npa(Zp, fstring=ddir + 'Z' + cdatstr)
+        else:
+            dou.save_npa(Zc, fstring=ddir + 'Z' + cdatstr)
 
 
 if __name__ == '__main__':

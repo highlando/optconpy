@@ -121,6 +121,7 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
                 print ('Number of ADI steps {0} -- \n' +
                        'Relative norm of the update {1}'
                        ).format(adi_step, rel_newZ_norm)
+                print 'sqrd norm of Z: {0}'.format(u_norm_sqrd)
         except KeyError:
             pass  # no verbosity specified - nothing is shown
 
@@ -228,13 +229,14 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
         upd_fnorm, fnznn, fnznc = \
             lau.comp_sqfnrm_factrd_diff(znn, znc, ret_sing_norms=True)
 
+        upd_fnorm = np.sqrt(np.abs(upd_fnorm))
         nwtn_upd_fnorms.append(upd_fnorm)
 
         try:
             if nwtn_adi_dict['verbose']:
                 print ('Newton ADI step: {1} --' +
-                       'f norm of update: {0}\n').format(upd_fnorm,
-                                                         nwtn_stp + 1)
+                       'f norm of update: {0}').format(upd_fnorm,
+                                                       nwtn_stp + 1)
         except KeyError:
             pass    # no verbosity specified - nothing is shown
 
