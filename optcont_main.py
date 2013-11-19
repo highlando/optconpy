@@ -22,6 +22,7 @@ def time_int_params(Nts):
                tE=tE,
                dt=dt,
                Nts=Nts,
+               Navier=False,  # set 0 for Stokes flow and 1 for NS
                vfile=None,
                pfile=None,
                Residuals=[],
@@ -115,9 +116,15 @@ class ContParams():
 
 
 def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
-    return 'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}'.format(
+
+    if timps['Navier']:
+        navsto = 'NStokes'
+    else:
+        navsto = 'Stokes'
+
+    return (navsto + 'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
         nwtn, time, timps['nu'], meshp,
-        timps['Nts'], timps['dt']
+        timps['Nts'], timps['dt'], timps['convfac']
     )
 
 
@@ -292,12 +299,17 @@ def optcon_nse(N=10, Nts=10):
 
             # get and condense the linearized convection
             # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
-            N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v,
-                                               V=femp['V'],
-                                               invinds=femp['invinds'],
-                                               diribcs=femp['diribcs'])
-            Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1 + N2,
-                                                       femp['diribcs'])
+
+            if tip['Navier']:
+                N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v,
+                                                   V=femp['V'],
+                                                   invinds=femp['invinds'],
+                                                   diribcs=femp['diribcs'])
+                convc_mat, rhsv_conbc = \
+                    dtn.condense_velmatsbybcs(N1 + N2, femp['diribcs'])
+
+            else:
+                convc_mat, rhsv_conbc = 0, 0
 
             rhsd_cur = dict(fv=stokesmatsc['M'] * v_old +
                             DT * (rhs_con[INVINDS, :] +
@@ -305,7 +317,7 @@ def optcon_nse(N=10, Nts=10):
                             fp=rhsd_vfstbc['fp'])
 
             matd_cur = dict(A=stokesmatsc['M'] +
-                            DT * (stokesmatsc['A'] + Nc),
+                            DT * (stokesmatsc['A'] + convc_mat),
                             JT=stokesmatsc['JT'],
                             J=stokesmatsc['J'])
 
