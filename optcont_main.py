@@ -239,7 +239,7 @@ def optcon_nse(N=10, Nts=10):
     # save the data
     curdatname = get_datastr(nwtn=newtk, time=t,
                              meshp=N, timps=tip)
-    dou.save_npa(vp_stokes[:NV, ], fstring=ddir + 'vel' + curdatname)
+    dou.save_npa(vp_stokes[:NV, ], fstring=ddir + curdatname + '__vel')
 
 #
 # Compute the time-dependent flow
@@ -256,8 +256,8 @@ def optcon_nse(N=10, Nts=10):
             cdatstr = get_datastr(nwtn=newtk, time=tip['tE'],
                                   meshp=N, timps=tip)
 
-            norm_nwtnupd = dou.load_npa(ddir + 'norm_nwtnupd' + cdatstr)
-            prev_v = dou.load_npa(ddir + 'vel' + cdatstr)
+            norm_nwtnupd = dou.load_npa(ddir + cdatstr + '__norm_nwtnupd')
+            prev_v = dou.load_npa(ddir + cdatstr + '__vel')
 
             tip['norm_nwtnupd_list'].append(norm_nwtnupd)
             print 'found vel files of Newton iteration {0}'.format(newtk)
@@ -291,11 +291,11 @@ def optcon_nse(N=10, Nts=10):
             # try - except for linearizations about stationary sols
             # for which t=None
             try:
-                prev_v = dou.load_npa(ddir + 'vel' + pdatstr)
+                prev_v = dou.load_npa(ddir + pdatstr + '__vel')
             except IOError:
                 pdatstr = get_datastr(nwtn=newtk - 1, time=None,
                                       meshp=N, timps=tip)
-                prev_v = dou.load_npa(ddir + 'vel' + pdatstr)
+                prev_v = dou.load_npa(ddir + pdatstr + '__vel')
 
             # get and condense the linearized convection
             # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
@@ -309,7 +309,8 @@ def optcon_nse(N=10, Nts=10):
                     dtn.condense_velmatsbybcs(N1 + N2, femp['diribcs'])
 
             else:
-                convc_mat, rhsv_conbc = 0, 0
+                convc_mat, rhsv_conbc, rhs_con = 0, 0
+                rhs_con = np.zeros((femp['V'].dim(), 1))
 
             rhsd_cur = dict(fv=stokesmatsc['M'] * v_old +
                             DT * (rhs_con[INVINDS, :] +
@@ -326,7 +327,7 @@ def optcon_nse(N=10, Nts=10):
 
             v_old = vp[:NV, ]
 
-            dou.save_npa(v_old, fstring=ddir + 'vel' + cdatstr)
+            dou.save_npa(v_old, fstring=ddir + cdatstr + '__vel')
 
             dou.output_paraview(tip, femp, vp=vp, t=t),
 
@@ -335,7 +336,7 @@ def optcon_nse(N=10, Nts=10):
                                         stokesmatsc['M'] *
                                         (v_old - prev_v))
 
-        dou.save_npa(norm_nwtnupd, ddir + 'norm_nwtnupd' + cdatstr)
+        dou.save_npa(norm_nwtnupd, ddir + cdatstr + '__norm_nwtnupd')
         tip['norm_nwtnupd_list'].append(norm_nwtnupd[0])
 
         print 'norm of current Newton update: {}'.format(norm_nwtnupd)
@@ -351,26 +352,26 @@ def optcon_nse(N=10, Nts=10):
 
     # get the control and observation operators
     try:
-        b_mat = dou.load_spa(ddir + 'b_mat' + contsetupstr)
-        u_masmat = dou.load_spa(ddir + 'u_masmat' + contsetupstr)
+        b_mat = dou.load_spa(ddir + contsetupstr + '__b_mat')
+        u_masmat = dou.load_spa(ddir + contsetupstr + '__u_masmat')
         print 'loaded `b_mat`'
     except IOError:
         print 'computing `b_mat`...'
         b_mat, u_masmat = cou.get_inp_opa(cdcoo=contp.cdcoo,
                                           V=femp['V'], NU=contp.NU)
-        dou.save_spa(b_mat, ddir + 'b_mat' + contsetupstr)
-        dou.save_spa(u_masmat, ddir + 'u_masmat' + contsetupstr)
+        dou.save_spa(b_mat, ddir + contsetupstr + '__b_mat')
+        dou.save_spa(u_masmat, ddir + contsetupstr + '__u_masmat')
     try:
-        mc_mat = dou.load_spa(ddir + 'mc_mat' + contsetupstr)
-        y_masmat = dou.load_spa(ddir + 'y_masmat' + contsetupstr)
+        mc_mat = dou.load_spa(ddir + contsetupstr + '__mc_mat')
+        y_masmat = dou.load_spa(ddir + contsetupstr + '__y_masmat')
         print 'loaded `c_mat`'
     except IOError:
         print 'computing `c_mat`...'
         mc_mat, y_masmat = cou.get_mout_opa(odcoo=contp.odcoo,
                                             V=femp['V'], NY=contp.NY)
 
-        dou.save_spa(mc_mat, ddir + 'mc_mat' + contsetupstr)
-        dou.save_spa(y_masmat, ddir + 'y_masmat' + contsetupstr)
+        dou.save_spa(mc_mat, ddir + contsetupstr + '__mc_mat')
+        dou.save_spa(y_masmat, ddir + contsetupstr + '__y_masmat')
 
     # restrict the operators to the inner nodes
     mc_mat = mc_mat[:, invinds][:, :]
@@ -409,8 +410,8 @@ def optcon_nse(N=10, Nts=10):
 
     cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, timps=tip)
 
-    dou.save_npa(Zc, fstring=ddir + 'Z' + cdatstr)
-    dou.save_npa(wc, fstring=ddir + 'w' + cdatstr)
+    dou.save_npa(Zc, fstring=ddir + cdatstr + '__Z')
+    dou.save_npa(wc, fstring=ddir + cdatstr + '__w')
 
     for t in np.linspace(tip['tE'] - DT, tip['t0'], Nts):
         print 'Time is {0}'.format(t)
@@ -421,19 +422,23 @@ def optcon_nse(N=10, Nts=10):
         # try - except for linearizations about stationary sols
         # for which t=None
         try:
-            prev_v = dou.load_npa(ddir + 'vel' + pdatstr)
+            prev_v = dou.load_npa(ddir + pdatstr + '__vel')
         except IOError:
             pdatstr = get_datastr(nwtn=newtk, time=None,
                                   meshp=N, timps=tip)
-            prev_v = dou.load_npa(ddir + 'vel' + pdatstr)
+            prev_v = dou.load_npa(ddir + pdatstr + '__vel')
 
         # get and condense the linearized convection
         # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
-        N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
-                                           invinds=femp['invinds'],
-                                           diribcs=femp['diribcs'])
-        Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1 + N2,
-                                                   femp['diribcs'])
+        if tip['Navier']:
+            N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
+                                               invinds=femp['invinds'],
+                                               diribcs=femp['diribcs'])
+            Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1 + N2,
+                                                       femp['diribcs'])
+        else:
+            convc_mat, rhsv_conbc = 0, 0
+            rhs_con = np.zeros((femp['V'].dim(), 1))
 
         # coeffmat for nwtn adi
         ft_mat = -(0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] + Nc.T))
@@ -462,9 +467,9 @@ def optcon_nse(N=10, Nts=10):
         else:
             Zc = Zp
         if tip['save_full_z']:
-            dou.save_npa(Zp, fstring=ddir + 'Z' + cdatstr)
+            dou.save_npa(Zp, fstring=ddir + cdatstr + '__Z')
         else:
-            dou.save_npa(Zc, fstring=ddir + 'Z' + cdatstr)
+            dou.save_npa(Zc, fstring=ddir + cdatstr + '__Z')
 
 
 if __name__ == '__main__':
