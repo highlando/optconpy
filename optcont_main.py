@@ -16,7 +16,7 @@ dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 def time_int_params(Nts):
     t0 = 0.0
-    tE = 0.1
+    tE = 0.01
     dt = (tE - t0) / Nts
     tip = dict(t0=t0,
                tE=tE,
@@ -34,7 +34,7 @@ def time_int_params(Nts):
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
                    adi_max_steps=150,
-                   adi_newZ_reltol=1e-6,
+                   adi_newZ_reltol=1e-8,
                    nwtn_max_steps=5,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=4e-8,
@@ -309,7 +309,7 @@ def optcon_nse(N=10, Nts=10):
                     dtn.condense_velmatsbybcs(N1 + N2, femp['diribcs'])
 
             else:
-                convc_mat, rhsv_conbc, rhs_con = 0, 0
+                convc_mat, rhsv_conbc = 0, 0
                 rhs_con = np.zeros((femp['V'].dim(), 1))
 
             rhsd_cur = dict(fv=stokesmatsc['M'] * v_old +
@@ -434,14 +434,15 @@ def optcon_nse(N=10, Nts=10):
             N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
                                                invinds=femp['invinds'],
                                                diribcs=femp['diribcs'])
-            Nc, rhsv_conbc = dtn.condense_velmatsbybcs(N1 + N2,
-                                                       femp['diribcs'])
+            convc_mat, rhsv_conbc = dtn.condense_velmatsbybcs(N1 + N2,
+                                                              femp['diribcs'])
         else:
-            convc_mat, rhsv_conbc = 0, 0
+            convc_mat, rhsv_conbc = 0*stokesmatsc['MT'], 0
             rhs_con = np.zeros((femp['V'].dim(), 1))
 
         # coeffmat for nwtn adi
-        ft_mat = -(0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] + Nc.T))
+        ft_mat = -(0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] +
+                                                   convc_mat.T))
         # rhs for nwtn adi
         w_mat = np.hstack([stokesmatsc['MT'] * Zc, np.sqrt(DT) * trct_mat])
 
@@ -473,4 +474,4 @@ def optcon_nse(N=10, Nts=10):
 
 
 if __name__ == '__main__':
-    optcon_nse(N=10, Nts=100)
+    optcon_nse(N=20, Nts=10)
