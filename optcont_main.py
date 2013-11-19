@@ -124,7 +124,7 @@ def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
 
     return (navsto + 'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
         nwtn, time, timps['nu'], meshp,
-        timps['Nts'], timps['dt'], timps['convfac']
+        timps['Nts'], timps['dt']
     )
 
 
