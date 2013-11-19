@@ -209,10 +209,10 @@ class TestProjLyap(unittest.TestCase):
 
         vec = np.random.randn(Z.shape[0], 1)
 
-        print '||(ZZ_red - ZZ )*testvec|| / ||testvec|| = {0}'.\
+        print '||(ZZ_red - ZZ )*testvec|| / ||ZZ*testvec|| = {0}'.\
             format(np.linalg.norm(np.dot(Z, np.dot(Z.T, vec)) -
                    np.dot(Zred, np.dot(Zred.T, vec))) /
-                   np.linalg.norm(vec))
+                   np.linalg.norm(np.dot(Zred, np.dot(Zred.T, vec))))
 
         self.assertTrue(True)
 

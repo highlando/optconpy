@@ -4,6 +4,11 @@ import numpy as np
 import cont_obs_utils as cou
 import scipy.sparse.linalg as spsla
 
+import warnings
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore", category=UserWarning)
+
+
 # unittests for the input and output operators
 
 
