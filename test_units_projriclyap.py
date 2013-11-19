@@ -184,11 +184,12 @@ class TestProjLyap(unittest.TestCase):
 # TEST: result is 'projected' - riccati sol
         self.assertTrue(np.allclose(MtXM,
                                     np.dot(self.P.T, np.dot(MtXM, self.P))))
-
 # TEST: check projected residual - riccati sol
         self.assertTrue(np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
                         < 1e-7)
 
+
+    # @unittest.skip("why does this freeze on Oresme??")
     def test_compress_algric_Z(self):
         Z = pru.proj_alg_ric_newtonadi(mmat=self.M, fmat=self.F,
                                        jmat=self.J, bmat=self.bmat,
