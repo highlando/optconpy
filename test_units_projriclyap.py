@@ -13,8 +13,8 @@ import proj_ric_utils as pru
 class TestProjLyap(unittest.TestCase):
 
     def setUp(self):
-        self.NV = 200
-        self.NP = 40
+        self.NV = 100
+        self.NP = 20
         self.NY = 5
         self.NU = self.NY+3
         self.verbose = False
