@@ -158,6 +158,160 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
                 adi_rel_newZ_norms=adi_rel_newZ_norms)
 
 
+def solve_proj_lyap_chshi(A=None, J=None, W=None, M=None,
+                          umat=None, vmat=None,
+                          transposed=False,
+                          adi_dict=dict(adi_max_steps=150,
+                                        adi_newZ_reltol=1e-8)
+                          ):
+    """ approximates X that solves the projected lyap equation
+
+        [A-UV].T*X*M + M.T*X*[A-UV] + J.T*Y*M + M.T*Y.T*J = -W*W.T
+
+        J*X*M = 0    and    M.T*X*J.T = 0
+
+    by considering the equivalent Stein eqns
+    and computing the first members of the
+    series converging to X
+
+    We use the SMW formula:
+    (A-UV).-1 = A.-1 + A.-1*U [ I - V A.-1 U].-1 A.-1
+
+    for the transpose:
+
+    (A-UV).-T = A.-T + A.-T*Vt [ I - Ut A.-T Vt ].-1 A.-T
+
+              = (A.T - Vt Ut).-1
+
+    see numOptAff.pdf
+    """
+
+    if transposed:
+        At, Mt = A, M
+    else:
+        At, Mt = A.T, M.T
+
+    ms = [-1, -5, -10]
+    NZ = W.shape[0]
+
+    def get_atmtlu(At, Mt, J, ms):
+        """compute the LU of the projection matrix
+
+        """
+        NP = J.shape[0]
+        sysm = sps.vstack([sps.hstack([At + ms.conjugate() * Mt, -J.T]),
+                           sps.hstack([J, sps.csr_matrix((NP, NP))])],
+                          format='csc')
+        return spsla.factorized(sysm)
+
+    def _app_projinvz(Z, At=None, Mt=None,
+                      J=None, ms=None, atmtlu=None):
+
+        if atmtlu is None:
+            atmtlu = get_atmtlu(At, Mt, J, ms)
+
+        NZ = Z.shape[0]
+
+        Zp = np.zeros(Z.shape)
+        zcol = np.zeros(NZ + J.shape[0])
+        for ccol in range(Z.shape[1]):
+            zcol[:NZ] = Z[:NZ, ccol]
+            Zp[:, ccol] = atmtlu(zcol)[:NZ]
+
+        return Zp, atmtlu
+
+    adi_step = 0
+    rel_newZ_norm = 2
+    adi_rel_newZ_norms = []
+
+    if umat is not None and vmat is not None:
+        # preps to apply the smw formula
+        atmtlu = get_atmtlu(At, Mt, J, ms[0])
+
+        # adding zeros to the coefficients to fit the
+        # saddle point systems
+        vmate = np.hstack([vmat, np.zeros((vmat.shape[0], J.shape[0]))])
+        if sps.isspmatrix(umat):
+            umate = sps.vstack([umat, sps.csr_matrix((J.shape[0],
+                                                     umat.shape[1]))])
+        else:
+            umate = np.vstack([umat, np.zeros((J.shape[0], umat.shape[1]))])
+
+        We = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
+
+        Stinv = lau.get_Sinv_smw(atmtlu, umat=vmate.T, vmat=umate.T)
+
+        #  Start the ADI iteration
+
+        Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T,
+                            rhsa=We, Sinv=Stinv)[:NZ, :]
+
+        ufac = Z
+        u_norm_sqrd = np.linalg.norm(Z) ** 2
+
+        while adi_step < adi_dict['adi_max_steps'] and \
+                rel_newZ_norm > adi_dict['adi_newZ_reltol']:
+            if sps.isspmatrix(umat):
+                Z = (At - ms[0] * Mt) * Z - np.dot(vmat.T, umat.T * Z)
+            else:
+                Z = (At - ms[0] * Mt) * Z - np.dot(vmat.T, np.dot(umat.T, Z))
+
+            Ze = np.vstack([Z, np.zeros((J.shape[0], W.shape[1]))])
+            Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T,
+                                rhsa=Ze, Sinv=Stinv)[:NZ, :]
+
+            z_norm_sqrd = np.linalg.norm(Z) ** 2
+            u_norm_sqrd = u_norm_sqrd + z_norm_sqrd
+
+            ufac = np.hstack([ufac, Z])
+            rel_newZ_norm = np.sqrt(z_norm_sqrd / u_norm_sqrd)
+            # np.linalg.norm(Z)/np.linalg.norm(ufac)
+
+            adi_step += 1
+            adi_rel_newZ_norms.append(rel_newZ_norm)
+
+        try:
+            if adi_dict['verbose']:
+                print ('Number of ADI steps {0} -- \n' +
+                       'Relative norm of the update {1}'
+                       ).format(adi_step, rel_newZ_norm)
+                print 'sqrd norm of Z: {0}'.format(u_norm_sqrd)
+        except KeyError:
+            pass  # no verbosity specified - nothing is shown
+
+    else:
+        Z, atmtlu = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
+        ufac = Z
+        u_norm_sqrd = np.linalg.norm(Z) ** 2
+
+        while adi_step < adi_dict['adi_max_steps'] and \
+                rel_newZ_norm > adi_dict['adi_newZ_reltol']:
+
+            Z = (At - ms[0] * Mt) * Z
+            Z = _app_projinvz(Z, At=At, Mt=Mt,
+                              J=J, ms=ms[0])[0]
+            ufac = np.hstack([ufac, Z])
+
+            z_norm_sqrd = np.linalg.norm(Z) ** 2
+            u_norm_sqrd = u_norm_sqrd + z_norm_sqrd
+
+            rel_newZ_norm = np.sqrt(z_norm_sqrd / u_norm_sqrd)
+
+            adi_step += 1
+            adi_rel_newZ_norms.append(rel_newZ_norm)
+
+        try:
+            if adi_dict['verbose']:
+                print ('Number of ADI steps {0} -- \n' +
+                       'Relative norm of the update {1}'
+                       ).format(adi_step, rel_newZ_norm)
+        except KeyError:
+            pass  # no verbosity specified - nothing is shown
+
+    return dict(zfac=np.sqrt(-2 * ms[0].real) * ufac,
+                adi_rel_newZ_norms=adi_rel_newZ_norms)
+
+
 def get_mTzzTg(MT, Z, tB):
     """ compute the lyapunov coefficient related to the linearization
 
@@ -236,6 +390,11 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
             vec = np.random.randn(znn.shape[0], 1)
             vecn2 = comp_diff_zzv(znn, znc, vec)
             if vecn2 + vecn1 < nwtn_adi_dict['nwtn_upd_abstol']:
+                znred = compress_Z(znn, 500)
+                zcred = compress_Z(znc, 500)
+                upred_fnorm = lau.comp_sqfnrm_factrd_diff(znred, zcred)
+                print 'shapes', znn.shape, znred.shape
+                print 'comp upd norms', upd_fnorm, upred_fnorm
                 print vecn2+vecn1, znc.shape
                 upd_fnorm = lau.comp_sqfnrm_factrd_diff(znn, znc)
                 upd_fnorm = np.sqrt(np.abs(upd_fnorm))
@@ -281,5 +440,3 @@ def compress_Z(Z, k=None, tol=None):
 def comp_diff_zzv(zone, ztwo, vec):
     return np.linalg.norm(np.dot(zone, np.dot(zone.T, vec)) -
                           np.dot(ztwo, np.dot(ztwo.T, vec)))
-   #  /\
-   #      np.linalg.norm(vec)

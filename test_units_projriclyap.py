@@ -20,11 +20,12 @@ class TestProjLyap(unittest.TestCase):
         self.verbose = False
         self.compn = 15  # factor for comp Z ~~> compn*W.shape[1]
 
-        self.nwtn_adi_dict = dict(adi_max_steps=180,
-                                  adi_newZ_reltol=1e-8,
+        self.nwtn_adi_dict = dict(adi_max_steps=380,
+                                  adi_newZ_reltol=1e-11,
                                   nwtn_max_steps=24,
-                                  nwtn_upd_reltol=4e-8,
-                                  nwtn_upd_abstol=4e-8,
+                                  nwtn_upd_reltol=4e-7,
+                                  nwtn_upd_abstol=4e-7,
+                                  full_upd_norm_check=True,
                                   verbose=self.verbose)
 
         # -F, M spd -- coefficient matrices
@@ -186,6 +187,8 @@ class TestProjLyap(unittest.TestCase):
                                     np.dot(self.P.T, np.dot(MtXM, self.P))))
 
 # TEST: check projected residual - riccati sol
+        print np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
+
         self.assertTrue(np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
                         < 1e-7)
 

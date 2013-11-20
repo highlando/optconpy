@@ -39,7 +39,7 @@ def time_int_params(Nts):
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=4e-8,
                    verbose=True,
-                   full_upd_norm_check=False
+                   full_upd_norm_check=True
                ),
                compress_z=True,  # whether or not to compress Z
                comprzfac=35,  # compression of the columns of Z to c*NY
