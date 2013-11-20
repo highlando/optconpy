@@ -34,8 +34,8 @@ class TestLinalgUtils(unittest.TestCase):
         self.assertTrue(np.allclose(AAinvZ, self.Z))
 
         # check the branch where A comes as LU
-        Alu = spsla.splu(self.A)
-        AuvInvZ = lau.app_smw_inv(Alu, umat=self.U, vmat=self.V,
+        alusolve = spsla.factorized(self.A)
+        AuvInvZ = lau.app_smw_inv(alusolve, umat=self.U, vmat=self.V,
                                   rhsa=self.Z, Sinv=None)
         AAinvZ = self.A * AuvInvZ - np.dot(self.U,
                                            np.dot(self.V, AuvInvZ))
@@ -55,8 +55,8 @@ class TestLinalgUtils(unittest.TestCase):
         self.assertTrue(np.allclose(AAinvZ, self.Z))
 
         # check the branch where A comes as LU
-        Alu = spsla.splu(self.A)
-        AuvInvZ = lau.app_smw_inv(Alu, umat=self.U, vmat=self.Vsp,
+        alusolve = spsla.factorized(self.A)
+        AuvInvZ = lau.app_smw_inv(alusolve, umat=self.U, vmat=self.Vsp,
                                   rhsa=self.Z, Sinv=None)
         AAinvZ = self.A * AuvInvZ - np.dot(self.U, self.Vsp * AuvInvZ)
 
@@ -69,9 +69,9 @@ class TestLinalgUtils(unittest.TestCase):
 
         import lin_alg_utils as lau
 
-        Alu = spsla.splu(self.A)
+        alusolve = spsla.factorized(self.A)
         Z = sps.csr_matrix(self.U)
-        AinvZ = lau.app_luinv_to_spmat(Alu, Z)
+        AinvZ = lau.app_luinv_to_spmat(alusolve, Z)
 
         self.assertTrue(np.allclose(self.U, self.A * AinvZ))
 
