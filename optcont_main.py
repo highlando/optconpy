@@ -33,12 +33,13 @@ def time_int_params(Nts):
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
-                   adi_max_steps=150,
+                   adi_max_steps=50,
                    adi_newZ_reltol=1e-8,
                    nwtn_max_steps=5,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=4e-8,
-                   verbose=True
+                   verbose=True,
+                   full_upd_norm_check=False
                ),
                compress_z=True,  # whether or not to compress Z
                comprzfac=35,  # compression of the columns of Z to c*NY
@@ -461,10 +462,10 @@ def optcon_nse(N=10, Nts=10):
 
             # monitor the compression
             vec = np.random.randn(Zp.shape[0], 1)
-            print '||(ZZ_red - ZZ )*testvec|| / ||testvec|| = {0}'.\
+            print '||(ZZ_red - ZZ )*testvec|| / ||ZZ_red*testvec|| = {0}'.\
                 format(np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec)) -
                        np.dot(Zc, np.dot(Zc.T, vec))) /
-                       np.linalg.norm(vec))
+                       np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec))))
         else:
             Zc = Zp
         if tip['save_full_z']:
@@ -474,4 +475,4 @@ def optcon_nse(N=10, Nts=10):
 
 
 if __name__ == '__main__':
-    optcon_nse(N=20, Nts=10)
+    optcon_nse(N=10, Nts=10)

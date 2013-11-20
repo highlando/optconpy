@@ -226,10 +226,20 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                                     transposed=transposed,
                                     adi_dict=nwtn_adi_dict)['zfac']
 
-        upd_fnorm, fnznn, fnznc = \
-            lau.comp_sqfnrm_factrd_diff(znn, znc, ret_sing_norms=True)
+        if nwtn_adi_dict['full_upd_norm_check']:
+            upd_fnorm = lau.comp_sqfnrm_factrd_diff(znn, znc)
+            upd_fnorm = np.sqrt(np.abs(upd_fnorm))
 
-        upd_fnorm = np.sqrt(np.abs(upd_fnorm))
+        else:
+            vec = np.random.randn(znn.shape[0], 1)
+            vecn1 = comp_diff_zzv(znn, znc, vec)
+            vec = np.random.randn(znn.shape[0], 1)
+            vecn2 = comp_diff_zzv(znn, znc, vec)
+            if vecn2 + vecn1 < nwtn_adi_dict['nwtn_upd_abstol']:
+                print vecn2+vecn1, znc.shape
+                upd_fnorm = lau.comp_sqfnrm_factrd_diff(znn, znc)
+                upd_fnorm = np.sqrt(np.abs(upd_fnorm))
+
         nwtn_upd_fnorms.append(upd_fnorm)
 
         try:
@@ -237,6 +247,12 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                 print ('Newton ADI step: {1} --' +
                        'f norm of update: {0}').format(upd_fnorm,
                                                        nwtn_stp + 1)
+                if not nwtn_adi_dict['full_upd_norm_check']:
+                    print ('btw... we used an estimated norm:').\
+                        format(nwtn_stp + 1)
+                    print '|| upd * vec || / || vec || = {0}'.format(vecn1)
+                    print '|| upd * vec || / || vec || = {0}'.format(vecn2)
+
         except KeyError:
             pass    # no verbosity specified - nothing is shown
 
@@ -260,3 +276,10 @@ def compress_Z(Z, k=None, tol=None):
     svred = S[:k, :][:, :k] * V[:k, :k]
 
     return np.dot(U[:, :k], svred)
+
+
+def comp_diff_zzv(zone, ztwo, vec):
+    return np.linalg.norm(np.dot(zone, np.dot(zone.T, vec)) -
+                          np.dot(ztwo, np.dot(ztwo.T, vec)))
+   #  /\
+   #      np.linalg.norm(vec)
