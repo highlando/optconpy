@@ -33,7 +33,7 @@ class TestProjLyap(unittest.TestCase):
         self.M = sps.eye(self.NV) + \
             sps.rand(self.NV, self.NV) * sps.rand(self.NV, self.NV)
         try:
-            self.Mlu = spsla.splu(self.M.tocsc())
+            self.Mlu = spsla.factorized(self.M.tocsc())
         except RuntimeError:
             print 'M is not full rank'
 

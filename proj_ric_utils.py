@@ -48,7 +48,7 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         sysm = sps.vstack([sps.hstack([At + ms.conjugate() * Mt, -J.T]),
                            sps.hstack([J, sps.csr_matrix((NP, NP))])],
                           format='csc')
-        return spsla.splu(sysm)
+        return spsla.factorized(sysm)
 
     def _app_projinvz(Z, At=None, Mt=None,
                       J=None, ms=None, atmtlu=None):
@@ -62,7 +62,7 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         zcol = np.zeros(NZ + J.shape[0])
         for ccol in range(Z.shape[1]):
             zcol[:NZ] = Z[:NZ, ccol]
-            Zp[:, ccol] = atmtlu.solve(zcol)[:NZ]
+            Zp[:, ccol] = atmtlu(zcol)[:NZ]
 
         return Zp, atmtlu
 
