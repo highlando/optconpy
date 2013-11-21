@@ -37,7 +37,7 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
     else:
         At, Mt = A.T, M.T
 
-    ms = [-10]
+    ms = [-10]  # TODO: enable multishifts, -10, -10]
     NZ = W.shape[0]
 
     def get_atmtlu(At, Mt, J, ms):
@@ -72,8 +72,6 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
 
     if umat is not None and vmat is not None:
         # preps to apply the smw formula
-        atmtlu = get_atmtlu(At, Mt, J, ms[0])
-
         # adding zeros to the coefficients to fit the
         # saddle point systems
         vmate = np.hstack([vmat, np.zeros((vmat.shape[0], J.shape[0]))])
@@ -84,36 +82,45 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
             umate = np.vstack([umat, np.zeros((J.shape[0], umat.shape[1]))])
 
         We = np.vstack([W, np.zeros((J.shape[0], W.shape[1]))])
-
-        Stinv = lau.get_Sinv_smw(atmtlu, umat=vmate.T, vmat=umate.T)
+        atmtlulist = []
+        stinvlist = []
+        for mu in ms:
+            atmtlumu = get_atmtlu(At, Mt, J, mu)
+            atmtlulist.append(atmtlumu)
+            stinvlist.append(lau.get_Sinv_smw(atmtlumu,
+                                              umat=vmate.T, vmat=umate.T))
 
         #  Start the ADI iteration
 
-        Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T,
-                            rhsa=We, Sinv=Stinv)[:NZ, :]
+        Z = lau.app_smw_inv(atmtlulist[0], umat=vmate.T, vmat=umate.T,
+                            rhsa=We, Sinv=stinvlist[0])[:NZ, :]
 
-        ufac = Z
+        ufac = np.sqrt(-2 * ms[0].real) * Z
         u_norm_sqrd = np.linalg.norm(Z) ** 2
+
+        muind = 0
 
         while adi_step < adi_dict['adi_max_steps'] and \
                 rel_newZ_norm > adi_dict['adi_newZ_reltol']:
             if sps.isspmatrix(umat):
-                Z = (At - ms[0] * Mt) * Z - np.dot(vmat.T, umat.T * Z)
+                Z = (At - ms[muind] * Mt) * Z - np.dot(vmat.T, umat.T * Z)
             else:
-                Z = (At - ms[0] * Mt) * Z - np.dot(vmat.T, np.dot(umat.T, Z))
+                Z = (At - ms[muind] * Mt) * Z - np.dot(vmat.T,
+                                                       np.dot(umat.T, Z))
 
             Ze = np.vstack([Z, np.zeros((J.shape[0], W.shape[1]))])
-            Z = lau.app_smw_inv(atmtlu, umat=vmate.T, vmat=umate.T,
-                                rhsa=Ze, Sinv=Stinv)[:NZ, :]
+            Z = lau.app_smw_inv(atmtlulist[muind], umat=vmate.T, vmat=umate.T,
+                                rhsa=Ze, Sinv=stinvlist[muind])[:NZ, :]
 
             z_norm_sqrd = np.linalg.norm(Z) ** 2
             u_norm_sqrd = u_norm_sqrd + z_norm_sqrd
 
-            ufac = np.hstack([ufac, Z])
+            ufac = np.hstack([ufac, np.sqrt(-2 * ms[muind].real) * Z])
             rel_newZ_norm = np.sqrt(z_norm_sqrd / u_norm_sqrd)
             # np.linalg.norm(Z)/np.linalg.norm(ufac)
 
             adi_step += 1
+            muind = np.mod(muind+1, len(ms))
             adi_rel_newZ_norms.append(rel_newZ_norm)
 
         try:
@@ -127,16 +134,16 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
 
     else:
         Z, atmtlu = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
-        ufac = Z
+        ufac = np.sqrt(-2 * ms[0].real) * Z
         u_norm_sqrd = np.linalg.norm(Z) ** 2
 
         while adi_step < adi_dict['adi_max_steps'] and \
                 rel_newZ_norm > adi_dict['adi_newZ_reltol']:
 
             Z = (At - ms[0] * Mt) * Z
-            Z = _app_projinvz(Z, At=At, Mt=Mt,
+            Z = _app_projinvz(Z, atmtlu=atmtlu, Mt=Mt,
                               J=J, ms=ms[0])[0]
-            ufac = np.hstack([ufac, Z])
+            ufac = np.hstack([ufac, np.sqrt(-2 * ms[0].real) * Z])
 
             z_norm_sqrd = np.linalg.norm(Z) ** 2
             u_norm_sqrd = u_norm_sqrd + z_norm_sqrd
@@ -154,7 +161,7 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         except KeyError:
             pass  # no verbosity specified - nothing is shown
 
-    return dict(zfac=np.sqrt(-2 * ms[0].real) * ufac,
+    return dict(zfac=ufac,
                 adi_rel_newZ_norms=adi_rel_newZ_norms)
 
 

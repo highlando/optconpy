@@ -13,18 +13,18 @@ import proj_ric_utils as pru
 class TestProjLyap(unittest.TestCase):
 
     def setUp(self):
-        self.NV = 100
-        self.NP = 20
+        self.NV = 220
+        self.NP = 40
         self.NY = 5
         self.NU = self.NY+3
         self.verbose = False
         self.compn = 15  # factor for comp Z ~~> compn*W.shape[1]
 
-        self.nwtn_adi_dict = dict(adi_max_steps=380,
-                                  adi_newZ_reltol=1e-11,
-                                  nwtn_max_steps=24,
-                                  nwtn_upd_reltol=4e-7,
-                                  nwtn_upd_abstol=4e-7,
+        self.nwtn_adi_dict = dict(adi_max_steps=350,
+                                  adi_newZ_reltol=1e-7,
+                                  nwtn_max_steps=28,
+                                  nwtn_upd_reltol=6e-7,
+                                  nwtn_upd_abstol=6e-7,
                                   full_upd_norm_check=True,
                                   verbose=self.verbose)
 
@@ -126,8 +126,9 @@ class TestProjLyap(unittest.TestCase):
 
 # TEST: check projected residual
         self.assertTrue(np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
-                        < 1e-8)
+                        < 1e-7)
 
+    # @unittest.skip("as long as only smw part with multishifts")
     def test_proj_lyap_smw_transposeflag(self):
         """check the solution of the projected lyap eqn
 
