@@ -20,11 +20,11 @@ class TestProjLyap(unittest.TestCase):
         self.verbose = True
         self.compn = 15  # factor for comp Z ~~> compn*W.shape[1]
 
-        self.nwtn_adi_dict = dict(adi_max_steps=250,
-                                  adi_newZ_reltol=1e-7,
-                                  nwtn_max_steps=28,
-                                  nwtn_upd_reltol=6e-7,
-                                  nwtn_upd_abstol=6e-7,
+        self.nwtn_adi_dict = dict(adi_max_steps=380,
+                                  adi_newZ_reltol=1e-11,
+                                  nwtn_max_steps=24,
+                                  nwtn_upd_reltol=4e-7,
+                                  nwtn_upd_abstol=4e-7,
                                   full_upd_norm_check=True,
                                   verbose=self.verbose)
 
@@ -126,9 +126,8 @@ class TestProjLyap(unittest.TestCase):
 
 # TEST: check projected residual
         self.assertTrue(np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
-                        < 1e-7)
+                        < 1e-8)
 
-    # @unittest.skip("as long as only smw part with multishifts")
     def test_proj_lyap_smw_transposeflag(self):
         """check the solution of the projected lyap eqn
 
