@@ -37,7 +37,7 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
     else:
         At, Mt = A.T, M.T
 
-    ms = [-10]  # TODO: enable multishifts, -10, -10]
+    ms = [-10, -10, -10]
     NZ = W.shape[0]
 
     def get_atmtlu(At, Mt, J, ms):
@@ -93,9 +93,10 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         #  Start the ADI iteration
 
         Z = lau.app_smw_inv(atmtlulist[0], umat=vmate.T, vmat=umate.T,
-                            rhsa=We, Sinv=stinvlist[0])[:NZ, :]
+                            rhsa=np.sqrt(-2 * ms[0].real) * We,
+                            Sinv=stinvlist[0])[:NZ, :]
 
-        ufac = np.sqrt(-2 * ms[0].real) * Z
+        ufac = Z
         u_norm_sqrd = np.linalg.norm(Z) ** 2
 
         muind = 0
