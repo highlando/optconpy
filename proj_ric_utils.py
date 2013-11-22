@@ -37,7 +37,7 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
     else:
         At, Mt = A.T, M.T
 
-    ms = [-10, -10, -10]
+    ms = [-10, -10, -9]
     NZ = W.shape[0]
 
     def get_atmtlu(At, Mt, J, ms):
@@ -99,24 +99,23 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
         ufac = Z
         u_norm_sqrd = np.linalg.norm(Z) ** 2
 
-        muind = 0
+        muind = 1
 
         while adi_step < adi_dict['adi_max_steps'] and \
                 rel_newZ_norm > adi_dict['adi_newZ_reltol']:
-            if sps.isspmatrix(umat):
-                Z = (At - ms[muind] * Mt) * Z - np.dot(vmat.T, umat.T * Z)
-            else:
-                Z = (At - ms[muind] * Mt) * Z - np.dot(vmat.T,
-                                                       np.dot(umat.T, Z))
 
-            Ze = np.vstack([Z, np.zeros((J.shape[0], W.shape[1]))])
-            Z = lau.app_smw_inv(atmtlulist[muind], umat=vmate.T, vmat=umate.T,
-                                rhsa=Ze, Sinv=stinvlist[muind])[:NZ, :]
+            Ze = np.vstack([Mt*Z, np.zeros((J.shape[0], W.shape[1]))])
+            Zi = lau.app_smw_inv(atmtlulist[muind], umat=vmate.T,
+                                 vmat=umate.T, rhsa=Ze,
+                                 Sinv=stinvlist[muind])[:NZ, :]
+
+            Z = np.sqrt(ms[muind].real / ms[muind-1].real) *\
+                (Z - (ms[muind] + ms[muind-1].conjugate()) * Zi)
 
             z_norm_sqrd = np.linalg.norm(Z) ** 2
             u_norm_sqrd = u_norm_sqrd + z_norm_sqrd
 
-            ufac = np.hstack([ufac, np.sqrt(-2 * ms[muind].real) * Z])
+            ufac = np.hstack([ufac, Z])
             rel_newZ_norm = np.sqrt(z_norm_sqrd / u_norm_sqrd)
             # np.linalg.norm(Z)/np.linalg.norm(ufac)
 
@@ -134,7 +133,10 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
             pass  # no verbosity specified - nothing is shown
 
     else:
-        Z, atmtlu = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
+        for mu in ms:
+            atmtlumu = get_atmtlu(At, Mt, J, mu)
+
+        Z = _app_projinvz(W, At=At, Mt=Mt, J=J, ms=ms[0])
         ufac = np.sqrt(-2 * ms[0].real) * Z
         u_norm_sqrd = np.linalg.norm(Z) ** 2
 
