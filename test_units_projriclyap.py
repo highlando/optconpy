@@ -17,7 +17,7 @@ class TestProjLyap(unittest.TestCase):
         self.NP = 20
         self.NY = 5
         self.NU = self.NY+3
-        self.verbose = False
+        self.verbose = True
         self.compn = 15  # factor for comp Z ~~> compn*W.shape[1]
 
         self.nwtn_adi_dict = dict(adi_max_steps=380,
