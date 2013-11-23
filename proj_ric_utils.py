@@ -137,17 +137,17 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
 
     else:
 
-        Z = _app_projinvz(W, atmtlu=atmtlulist[0], Mt=Mt, J=J, ms=ms[0])[0]
-        ufac = np.sqrt(-2 * ms[0].real) * Z
-        u_norm_sqrd = np.linalg.norm(Z) ** 2
+        Z = _app_projinvz(np.sqrt(-2*ms[0].real)*W, J=J,
+                          atmtlu=atmtlulist[0])[0]
 
+        ufac = Z
+        u_norm_sqrd = np.linalg.norm(Z) ** 2
         muind = 1
 
         while adi_step < adi_dict['adi_max_steps'] and \
                 rel_newZ_norm > adi_dict['adi_newZ_reltol']:
 
-            Zi = _app_projinvz(Mt * Z, atmtlu=atmtlulist[muind], Mt=Mt,
-                               J=J, ms=ms[muind])[0]
+            Zi = _app_projinvz(Mt*Z, J=J, atmtlu=atmtlulist[muind])[0]
 
             Z = np.sqrt(ms[muind].real / ms[muind-1].real) *\
                 (Z - (ms[muind] + ms[muind-1].conjugate()) * Zi)

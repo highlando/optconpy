@@ -13,14 +13,14 @@ import proj_ric_utils as pru
 class TestProjLyap(unittest.TestCase):
 
     def setUp(self):
-        self.NV = 100
-        self.NP = 20
+        self.NV = 200
+        self.NP = 40
         self.NY = 5
         self.NU = self.NY+3
         self.verbose = True
         self.compn = 15  # factor for comp Z ~~> compn*W.shape[1]
 
-        self.nwtn_adi_dict = dict(adi_max_steps=380,
+        self.nwtn_adi_dict = dict(adi_max_steps=300,
                                   adi_newZ_reltol=1e-11,
                                   nwtn_max_steps=24,
                                   nwtn_upd_reltol=4e-7,
@@ -160,6 +160,7 @@ class TestProjLyap(unittest.TestCase):
         self.assertTrue(np.allclose(Z, Z2))
         self.assertTrue(np.allclose(Z2, Z3))
         self.assertTrue(np.allclose(Z3, Z4))
+        self.assertTrue(np.allclose(Z, Z4))
 
     def test_proj_alg_ric_sol(self):
         """check the sol of the projected alg. Riccati Eqn
