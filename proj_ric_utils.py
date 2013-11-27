@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg as spla
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 import lin_alg_utils as lau
@@ -253,8 +254,8 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
             vec = np.random.randn(znn.shape[0], 1)
             vecn2 = comp_diff_zzv(znn, znc, vec)
             if vecn2 + vecn1 < nwtn_adi_dict['nwtn_upd_abstol']:
-                znred = compress_Z(znn, 500)
-                zcred = compress_Z(znc, 500)
+                znred = compress_Z(znn, 500, shplot=False)
+                zcred = compress_Z(znc, 500, shplot=False)
                 upred_fnorm = lau.comp_sqfnrm_factrd_diff(znred, zcred)
                 print 'shapes', znn.shape, znred.shape
                 print 'comp upd norms', upd_fnorm, upred_fnorm
@@ -285,19 +286,71 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                 nwtn_upd_fnorms=nwtn_upd_fnorms)
 
 
-def compress_Z(Z, k=None, tol=None):
+def comp_proj_lyap_res_norm(Z, F, M, W, J, Sinv=None):
+    """compute the squared f norm of projected lyap residual
+
+        res = Pt*[ Ft*ZZt*M + Mt*ZZt*M + W*Wt ]*P
+
+    """
+    if Z.shape[1] >= Z.shape[0]:
+        raise Warning('TODO: catch cases where Z has more cols than rows')
+
+    if Sinv is None:
+        Mlu = spsla.factorized(M)
+        MinvJt = lau.app_luinv_to_spmat(Mlu, J.T)
+        Sinv = np.linalg.inv(J * MinvJt)
+
+    def _app_pt(Z, J, MinvJt, Sinv):
+        return Z - J.T * np.dot(Sinv, np.dot(MinvJt.T, Z))
+
+    PtFtZ = _app_pt(F.T * Z, J, MinvJt, Sinv)
+    PtMtZ = _app_pt(M.T * Z, J, MinvJt, Sinv)
+    PtW = _app_pt(W, J, MinvJt, Sinv)
+
+    return lau.comp_sqfnrm_factrd_lyap_res(PtMtZ, PtFtZ, PtW)
+
+
+def compress_Zsvd(Z, k=None, thresh=None, shplot=False):
     """routine that compresses the columns Z by means of a truncated SVD
 
     such that it ZZ.T is still well approximated"""
+    if Z.shape[1] >= Z.shape[0]:
+        raise Warning('TODO: catch cases where Z has more cols than rows')
 
     nny = Z.shape[1]
     U, s, V = np.linalg.svd(Z, full_matrices=False)
 
-    S = sps.dia_matrix((s, 0), (nny, nny)).tocsr()
+    if shplot:
+        import matplotlib.pyplot as plt
+        plt.semilogy(s[:nny/2])
+        plt.show(block=False)
 
-    svred = S[:k, :][:, :k] * V[:k, :k]
+    if k is None:
+        k = nny
 
-    return np.dot(U[:, :k], svred)
+    if thresh is not None:
+        k = min(k, np.where(s > thresh)[0].size)
+
+    S = sps.dia_matrix((s[:k], 0), (k, k)).tocsr()
+
+    # svred = S[:k, :][:, :k]
+
+    # return np.dot(U[:, :k], svred)
+    return U[:, :k] * S
+
+
+def compress_Z(Z, tol=None, shplot=False):
+    """routine that compresses the columns Z by means of rank revealing QR
+
+    such that it ZZ.T is still well approximated"""
+
+    rmat, permumat = spla.qr(Z.T, mode='r', pivoting=True)
+
+    if shplot:
+        import matplotlib.pyplot as plt
+        plt.show()
+
+    return rmat[:, np.argsort(permumat)].T
 
 
 def comp_diff_zzv(zone, ztwo, vec):
