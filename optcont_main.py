@@ -33,8 +33,8 @@ def time_int_params(Nts):
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
-                   adi_max_steps=50,
-                   adi_newZ_reltol=1e-8,
+                   adi_max_steps=80,
+                   adi_newZ_reltol=1e-10,
                    nwtn_max_steps=5,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=4e-8,
@@ -42,7 +42,8 @@ def time_int_params(Nts):
                    full_upd_norm_check=False
                ),
                compress_z=True,  # whether or not to compress Z
-               comprzfac=35,  # compression of the columns of Z to c*NY
+               comprz_maxc=200,  # compression of the columns of Z to c*NY
+               comprz_thresh=1e-7,  # threshold for trunc of SVD
                save_full_z=True,  # whether or not to save the uncompressed Z
                )
 
@@ -170,6 +171,28 @@ def drivcav_fems(N, NU=None, NY=None):
     return dfems
 
 
+def get_v_conv_conts(dirnpdatstr, femp, tip):
+
+    prev_v = dou.load_npa(dirnpdatstr + '__vel')
+    prev_v = dou.load_npa(dirnpdatstr + '__vel')
+
+    # get and condense the linearized convection
+    # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
+    if tip['Navier']:
+        N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v,
+                                           V=femp['V'],
+                                           invinds=femp['invinds'],
+                                           diribcs=femp['diribcs'])
+        convc_mat, rhsv_conbc = \
+            dtn.condense_velmatsbybcs(N1 + N2, femp['diribcs'])
+
+    else:
+        convc_mat, rhsv_conbc = 0, 0
+        rhs_con = np.zeros((femp['V'].dim(), 1))
+
+    return convc_mat, rhs_con, rhsv_conbc, prev_v
+
+
 def optcon_nse(N=10, Nts=10):
 
     tip = time_int_params(Nts)
@@ -272,6 +295,12 @@ def optcon_nse(N=10, Nts=10):
            norm_nwtnupd > tip['vel_nwtn_tol']):
         newtk += 1
 
+        cdatstr = get_datastr(nwtn=newtk, time=0,
+                              meshp=N, timps=tip)
+
+        # save the inival value
+        dou.save_npa(inivalvec, fstring=ddir + curdatname + '__vel')
+
         set_vpfiles(tip, fstring=('results/' +
                                   'NewtonIt{0}').format(newtk))
         dou.output_paraview(tip, femp, vp=vp_stokes, t=0)
@@ -292,26 +321,15 @@ def optcon_nse(N=10, Nts=10):
             # try - except for linearizations about stationary sols
             # for which t=None
             try:
-                prev_v = dou.load_npa(ddir + pdatstr + '__vel')
+                (convc_mat, rhs_con,
+                 rhsv_conbc, prev_v) = get_v_conv_conts(ddir+pdatstr,
+                                                        femp, tip)
             except IOError:
                 pdatstr = get_datastr(nwtn=newtk - 1, time=None,
                                       meshp=N, timps=tip)
-                prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-
-            # get and condense the linearized convection
-            # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
-
-            if tip['Navier']:
-                N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v,
-                                                   V=femp['V'],
-                                                   invinds=femp['invinds'],
-                                                   diribcs=femp['diribcs'])
-                convc_mat, rhsv_conbc = \
-                    dtn.condense_velmatsbybcs(N1 + N2, femp['diribcs'])
-
-            else:
-                convc_mat, rhsv_conbc = 0, 0
-                rhs_con = np.zeros((femp['V'].dim(), 1))
+                (convc_mat, rhs_con,
+                 rhsv_conbc, prev_v) = get_v_conv_conts(ddir+pdatstr,
+                                                        femp, tip)
 
             rhsd_cur = dict(fv=stokesmatsc['M'] * v_old +
                             DT * (rhs_con[INVINDS, :] +
@@ -416,30 +434,16 @@ def optcon_nse(N=10, Nts=10):
 
     for t in np.linspace(tip['tE'] - DT, tip['t0'], Nts):
         print 'Time is {0}'.format(t)
-    # for t in np.linspace(tip['tE'] - DT, tip['tE'] - DT, 1):
+
         # get the previous time convection matrices
+        if t == tip['t0']:
+            newtk = 0  # to get the initial velocity...
         pdatstr = get_datastr(nwtn=newtk, time=t,
                               meshp=N, timps=tip)
-        # try - except for linearizations about stationary sols
-        # for which t=None
-        try:
-            prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-        except IOError:
-            pdatstr = get_datastr(nwtn=newtk, time=None,
-                                  meshp=N, timps=tip)
-            prev_v = dou.load_npa(ddir + pdatstr + '__vel')
 
-        # get and condense the linearized convection
-        # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
-        if tip['Navier']:
-            N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v, V=femp['V'],
-                                               invinds=femp['invinds'],
-                                               diribcs=femp['diribcs'])
-            convc_mat, rhsv_conbc = dtn.condense_velmatsbybcs(N1 + N2,
-                                                              femp['diribcs'])
-        else:
-            convc_mat, rhsv_conbc = 0*stokesmatsc['MT'], 0
-            rhs_con = np.zeros((femp['V'].dim(), 1))
+        (convc_mat, rhs_con,
+         rhsv_conbc, prev_v) = get_v_conv_conts(ddir+pdatstr,
+                                                femp, tip)
 
         # coeffmat for nwtn adi
         ft_mat = -(0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] +
@@ -448,18 +452,15 @@ def optcon_nse(N=10, Nts=10):
         w_mat = np.hstack([stokesmatsc['MT'] * Zc, np.sqrt(DT) * trct_mat])
 
         Zp = pru.proj_alg_ric_newtonadi(mmat=stokesmatsc['MT'],
-                                        fmat=ft_mat,
-                                        transposed=True,
+                                        fmat=ft_mat, transposed=True,
                                         jmat=stokesmatsc['J'],
                                         bmat=np.sqrt(DT)*tb_mat,
-                                        wmat=w_mat,
-                                        z0=Zc,
+                                        wmat=w_mat, z0=Zc,
                                         nwtn_adi_dict=tip['nwtn_adi_dict']
                                         )['zfac']
 
         if tip['compress_z']:
-            Zc = pru.compress_Z(Zp, k=tip['comprzfac']*contp.NY)
-
+            Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'])
             # monitor the compression
             vec = np.random.randn(Zp.shape[0], 1)
             print '||(ZZ_red - ZZ )*testvec|| / ||ZZ_red*testvec|| = {0}'.\
@@ -475,4 +476,4 @@ def optcon_nse(N=10, Nts=10):
 
 
 if __name__ == '__main__':
-    optcon_nse(N=10, Nts=4)
+    optcon_nse(N=15, Nts=10)

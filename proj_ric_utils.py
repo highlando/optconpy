@@ -254,13 +254,13 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
             vec = np.random.randn(znn.shape[0], 1)
             vecn2 = comp_diff_zzv(znn, znc, vec)
             if vecn2 + vecn1 < nwtn_adi_dict['nwtn_upd_abstol']:
-                znred = compress_Z(znn, 500, shplot=False)
-                zcred = compress_Z(znc, 500, shplot=False)
-                upred_fnorm = lau.comp_sqfnrm_factrd_diff(znred, zcred)
-                print 'shapes', znn.shape, znred.shape
-                print 'comp upd norms', upd_fnorm, upred_fnorm
-                print vecn2+vecn1, znc.shape
+                # znred = compress_Zsvd(znn, thresh=1e-6, shplot=True)
+                # zcred = compress_Zsvd(znc, thresh=1e-6, shplot=False)
+                # upred_fnorm = lau.comp_sqfnrm_factrd_diff(znred, zcred)
                 upd_fnorm = lau.comp_sqfnrm_factrd_diff(znn, znc)
+                # print 'shapes', znn.shape, znred.shape
+                # print 'comp upd norms', upd_fnorm, upred_fnorm
+                # print vecn2+vecn1, znc.shape
                 upd_fnorm = np.sqrt(np.abs(upd_fnorm))
 
         nwtn_upd_fnorms.append(upd_fnorm)
@@ -274,7 +274,7 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                     print ('btw... we used an estimated norm:').\
                         format(nwtn_stp + 1)
                     print '|| upd * vec || / || vec || = {0}'.format(vecn1)
-                    print '|| upd * vec || / || vec || = {0}'.format(vecn2)
+                    print '|| upd * vec || / || vec || = {0}\n'.format(vecn2)
 
         except KeyError:
             pass    # no verbosity specified - nothing is shown
@@ -282,8 +282,7 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
         znc = znn
         nwtn_stp += 1
 
-    return dict(zfac=znn,
-                nwtn_upd_fnorms=nwtn_upd_fnorms)
+    return dict(zfac=znn, nwtn_upd_fnorms=nwtn_upd_fnorms)
 
 
 def comp_proj_lyap_res_norm(Z, F, M, W, J, Sinv=None):
@@ -314,8 +313,8 @@ def compress_Zsvd(Z, k=None, thresh=None, shplot=False):
     """routine that compresses the columns Z by means of a truncated SVD
 
     such that it ZZ.T is still well approximated"""
-    if Z.shape[1] >= Z.shape[0]:
-        raise Warning('TODO: catch cases where Z has more cols than rows')
+    # if Z.shape[1] >= Z.shape[0]:
+    #     raise Warning('TODO: catch cases where Z has more cols than rows')
 
     nny = Z.shape[1]
     U, s, V = np.linalg.svd(Z, full_matrices=False)
