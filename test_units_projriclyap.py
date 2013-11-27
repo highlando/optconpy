@@ -193,6 +193,7 @@ class TestProjLyap(unittest.TestCase):
         self.assertTrue(np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
                         < 1e-7)
 
+    @unittest.skip('mvd to test_units_compfacres_compress ')
     def test_compress_algric_Z(self):
         Z = pru.proj_alg_ric_newtonadi(mmat=self.M, fmat=self.F,
                                        jmat=self.J, bmat=self.bmat,

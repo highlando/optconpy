@@ -179,3 +179,46 @@ def comp_sqfnrm_factrd_diff(zone, ztwo, ret_sing_norms=False):
     return (ata * ata).sum(-1).sum() -  \
         2 * (atb * atb).sum(-1).sum() + \
         (btb * btb).sum(-1).sum()
+
+
+def comp_sqfnrm_factrd_sum(zone, ztwo, ret_sing_norms=False):
+    """compute the squared Frobenius norm of z1*z1.T + z2*z2.T
+
+    using the linearity traces and that tr.(z1.dot(z2)) = tr(z2.dot(z1))
+    and that tr(z1.dot(z1.T)) is faster computed via (z1*z1.sum(-1)).sum()
+    """
+
+    ata = np.dot(zone.T, zone)
+    btb = np.dot(ztwo.T, ztwo)
+    atb = np.dot(zone.T, ztwo)
+
+    if ret_sing_norms:
+        norm_z1 = (ata * ata).sum(-1).sum()
+        norm_z2 = (btb * btb).sum(-1).sum()
+        return (norm_z1 + 2 * (atb * atb).sum(-1).sum() + norm_z2,
+                norm_z1,
+                norm_z2)
+
+    return (ata * ata).sum(-1).sum() +  \
+        2 * (atb * atb).sum(-1).sum() + \
+        (btb * btb).sum(-1).sum()
+
+
+def comp_sqfnrm_factrd_lyap_res(A, B, C):
+    """compute the squared Frobenius norm of A*B.T + B*A.T + C*C.T
+
+    using the linearity traces and that tr.(z1.dot(z2)) = tr(z2.dot(z1))
+    and that tr(z1.dot(z1.T)) is faster computed via (z1*z1.sum(-1)).sum()
+    """
+
+    ata = np.dot(A.T, A)
+    atb = np.dot(A.T, B)
+    atc = np.dot(A.T, C)
+    btb = np.dot(B.T, B)
+    btc = np.dot(B.T, C)
+    ctc = np.dot(C.T, C)
+
+    return 2 * (btb * ata).sum(-1).sum() +  \
+        2 * (atb * atb.T).sum(-1).sum() + \
+        4 * (btc.T * atc.T).sum(-1).sum() + \
+        (ctc * ctc).sum(-1).sum()
