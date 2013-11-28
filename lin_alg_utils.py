@@ -10,6 +10,13 @@ def solve_sadpnt(amat, j1t=None, j2=None, f1=None, f2=None):
     """
 
 
+def solve_sadpnt_smw(amat, jmat, rhs, umat=None, vmat=None):
+    """solves with
+            A - np.dot(U,V)    -J.T
+            J                   0
+    """
+
+
 def stokes_steadystate(matdict=None, rhsdict=None, add_a=None):
     """solve for the steady state
 
