@@ -16,35 +16,35 @@ dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 def time_int_params(Nts):
     t0 = 0.0
-    tE = 0.01
+    tE = 0.1
     dt = (tE - t0) / Nts
     tip = dict(t0=t0,
                tE=tE,
                dt=dt,
                Nts=Nts,
-               Navier=False,  # set 0 for Stokes flow and 1 for NS
+               Navier=True,  # set 0 for Stokes flow and 1 for NS
                vfile=None,
                pfile=None,
                Residuals=[],
-               ParaviewOutput=True,
-               nu=1e-2,
-               nnewtsteps=3,  # n nwtn stps for vel comp
+               ParaviewOutput=False,
+               nu=1e-3,
+               nnewtsteps=4,  # n nwtn stps for vel comp
                vel_nwtn_tol=1e-14,
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
                    adi_max_steps=100,
-                   adi_newZ_reltol=1e-10,
-                   nwtn_max_steps=4,
+                   adi_newZ_reltol=1e-12,
+                   nwtn_max_steps=7,
                    nwtn_upd_reltol=4e-8,
-                   nwtn_upd_abstol=4e-8,
+                   nwtn_upd_abstol=1e-7,
                    verbose=True,
                    full_upd_norm_check=False
                ),
                compress_z=True,  # whether or not to compress Z
                comprz_maxc=200,  # compression of the columns of Z to c*NY
                comprz_thresh=1e-5,  # threshold for trunc of SVD
-               save_full_z=True,  # whether or not to save the uncompressed Z
+               save_full_z=False,  # whether or not to save the uncompressed Z
                )
 
     return tip
@@ -514,6 +514,8 @@ def optcon_nse(N=10, Nts=10):
         dou.save_npa(wc, fstring=ddir + pdatstr + cntpstr + '__w')
 
     # solve the closed loop system
+    set_vpfiles(tip, fstring=('results/' + 'closedloop' + cntpstr +
+                              'NewtonIt{0}').format(newtk))
     for t in np.linspace(tip['t0']+DT, tip['tE'], Nts):
 
         # t for implicit scheme
@@ -549,8 +551,8 @@ def optcon_nse(N=10, Nts=10):
 
         dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
 
-        # dou.output_paraview(tip, femp, vp=vpn, t=t),
+        dou.output_paraview(tip, femp, vp=vpn, t=t),
 
 
 if __name__ == '__main__':
-    optcon_nse(N=10, Nts=10)
+    optcon_nse(N=20, Nts=40)
