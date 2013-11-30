@@ -20,11 +20,12 @@ class TestProjLyap(unittest.TestCase):
         self.verbose = False
         self.compn = 15  # factor for comp Z ~~> compn*W.shape[1]
 
-        self.nwtn_adi_dict = dict(adi_max_steps=180,
-                                  adi_newZ_reltol=1e-8,
+        self.nwtn_adi_dict = dict(adi_max_steps=300,
+                                  adi_newZ_reltol=1e-11,
                                   nwtn_max_steps=24,
-                                  nwtn_upd_reltol=4e-8,
-                                  nwtn_upd_abstol=4e-8,
+                                  nwtn_upd_reltol=4e-7,
+                                  nwtn_upd_abstol=4e-7,
+                                  full_upd_norm_check=True,
                                   verbose=self.verbose)
 
         # -F, M spd -- coefficient matrices
@@ -33,7 +34,7 @@ class TestProjLyap(unittest.TestCase):
         self.M = sps.eye(self.NV) + \
             sps.rand(self.NV, self.NV) * sps.rand(self.NV, self.NV)
         try:
-            self.Mlu = spsla.splu(self.M.tocsc())
+            self.Mlu = spsla.factorized(self.M.tocsc())
         except RuntimeError:
             print 'M is not full rank'
 
@@ -159,6 +160,7 @@ class TestProjLyap(unittest.TestCase):
         self.assertTrue(np.allclose(Z, Z2))
         self.assertTrue(np.allclose(Z2, Z3))
         self.assertTrue(np.allclose(Z3, Z4))
+        self.assertTrue(np.allclose(Z, Z4))
 
     def test_proj_alg_ric_sol(self):
         """check the sol of the projected alg. Riccati Eqn
@@ -184,12 +186,14 @@ class TestProjLyap(unittest.TestCase):
 # TEST: result is 'projected' - riccati sol
         self.assertTrue(np.allclose(MtXM,
                                     np.dot(self.P.T, np.dot(MtXM, self.P))))
+
 # TEST: check projected residual - riccati sol
+        print np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
+
         self.assertTrue(np.linalg.norm(ProjRes) / np.linalg.norm(MtXM)
                         < 1e-7)
 
-
-    # @unittest.skip("why does this freeze on Oresme??")
+    @unittest.skip('mvd to test_units_compfacres_compress ')
     def test_compress_algric_Z(self):
         Z = pru.proj_alg_ric_newtonadi(mmat=self.M, fmat=self.F,
                                        jmat=self.J, bmat=self.bmat,

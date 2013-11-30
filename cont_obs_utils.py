@@ -197,11 +197,11 @@ def get_regularized_c(Ct=None, J=None, Mt=None):
         rCt = np.load('data/regCNY{0}vdim{1}.npy'.format(NY, Nv))
     except IOError:
         print 'no data/regCNY{0}vdim{1}.npy'.format(NY, Nv)
-        MTlu = spsla.splu(Mt)
+        MTlu = spsla.factorized(Mt)
         auCt = np.zeros(Ct.shape)
         # M.-T*C.T
         for ccol in range(NY):
-            auCt[:, ccol] = MTlu.solve(np.array(Ct[:, ccol].todense())[:, 0])
+            auCt[:, ccol] = MTlu(np.array(Ct[:, ccol].todense())[:, 0])
         # J*M.-T*C.T
         auCt = J * auCt
         # S.-T*J*M.-T*C.T

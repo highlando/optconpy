@@ -10,6 +10,13 @@ def solve_sadpnt(amat, j1t=None, j2=None, f1=None, f2=None):
     """
 
 
+def solve_sadpnt_smw(amat, jmat, rhs, umat=None, vmat=None):
+    """solves with
+            A - np.dot(U,V)    -J.T
+            J                   0
+    """
+
+
 def stokes_steadystate(matdict=None, rhsdict=None, add_a=None):
     """solve for the steady state
 
@@ -45,14 +52,14 @@ def apply_massinv(M, rhsa, output=None):
         return spsla.spsolve(M, rhsa)
 
     else:
-        mlu = spsla.splu(M.tocsc())
+        mlusolve = spsla.factorized(M.tocsc())
         try:
             mirhs = np.copy(rhsa.todense())
         except AttributeError:
             mirhs = np.copy(rhsa)
 
         for ccol in range(mirhs.shape[1]):
-            mirhs[:, ccol] = mlu.solve(mirhs[:, ccol])
+            mirhs[:, ccol] = mlusolve(mirhs[:, ccol])
 
         return mirhs
 
@@ -77,8 +84,8 @@ def get_Sinv_smw(amat_lu, umat=None, vmat=None):
 
     for ccol in range(umat.shape[1]):
         try:
-            aiu[:, ccol] = amat_lu.solve(umat[:, ccol])
-        except AttributeError:
+            aiu[:, ccol] = amat_lu(umat[:, ccol])
+        except TypeError:
             aiu[:, ccol] = spsla.spsolve(amat_lu, umat[:, ccol])
 
     if sps.isspmatrix(vmat):
@@ -87,7 +94,7 @@ def get_Sinv_smw(amat_lu, umat=None, vmat=None):
         return np.linalg.inv(np.eye(umat.shape[1]) - np.dot(vmat, aiu))
 
 
-def app_luinv_to_spmat(Alu, Z):
+def app_luinv_to_spmat(alu_solve, Z):
     """ compute A.-1*Z  where A comes factored
 
     and with a solve routine"""
@@ -95,7 +102,7 @@ def app_luinv_to_spmat(Alu, Z):
     Z.tocsc()
     ainvz = np.zeros(Z.shape)
     for ccol in range(Z.shape[1]):
-        ainvz[:, ccol] = Alu.solve(Z[:, ccol].toarray().flatten())
+        ainvz[:, ccol] = alu_solve(Z[:, ccol].toarray().flatten())
 
     return ainvz
 
@@ -117,9 +124,9 @@ def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
         crhs = rhsa[:, rhscol]
         # the corrected rhs: (I + U*Sinv*V*Ainv)*rhs
         try:
-            # if Alu comes with a solve routine, e.g. LU-factored - fine
-            aicrhs = Alu.solve(crhs)
-        except AttributeError:
+            # if Alu comes factorized, e.g. LU-factored - fine
+            aicrhs = Alu(crhs)
+        except TypeError:
             aicrhs = spsla.spsolve(Alu, crhs)
 
         if sps.isspmatrix(vmat):
@@ -128,8 +135,8 @@ def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
             crhs = crhs + np.dot(umat, np.dot(Sinv, np.dot(vmat, aicrhs)))
 
         try:
-            auvirhs[:, rhscol] = Alu.solve(crhs)
-        except AttributeError:
+            auvirhs[:, rhscol] = Alu(crhs)
+        except TypeError:
             auvirhs[:, rhscol] = spsla.spsolve(Alu, crhs)
 
     return auvirhs
@@ -144,8 +151,8 @@ def app_schurc_inv(M, J, veca):
     def _schurc(cveca):
         try:
             # if M comes with a solve routine
-            return J * M.solve(J.T * cveca.flatten())
-        except AttributeError:
+            return J * M(J.T * cveca.flatten())
+        except TypeError:
             return J * spsla.spsolve(M, J.T * cveca)
 
     S = spsla.LinearOperator((J.shape[0], J.shape[0]), matvec=_schurc,
@@ -179,3 +186,46 @@ def comp_sqfnrm_factrd_diff(zone, ztwo, ret_sing_norms=False):
     return (ata * ata).sum(-1).sum() -  \
         2 * (atb * atb).sum(-1).sum() + \
         (btb * btb).sum(-1).sum()
+
+
+def comp_sqfnrm_factrd_sum(zone, ztwo, ret_sing_norms=False):
+    """compute the squared Frobenius norm of z1*z1.T + z2*z2.T
+
+    using the linearity traces and that tr.(z1.dot(z2)) = tr(z2.dot(z1))
+    and that tr(z1.dot(z1.T)) is faster computed via (z1*z1.sum(-1)).sum()
+    """
+
+    ata = np.dot(zone.T, zone)
+    btb = np.dot(ztwo.T, ztwo)
+    atb = np.dot(zone.T, ztwo)
+
+    if ret_sing_norms:
+        norm_z1 = (ata * ata).sum(-1).sum()
+        norm_z2 = (btb * btb).sum(-1).sum()
+        return (norm_z1 + 2 * (atb * atb).sum(-1).sum() + norm_z2,
+                norm_z1,
+                norm_z2)
+
+    return (ata * ata).sum(-1).sum() +  \
+        2 * (atb * atb).sum(-1).sum() + \
+        (btb * btb).sum(-1).sum()
+
+
+def comp_sqfnrm_factrd_lyap_res(A, B, C):
+    """compute the squared Frobenius norm of A*B.T + B*A.T + C*C.T
+
+    using the linearity traces and that tr.(z1.dot(z2)) = tr(z2.dot(z1))
+    and that tr(z1.dot(z1.T)) is faster computed via (z1*z1.sum(-1)).sum()
+    """
+
+    ata = np.dot(A.T, A)
+    atb = np.dot(A.T, B)
+    atc = np.dot(A.T, C)
+    btb = np.dot(B.T, B)
+    btc = np.dot(B.T, C)
+    ctc = np.dot(C.T, C)
+
+    return 2 * (btb * ata).sum(-1).sum() +  \
+        2 * (atb * atb.T).sum(-1).sum() + \
+        4 * (btc.T * atc.T).sum(-1).sum() + \
+        (ctc * ctc).sum(-1).sum()
