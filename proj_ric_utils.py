@@ -226,7 +226,7 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
     nwtn_upd_fnorms = []
 
     while nwtn_stp < nwtn_adi_dict['nwtn_max_steps'] and \
-            upd_fnorm > nwtn_adi_dict['nwtn_upd_abstol']:
+            upd_fnorm > nwtn_adi_dict['nwtn_upd_reltol']:
 
         try:
             mtxb = mt * np.dot(znc, np.dot(znc.T, bmat))
@@ -258,19 +258,20 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                 # znred = compress_Zsvd(znn, thresh=1e-6, shplot=True)
                 # zcred = compress_Zsvd(znc, thresh=1e-6, shplot=False)
                 # upred_fnorm = lau.comp_sqfnrm_factrd_diff(znred, zcred)
-                upd_fnorm = lau.comp_sqfnrm_factrd_diff(znn, znc)
+                upd_fnorm, nzn, nzc = lau.\
+                    comp_sqfnrm_factrd_diff(znn, znc, ret_sing_norms=True)
                 # print 'shapes', znn.shape, znred.shape
                 # print 'comp upd norms', upd_fnorm, upred_fnorm
                 # print vecn2+vecn1, znc.shape
-                upd_fnorm = np.sqrt(np.abs(upd_fnorm))
+                upd_fnorm = np.sqrt(np.abs(upd_fnorm) / np.abs(nzn))
 
         nwtn_upd_fnorms.append(upd_fnorm)
 
         try:
             if nwtn_adi_dict['verbose']:
                 print ('Newton ADI step: {1} --' +
-                       'f norm of update: {0}').format(upd_fnorm,
-                                                       nwtn_stp + 1)
+                       'rel f norm of update: {0}').format(upd_fnorm,
+                                                           nwtn_stp + 1)
                 if not nwtn_adi_dict['full_upd_norm_check']:
                     print ('btw... we used an estimated norm:').\
                         format(nwtn_stp + 1)
