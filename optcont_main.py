@@ -43,7 +43,7 @@ def time_int_params(Nts):
                ),
                compress_z=True,  # whether or not to compress Z
                comprz_maxc=200,  # compression of the columns of Z to c*NY
-               comprz_thresh=1e-7,  # threshold for trunc of SVD
+               comprz_thresh=1e-5,  # threshold for trunc of SVD
                save_full_z=True,  # whether or not to save the uncompressed Z
                )
 
@@ -83,7 +83,7 @@ class ContParams():
 
         self.R = None
         # regularization parameter
-        self.alphau = 1e-4
+        self.alphau = 1e-5
         self.V = None
         self.W = None
 
@@ -415,8 +415,8 @@ def optcon_nse(N=10, Nts=10):
                                         Mt=stokesmatsc['MT'])
 
     # set the weighing matrices
-    if contp.R is None:
-        contp.R = contp.alphau * u_masmat
+    # if contp.R is None:
+    contp.R = contp.alphau * u_masmat
     # TODO: by now we tacitly assume that V, W = MyC.T My^-1 MyC
     # if contp.V is None:
     #     contp.V = My
@@ -444,8 +444,10 @@ def optcon_nse(N=10, Nts=10):
 
     cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, timps=tip)
 
-    dou.save_npa(Zc, fstring=ddir + cdatstr + '__Z')
-    dou.save_npa(wc, fstring=ddir + cdatstr + '__w')
+    dou.save_npa(Zc, fstring=ddir + cdatstr +
+                 '_alphau{0}__Z'.format(contp.alphau))
+    dou.save_npa(wc, fstring=ddir + cdatstr +
+                 '_alphau{0}__w'.format(contp.alphau))
 
     # we gonna use this quite often
     MT, AT = stokesmatsc['MT'], stokesmatsc['AT']
@@ -457,37 +459,45 @@ def optcon_nse(N=10, Nts=10):
         # get the previous time convection matrices
         pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, timps=tip)
         prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-        convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(prev_v, femp, tip)
 
-        # coeffmat for nwtn adi
-        ft_mat = -(0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] +
-                                                   convc_mat.T))
-        # rhs for nwtn adi
-        w_mat = np.hstack([stokesmatsc['MT'] * Zc, np.sqrt(DT) * trct_mat])
+        try:
+            Zc = dou.load_npa(ddir + pdatstr +
+                              '_alphau{0}__Z'.format(contp.alphau))
+        except IOError:
+            convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(prev_v,
+                                                              femp, tip)
 
-        Zp = pru.proj_alg_ric_newtonadi(mmat=stokesmatsc['MT'],
-                                        fmat=ft_mat, transposed=True,
-                                        jmat=stokesmatsc['J'],
-                                        bmat=np.sqrt(DT)*tb_mat,
-                                        wmat=w_mat, z0=Zc,
-                                        nwtn_adi_dict=tip['nwtn_adi_dict']
-                                        )['zfac']
+            # coeffmat for nwtn adi
+            ft_mat = -(0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] +
+                                                       convc_mat.T))
+            # rhs for nwtn adi
+            w_mat = np.hstack([stokesmatsc['MT']*Zc, np.sqrt(DT)*trct_mat])
 
-        if tip['compress_z']:
-            Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'])
-            # monitor the compression
-            vec = np.random.randn(Zp.shape[0], 1)
-            print '||(ZZ_red - ZZ )*testvec|| / ||ZZ_red*testvec|| = {0}'.\
-                format(np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec)) -
-                       np.dot(Zc, np.dot(Zc.T, vec))) /
-                       np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec))))
-        else:
-            Zc = Zp
+            Zp = pru.proj_alg_ric_newtonadi(mmat=stokesmatsc['MT'],
+                                            fmat=ft_mat, transposed=True,
+                                            jmat=stokesmatsc['J'],
+                                            bmat=np.sqrt(DT)*tb_mat,
+                                            wmat=w_mat, z0=Zc,
+                                            nwtn_adi_dict=tip['nwtn_adi_dict']
+                                            )['zfac']
 
-        if tip['save_full_z']:
-            dou.save_npa(Zp, fstring=ddir + pdatstr + '__Z')
-        else:
-            dou.save_npa(Zc, fstring=ddir + pdatstr + '__Z')
+            if tip['compress_z']:
+                Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'])
+                # monitor the compression
+                vec = np.random.randn(Zp.shape[0], 1)
+                print '||(ZZ_red - ZZ )*testvec|| / ||ZZ_red*testvec|| = {0}'.\
+                    format(np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec)) -
+                           np.dot(Zc, np.dot(Zc.T, vec))) /
+                           np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec))))
+            else:
+                Zc = Zp
+
+            if tip['save_full_z']:
+                dou.save_npa(Zp, fstring=ddir + pdatstr +
+                             '_alphau{0}__Z'.format(contp.alphau))
+            else:
+                dou.save_npa(Zc, fstring=ddir + pdatstr +
+                             '_alphau{0}__Z'.format(contp.alphau))
 
         ### and the affine correction
         ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
@@ -504,7 +514,8 @@ def optcon_nse(N=10, Nts=10):
         umate = np.vstack([umat, np.zeros((NP, umat.shape[1]))])
 
         wc = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)[:NV]
-        dou.save_npa(wc, fstring=ddir + pdatstr + '__w')
+        dou.save_npa(wc, fstring=ddir + pdatstr +
+                     '_alphau{0}__w'.format(contp.alphau))
 
     # solve the closed loop system
     for t in np.linspace(tip['t0']+DT, tip['tE'], Nts):
@@ -519,8 +530,10 @@ def optcon_nse(N=10, Nts=10):
                                                           femp, tip)
 
         # feedback mats
-        next_zmat = dou.load_npa(ddir + ndatstr + '__Z')
-        next_w = dou.load_npa(ddir + ndatstr + '__w')
+        next_zmat = dou.load_npa(ddir + ndatstr +
+                                 '_alphau{0}__Z'.format(contp.alphau))
+        next_w = dou.load_npa(ddir + ndatstr +
+                              '_alphau{0}__w'.format(contp.alphau))
 
         umat = DT*MT*np.dot(next_zmat, next_zmat.T*tb_mat)
         vmat = tb_mat.T
