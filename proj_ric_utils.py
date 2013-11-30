@@ -38,7 +38,8 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
     else:
         At, Mt = A.T, M.T
 
-    ms = [-10.0, -8.0, -5.0, -3.0, -2.0, -1.0]
+    # ms = [-10.0, -8.0, -5.0, -3.0, -2.0, -1.0]
+    ms = [-10.0, -5.0, -3.0, -1.0]
     NZ = W.shape[0]
 
     def get_atmtlu(At, Mt, J, ms):
@@ -253,7 +254,7 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
             vecn1 = comp_diff_zzv(znn, znc, vec)
             vec = np.random.randn(znn.shape[0], 1)
             vecn2 = comp_diff_zzv(znn, znc, vec)
-            if vecn2 + vecn1 < nwtn_adi_dict['nwtn_upd_abstol']:
+            if vecn2 + vecn1 < 8e-9:
                 # znred = compress_Zsvd(znn, thresh=1e-6, shplot=True)
                 # zcred = compress_Zsvd(znc, thresh=1e-6, shplot=False)
                 # upred_fnorm = lau.comp_sqfnrm_factrd_diff(znred, zcred)
