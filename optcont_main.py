@@ -66,11 +66,11 @@ class ContParams():
     """
     def __init__(self):
 
-        self.ystarx = dolfin.Expression('-1', t=0)
-        self.ystary = dolfin.Expression('-1', t=0)
+        self.ystarx = dolfin.Expression('0', t=0)
+        self.ystary = dolfin.Expression('0', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
-        self.NU, self.NY = 5, 3
+        self.NU, self.NY = 5, 5
 
         self.odcoo = dict(xmin=0.45,
                           xmax=0.55,
@@ -437,6 +437,8 @@ def optcon_nse(N=10, Nts=10):
     trct_mat = lau.apply_invsqrt_fromleft(y_masmat, mct_mat_reg,
                                           output='dense')
 
+    cntpstr = 'NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY, contp.alphau)
+
     # set/compute the terminal values aka starting point
     Zc = lau.apply_massinv(stokesmatsc['M'], trct_mat)
     wc = -lau.apply_massinv(stokesmatsc['MT'],
@@ -444,10 +446,8 @@ def optcon_nse(N=10, Nts=10):
 
     cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, timps=tip)
 
-    dou.save_npa(Zc, fstring=ddir + cdatstr +
-                 '_alphau{0}__Z'.format(contp.alphau))
-    dou.save_npa(wc, fstring=ddir + cdatstr +
-                 '_alphau{0}__w'.format(contp.alphau))
+    dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
+    dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
 
     # we gonna use this quite often
     MT, AT = stokesmatsc['MT'], stokesmatsc['AT']
@@ -459,13 +459,12 @@ def optcon_nse(N=10, Nts=10):
         # get the previous time convection matrices
         pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, timps=tip)
         prev_v = dou.load_npa(ddir + pdatstr + '__vel')
+        convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(prev_v,
+                                                          femp, tip)
 
         try:
-            Zc = dou.load_npa(ddir + pdatstr +
-                              '_alphau{0}__Z'.format(contp.alphau))
+            Zc = dou.load_npa(ddir + pdatstr + cntpstr + '__Z')
         except IOError:
-            convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(prev_v,
-                                                              femp, tip)
 
             # coeffmat for nwtn adi
             ft_mat = -(0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] +
@@ -493,11 +492,9 @@ def optcon_nse(N=10, Nts=10):
                 Zc = Zp
 
             if tip['save_full_z']:
-                dou.save_npa(Zp, fstring=ddir + pdatstr +
-                             '_alphau{0}__Z'.format(contp.alphau))
+                dou.save_npa(Zp, fstring=ddir + pdatstr + cntpstr + '__Z')
             else:
-                dou.save_npa(Zc, fstring=ddir + pdatstr +
-                             '_alphau{0}__Z'.format(contp.alphau))
+                dou.save_npa(Zc, fstring=ddir + pdatstr + cntpstr + '__Z')
 
         ### and the affine correction
         ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
@@ -514,8 +511,7 @@ def optcon_nse(N=10, Nts=10):
         umate = np.vstack([umat, np.zeros((NP, umat.shape[1]))])
 
         wc = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)[:NV]
-        dou.save_npa(wc, fstring=ddir + pdatstr +
-                     '_alphau{0}__w'.format(contp.alphau))
+        dou.save_npa(wc, fstring=ddir + pdatstr + cntpstr + '__w')
 
     # solve the closed loop system
     for t in np.linspace(tip['t0']+DT, tip['tE'], Nts):
@@ -530,10 +526,8 @@ def optcon_nse(N=10, Nts=10):
                                                           femp, tip)
 
         # feedback mats
-        next_zmat = dou.load_npa(ddir + ndatstr +
-                                 '_alphau{0}__Z'.format(contp.alphau))
-        next_w = dou.load_npa(ddir + ndatstr +
-                              '_alphau{0}__w'.format(contp.alphau))
+        next_zmat = dou.load_npa(ddir + ndatstr + cntpstr + '__Z')
+        next_w = dou.load_npa(ddir + ndatstr + cntpstr + '__w')
 
         umat = DT*MT*np.dot(next_zmat, next_zmat.T*tb_mat)
         vmat = tb_mat.T
@@ -559,4 +553,4 @@ def optcon_nse(N=10, Nts=10):
 
 
 if __name__ == '__main__':
-    optcon_nse(N=15, Nts=10)
+    optcon_nse(N=10, Nts=10)
