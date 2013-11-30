@@ -33,9 +33,9 @@ def time_int_params(Nts):
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
-                   adi_max_steps=80,
+                   adi_max_steps=100,
                    adi_newZ_reltol=1e-10,
-                   nwtn_max_steps=1,
+                   nwtn_max_steps=4,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=4e-8,
                    verbose=True,
@@ -66,8 +66,8 @@ class ContParams():
     """
     def __init__(self):
 
-        self.ystarx = dolfin.Expression('t*1', t=0)
-        self.ystary = dolfin.Expression('1', t=0)
+        self.ystarx = dolfin.Expression('-1', t=0)
+        self.ystary = dolfin.Expression('-1', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
         self.NU, self.NY = 5, 3
@@ -198,9 +198,9 @@ def setup_sadpnt_matsrhs(amat, jmat, rhsv, rhsp=None, jmatT=None):
     if jmatT is None:
         jmatT = jmat.T
     if rhsp is None:
-        rhsp = np.zeros((1, nnpp))
+        rhsp = np.zeros((nnpp, 1))
 
-    sysm1 = sps.hstack(amat, jmat.T, format='csr')
+    sysm1 = sps.hstack([amat, jmat.T], format='csr')
     sysm2 = sps.hstack([jmat, sps.csr_matrix((nnpp, nnpp))], format='csr')
 
     mata = sps.vstack([sysm1, sysm2], format='csr')
@@ -327,12 +327,12 @@ def optcon_nse(N=10, Nts=10):
         print 'Computing Newton Iteration {0} -- ({1} timesteps)'.\
             format(newtk, Nts)
 
-        for t in np.linspace(tip['t0'] + DT, tip['tE'], Nts):
+        for t in np.linspace(tip['t0']+DT, tip['tE'], Nts):
             cdatstr = get_datastr(nwtn=newtk, time=t,
                                   meshp=N, timps=tip)
 
             # t for implicit scheme
-            pdatstr = get_datastr(nwtn=newtk - 1, time=t,
+            pdatstr = get_datastr(nwtn=newtk-1, time=t,
                                   meshp=N, timps=tip)
 
             # try - except for linearizations about stationary sols
@@ -449,6 +449,7 @@ def optcon_nse(N=10, Nts=10):
 
     # we gonna use this quite often
     MT, AT = stokesmatsc['MT'], stokesmatsc['AT']
+    M, A = stokesmatsc['M'], stokesmatsc['A']
 
     for t in np.linspace(tip['tE'] - DT, tip['t0'], Nts):
         print 'Time is {0}'.format(t)
@@ -491,17 +492,58 @@ def optcon_nse(N=10, Nts=10):
         ### and the affine correction
         ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
         at_mat = MT + DT*(AT + convc_mat.T)
-        rhswc = MT + DT*(mc_mat.T*contp.ystarvec(t) -
-                         MT*np.dot(Zc, np.dot(Zc.T, ftilde)))
+        rhswc = MT*wc + DT*(mc_mat.T*contp.ystarvec(t) -
+                            MT*np.dot(Zc, np.dot(Zc.T, ftilde)))
 
         amat, currhs = setup_sadpnt_matsrhs(at_mat, stokesmatsc['J'], rhswc)
 
-        umat = DT*MT*np.dot(Zc, np.dot(Zc.T, tb_mat))
-        vmat = tb_mat
+        umat = DT*MT*np.dot(Zc, Zc.T*tb_mat)
+        vmat = tb_mat.T
 
-        vmate = np.hstack([vmat, np.zeros((vmat.shape[0], NP))])
+        vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], NP))])
         umate = np.vstack([umat, np.zeros((NP, umat.shape[1]))])
+
+        wc = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)[:NV]
+        dou.save_npa(wc, fstring=ddir + pdatstr + '__w')
+
+    # solve the closed loop system
+    for t in np.linspace(tip['t0']+DT, tip['tE'], Nts):
+
+        # t for implicit scheme
+        ndatstr = get_datastr(nwtn=newtk, time=t,
+                              meshp=N, timps=tip)
+
+        # convec mats
+        next_v = dou.load_npa(ddir + ndatstr + '__vel')
+        convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(next_v,
+                                                          femp, tip)
+
+        # feedback mats
+        next_zmat = dou.load_npa(ddir + ndatstr + '__Z')
+        next_w = dou.load_npa(ddir + ndatstr + '__w')
+
+        umat = DT*MT*np.dot(next_zmat, next_zmat.T*tb_mat)
+        vmat = tb_mat.T
+
+        vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], NP))])
+        umate = np.vstack([umat, np.zeros((NP, umat.shape[1]))])
+
+        fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
+        rhsn = M*next_v + DT*(fvn + tb_mat * (tb_mat.T * next_w))
+
+        amat = M + DT*(A + convc_mat)
+
+        amat, currhs = setup_sadpnt_matsrhs(amat, stokesmatsc['J'], rhsn)
+
+        vpn = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)
+
+        yn = lau.apply_massinv(y_masmat, mc_mat*vpn[:NV])
+        print 'current y: ', yn
+
+        dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
+
+        # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
 
 if __name__ == '__main__':
-    optcon_nse(N=10, Nts=10)
+    optcon_nse(N=15, Nts=10)
