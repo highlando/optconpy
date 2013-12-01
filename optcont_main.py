@@ -16,7 +16,7 @@ dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 def time_int_params(Nts):
     t0 = 0.0
-    tE = 0.1
+    tE = 0.01
     dt = (tE - t0) / Nts
     tip = dict(t0=t0,
                tE=tE,
@@ -530,6 +530,7 @@ def optcon_nse(N=10, Nts=10):
         # feedback mats
         next_zmat = dou.load_npa(ddir + ndatstr + cntpstr + '__Z')
         next_w = dou.load_npa(ddir + ndatstr + cntpstr + '__w')
+        print 'norm of w:' , np.linalg.norm(next_w)
 
         umat = DT*MT*np.dot(next_zmat, next_zmat.T*tb_mat)
         vmat = tb_mat.T
@@ -538,13 +539,15 @@ def optcon_nse(N=10, Nts=10):
         umate = np.vstack([umat, np.zeros((NP, umat.shape[1]))])
 
         fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
-        rhsn = M*next_v + DT*(fvn + tb_mat * (tb_mat.T * next_w))
+        # rhsn = M*next_v + DT*(fvn + tb_mat * (tb_mat.T * next_w))
+        rhsn = M*next_v + DT*(fvn + 0*tb_mat * (tb_mat.T * next_w))
 
         amat = M + DT*(A + convc_mat)
 
         amat, currhs = setup_sadpnt_matsrhs(amat, stokesmatsc['J'], rhsn)
 
-        vpn = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)
+        # vpn = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)
+        vpn = sps.spsolve(amat, currhs)
 
         yn = lau.apply_massinv(y_masmat, mc_mat*vpn[:NV])
         print 'current y: ', yn
@@ -555,4 +558,4 @@ def optcon_nse(N=10, Nts=10):
 
 
 if __name__ == '__main__':
-    optcon_nse(N=20, Nts=40)
+    optcon_nse(N=20, Nts=5)
