@@ -26,24 +26,24 @@ def time_int_params(Nts):
                vfile=None,
                pfile=None,
                Residuals=[],
-               ParaviewOutput=False,
-               nu=1e-3,
+               ParaviewOutput=True,
+               nu=1e-1,
                nnewtsteps=4,  # n nwtn stps for vel comp
                vel_nwtn_tol=1e-14,
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
                    adi_max_steps=100,
-                   adi_newZ_reltol=1e-12,
-                   nwtn_max_steps=7,
+                   adi_newZ_reltol=1e-10,
+                   nwtn_max_steps=6,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=1e-7,
                    verbose=True,
                    full_upd_norm_check=False
                ),
                compress_z=True,  # whether or not to compress Z
-               comprz_maxc=200,  # compression of the columns of Z to c*NY
-               comprz_thresh=1e-5,  # threshold for trunc of SVD
+               comprz_maxc=500,  # compression of the columns of Z by QR
+               comprz_thresh=5e-5,  # threshold for trunc of SVD
                save_full_z=False,  # whether or not to save the uncompressed Z
                )
 
@@ -66,11 +66,11 @@ class ContParams():
     """
     def __init__(self):
 
-        self.ystarx = dolfin.Expression('0', t=0)
-        self.ystary = dolfin.Expression('0', t=0)
+        self.ystarx = dolfin.Expression('0.0', t=0)
+        self.ystary = dolfin.Expression('100.0', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
-        self.NU, self.NY = 5, 5
+        self.NU, self.NY = 4, 4
 
         self.odcoo = dict(xmin=0.45,
                           xmax=0.55,
@@ -83,7 +83,8 @@ class ContParams():
 
         self.R = None
         # regularization parameter
-        self.alphau = 1e-5
+        self.alphau = 1e-7
+        self.endpy = 10
         self.V = None
         self.W = None
 
@@ -434,8 +435,8 @@ def optcon_nse(N=10, Nts=10):
     tb_mat = lau.apply_invsqrt_fromleft(contp.R, b_mat,
                                         output='sparse')
 
-    trct_mat = lau.apply_invsqrt_fromleft(y_masmat, mct_mat_reg,
-                                          output='dense')
+    trct_mat = lau.apply_invsqrt_fromleft(contp.endpy*y_masmat,
+                                          mct_mat_reg, output='dense')
 
     cntpstr = 'NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY, contp.alphau)
 
@@ -467,8 +468,8 @@ def optcon_nse(N=10, Nts=10):
         except IOError:
 
             # coeffmat for nwtn adi
-            ft_mat = -(0.5 * stokesmatsc['MT'] + DT * (stokesmatsc['AT'] +
-                                                       convc_mat.T))
+            ft_mat = -(0.5*stokesmatsc['MT'] + DT*(stokesmatsc['AT'] +
+                                                   convc_mat.T))
             # rhs for nwtn adi
             w_mat = np.hstack([stokesmatsc['MT']*Zc, np.sqrt(DT)*trct_mat])
 
@@ -481,9 +482,11 @@ def optcon_nse(N=10, Nts=10):
                                             )['zfac']
 
             if tip['compress_z']:
+                # Zc = pru.compress_ZQR(Zp, kmax=tip['comprz_maxc'])
                 Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'])
                 # monitor the compression
                 vec = np.random.randn(Zp.shape[0], 1)
+                print 'dims of Z and Z_red: ', Zp.shape, Zc.shape
                 print '||(ZZ_red - ZZ )*testvec|| / ||ZZ_red*testvec|| = {0}'.\
                     format(np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec)) -
                            np.dot(Zc, np.dot(Zc.T, vec))) /
@@ -536,18 +539,21 @@ def optcon_nse(N=10, Nts=10):
         vmat = tb_mat.T
 
         vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], NP))])
-        umate = np.vstack([umat, np.zeros((NP, umat.shape[1]))])
+        umate = DT*np.vstack([umat, np.zeros((NP, umat.shape[1]))])
 
         fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
         # rhsn = M*next_v + DT*(fvn + tb_mat * (tb_mat.T * next_w))
         rhsn = M*next_v + DT*(fvn + 0*tb_mat * (tb_mat.T * next_w))
 
         amat = M + DT*(A + convc_mat)
+        rvec = np.random.randn(next_zmat.shape[0], 1)
+        print 'norm of amat', np.linalg.norm(amat*rvec)
+        print 'norm of gain mat', np.linalg.norm(np.dot(umat, vmat*rvec))
 
         amat, currhs = setup_sadpnt_matsrhs(amat, stokesmatsc['J'], rhsn)
 
-        # vpn = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)
-        vpn = sps.spsolve(amat, currhs)
+        vpn = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)
+        # vpn = np.atleast_2d(sps.linalg.spsolve(amat, currhs)).T
 
         yn = lau.apply_massinv(y_masmat, mc_mat*vpn[:NV])
         print 'current y: ', yn
@@ -556,6 +562,7 @@ def optcon_nse(N=10, Nts=10):
 
         dou.output_paraview(tip, femp, vp=vpn, t=t),
 
+    print 'dim of v :', femp['V'].dim()
 
 if __name__ == '__main__':
     optcon_nse(N=20, Nts=5)

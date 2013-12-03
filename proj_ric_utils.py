@@ -275,8 +275,7 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                 if not nwtn_adi_dict['full_upd_norm_check']:
                     print ('btw... we used an estimated norm:').\
                         format(nwtn_stp + 1)
-                    print '|| upd * vec || / || vec || = {0}'.format(vecn1)
-                    print '|| upd * vec || / || vec || = {0}\n'.format(vecn2)
+                    print '|| upd * vec || / || vec || = {0}'.format(vecn2)
 
         except KeyError:
             pass    # no verbosity specified - nothing is shown
@@ -340,7 +339,7 @@ def compress_Zsvd(Z, k=None, thresh=None, shplot=False):
     return U[:, :k] * S
 
 
-def compress_Z(Z, tol=None, shplot=False):
+def compress_ZQR(Z, kmax=None, shplot=False):
     """routine that compresses the columns Z by means of rank revealing QR
 
     such that it ZZ.T is still well approximated"""
@@ -351,7 +350,7 @@ def compress_Z(Z, tol=None, shplot=False):
         import matplotlib.pyplot as plt
         plt.show()
 
-    return rmat[:, np.argsort(permumat)].T
+    return rmat[:kmax, np.argsort(permumat)].T
 
 
 def comp_diff_zzv(zone, ztwo, vec):
