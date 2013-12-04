@@ -16,7 +16,7 @@ dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 def time_int_params(Nts):
     t0 = 0.0
-    tE = 0.01
+    tE = 1.0
     dt = (tE - t0) / Nts
     tip = dict(t0=t0,
                tE=tE,
@@ -27,14 +27,14 @@ def time_int_params(Nts):
                pfile=None,
                Residuals=[],
                ParaviewOutput=True,
-               nu=1e-1,
+               nu=1e-2,
                nnewtsteps=4,  # n nwtn stps for vel comp
                vel_nwtn_tol=1e-14,
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
                    adi_max_steps=100,
-                   adi_newZ_reltol=1e-10,
+                   adi_newZ_reltol=1e-5,
                    nwtn_max_steps=6,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=1e-7,
@@ -67,7 +67,7 @@ class ContParams():
     def __init__(self):
 
         self.ystarx = dolfin.Expression('0.0', t=0)
-        self.ystary = dolfin.Expression('100.0', t=0)
+        self.ystary = dolfin.Expression('1.0', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
         self.NU, self.NY = 4, 4
@@ -565,4 +565,4 @@ def optcon_nse(N=10, Nts=10):
     print 'dim of v :', femp['V'].dim()
 
 if __name__ == '__main__':
-    optcon_nse(N=20, Nts=5)
+    optcon_nse(N=25, Nts=100)

@@ -128,6 +128,15 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
             muind = np.mod(muind+1, len(ms))
             adi_rel_newZ_norms.append(rel_newZ_norm)
 
+
+            if np.mod(adi_step, 10) == 0:
+                sqrdprolyares = comp_proj_lyap_res_norm(Z, amat=A, mmat=M,
+                                                        wmat=W, jmat=J,
+                                                        umat=umat, vmat=vmat)
+                print 'adistep ', adi_step
+                print 'cur proj lyap res: ', np.sqrt(sqrdprolyares)
+                print 'rel Z norm: \n', rel_newZ_norm
+
         try:
             if adi_dict['verbose']:
                 print ('Number of ADI steps {0} -- \n' +
@@ -204,7 +213,7 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                            bmat=None, wmat=None, z0=None,
                            transposed=False,
                            nwtn_adi_dict=dict(adi_max_steps=150,
-                                              adi_newZ_reltol=1e-8,
+                                              adi_newZ_reltol=1e-5,
                                               nwtn_max_steps=14,
                                               nwtn_upd_reltol=1e-8)):
     """ solve the projected algebraic ricc via newton adi
@@ -286,7 +295,8 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
     return dict(zfac=znn, nwtn_upd_fnorms=nwtn_upd_fnorms)
 
 
-def comp_proj_lyap_res_norm(Z, F, M, W, J, Sinv=None):
+def comp_proj_lyap_res_norm(Z, amat=None, mmat=None, wmat=None, 
+                            jmat=None, umat=None, vmat=None, Sinv=None):
     """compute the squared f norm of projected lyap residual
 
         res = Pt*[ Ft*ZZt*M + Mt*ZZt*M + W*Wt ]*P
@@ -296,16 +306,21 @@ def comp_proj_lyap_res_norm(Z, F, M, W, J, Sinv=None):
         raise Warning('TODO: catch cases where Z has more cols than rows')
 
     if Sinv is None:
-        Mlu = spsla.factorized(M)
-        MinvJt = lau.app_luinv_to_spmat(Mlu, J.T)
-        Sinv = np.linalg.inv(J * MinvJt)
+        Mlu = spsla.factorized(mmat)
+        MinvJt = lau.app_luinv_to_spmat(Mlu, jmat.T)
+        Sinv = np.linalg.inv(jmat * MinvJt)
 
-    def _app_pt(Z, J, MinvJt, Sinv):
-        return Z - J.T * np.dot(Sinv, np.dot(MinvJt.T, Z))
+    def _app_pt(Z, jmat, MinvJt, Sinv):
+        return Z - jmat.T * np.dot(Sinv, np.dot(MinvJt.T, Z))
 
-    PtFtZ = _app_pt(F.T * Z, J, MinvJt, Sinv)
-    PtMtZ = _app_pt(M.T * Z, J, MinvJt, Sinv)
-    PtW = _app_pt(W, J, MinvJt, Sinv)
+    if umat is None and vmat is None:
+        amattZ = amat.T * Z
+    else:
+        amattZ = amat.T*Z - np.dot(vmat.T, umat.T * Z)
+
+    PtFtZ = _app_pt(amat.T * Z, jmat, MinvJt, Sinv)
+    PtMtZ = _app_pt(mmat.T * Z, jmat, MinvJt, Sinv)
+    PtW = _app_pt(wmat, jmat, MinvJt, Sinv)
 
     return lau.comp_sqfnrm_factrd_lyap_res(PtMtZ, PtFtZ, PtW)
 
