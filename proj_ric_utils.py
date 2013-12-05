@@ -316,9 +316,9 @@ def comp_proj_lyap_res_norm(Z, amat=None, mmat=None, wmat=None,
     if umat is None and vmat is None:
         amattZ = amat.T * Z
     else:
-        amattZ = amat.T*Z - np.dot(vmat.T, umat.T * Z)
+        amattZ = amat.T*Z - lau.comp_uvz_spdns(vmat.T, umat.T, Z)
 
-    PtFtZ = _app_pt(amat.T * Z, jmat, MinvJt, Sinv)
+    PtFtZ = _app_pt(amattZ, jmat, MinvJt, Sinv)
     PtMtZ = _app_pt(mmat.T * Z, jmat, MinvJt, Sinv)
     PtW = _app_pt(wmat, jmat, MinvJt, Sinv)
 

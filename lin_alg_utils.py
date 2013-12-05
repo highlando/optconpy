@@ -5,16 +5,47 @@ import scipy.sparse.linalg as spsla
 import krypy.linsys
 
 
-def solve_sadpnt(amat, j1t=None, j2=None, f1=None, f2=None):
-    """TODO more explicit method for the stokes problem
-    """
+def app_prj_via_sadpnt(amat, jmat, rhsv,
+                       jmatT=None, umat=None, vmat=None):
+    """apply projection via solving a sadpnt problem"""
+
+    if umat is None and vmat is None:
+        arhsv = amat * rhsv
+    else:
+        arhsv = amat * rhsv - \
+            np.dot(umat, np.dot(vmat, rhsv))
+
+    return solve_sadpnt_smw(amat, jmat, arhsv, jmatT=jmatT)[:amat.shape[0], :]
 
 
-def solve_sadpnt_smw(amat, jmat, rhs, umat=None, vmat=None):
+def solve_sadpnt_smw(amat, jmat, rhsv,
+                     jmatT=None, umat=None, vmat=None,
+                     rhsp=None):
     """solves with
-            A - np.dot(U,V)    -J.T
-            J                   0
+            A - np.dot(U,V)    J.T  *  X   =   rhsv
+            J                   0              rhsp
     """
+
+    nnpp = jmat.shape[0]
+
+    if jmatT is None:
+        jmatT = jmat.T
+    if rhsp is None:
+        rhsp = np.zeros((nnpp, rhsv.shape[1]))
+
+    sysm1 = sps.hstack([amat, jmatT], format='csr')
+    sysm2 = sps.hstack([jmat, sps.csr_matrix((nnpp, nnpp))], format='csr')
+    mata = sps.vstack([sysm1, sysm2], format='csr')
+
+    rhs = np.vstack([rhsv, rhsp])
+
+    if umat is not None:
+        vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], nnpp))])
+        umate = np.vstack([umat, np.zeros((nnpp, umat.shape[1]))])
+    else:
+        umate, vmate = None, None
+
+    return app_smw_inv(mata, umat=umate, vmat=vmate, rhsa=rhs)
 
 
 def stokes_steadystate(matdict=None, rhsdict=None, add_a=None):
@@ -118,21 +149,23 @@ def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
 
     auvirhs = np.zeros(rhsa.shape)
     for rhscol in range(rhsa.shape[1]):
-        if Sinv is None:
-            Sinv = get_Sinv_smw(Alu, umat, vmat)
-
         crhs = rhsa[:, rhscol]
-        # the corrected rhs: (I + U*Sinv*V*Ainv)*rhs
-        try:
-            # if Alu comes factorized, e.g. LU-factored - fine
-            aicrhs = Alu(crhs)
-        except TypeError:
-            aicrhs = spsla.spsolve(Alu, crhs)
+        # branch with u and v present
+        if umat is not None:
+            if Sinv is None:
+                Sinv = get_Sinv_smw(Alu, umat, vmat)
 
-        if sps.isspmatrix(vmat):
-            crhs = crhs + np.dot(umat, np.dot(Sinv, vmat * aicrhs))
-        else:
-            crhs = crhs + np.dot(umat, np.dot(Sinv, np.dot(vmat, aicrhs)))
+            # the corrected rhs: (I + U*Sinv*V*Ainv)*rhs
+            try:
+                # if Alu comes factorized, e.g. LU-factored - fine
+                aicrhs = Alu(crhs)
+            except TypeError:
+                aicrhs = spsla.spsolve(Alu, crhs)
+
+            if sps.isspmatrix(vmat):
+                crhs = crhs + np.dot(umat, np.dot(Sinv, vmat * aicrhs))
+            else:
+                crhs = crhs + np.dot(umat, np.dot(Sinv, np.dot(vmat, aicrhs)))
 
         try:
             auvirhs[:, rhscol] = Alu(crhs)
@@ -229,3 +262,16 @@ def comp_sqfnrm_factrd_lyap_res(A, B, C):
         2 * (atb * atb.T).sum(-1).sum() + \
         4 * (btc.T * atc.T).sum(-1).sum() + \
         (ctc * ctc).sum(-1).sum()
+
+
+def comp_uvz_spdns(umat, vmat, zmat):
+    """comp u*v*z for sparse or dense u or v"""
+
+    if sps.isspmatrix(vmat):
+        vz = vmat * zmat
+    else:
+        vz = np.dot(vmat, zmat)
+    if sps.isspmatrix(umat):
+        return umat * vz
+    else:
+        return np.dot(umat, vz)

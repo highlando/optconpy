@@ -2,6 +2,7 @@ import unittest
 import numpy as np
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
+import lin_alg_utils as lau
 
 # unittests for the helper functions
 
@@ -10,21 +11,21 @@ class TestLinalgUtils(unittest.TestCase):
 
     def setUp(self):
 
-        self.n = 500
-        self.k = 15
-        self.A = 30 * sps.eye(self.n) + \
+        self.n = 700
+        self.k = 10
+        self.A = 20 * sps.eye(self.n) + \
             sps.rand(self.n, self.n, format='csr')
         self.U = np.random.randn(self.n, self.k)
         self.V = np.random.randn(self.k, self.n)
         self.Z = np.random.randn(self.n, self.k + 2)
         self.Vsp = sps.rand(self.k, self.n)
+        self.J = sps.rand(self.k, self.n)
+        self.Jt = sps.rand(self.n, self.k)
 
     def test_smw_formula(self):
         """check the use of the smw formula
 
         for the inverse of A-UV"""
-
-        import lin_alg_utils as lau
 
         # check the branch with direct solves
         AuvInvZ = lau.app_smw_inv(self.A, umat=self.U, vmat=self.V,
@@ -46,8 +47,6 @@ class TestLinalgUtils(unittest.TestCase):
 
         for the inverse of A-UV with v sparse"""
 
-        import lin_alg_utils as lau
-
         # check the branch with direct solves
         AuvInvZ = lau.app_smw_inv(self.A, umat=self.U, vmat=self.Vsp,
                                   rhsa=self.Z, Sinv=None)
@@ -67,20 +66,61 @@ class TestLinalgUtils(unittest.TestCase):
 
         of a lu-factored matrix to a sparse mat"""
 
-        import lin_alg_utils as lau
-
         alusolve = spsla.factorized(self.A)
         Z = sps.csr_matrix(self.U)
         AinvZ = lau.app_luinv_to_spmat(alusolve, Z)
 
         self.assertTrue(np.allclose(self.U, self.A * AinvZ))
 
+    def test_solve_sadpnt_smw(self):
+        """check the sadpnt solver"""
+
+        umat, vmat, k, n = self.U, self.V, self.k, self.n
+
+        # self.Jt = self.J.T
+        # check the formula
+        AuvInvZ = lau.solve_sadpnt_smw(self.A, self.J, self.Z,
+                                       jmatT=self.Jt, umat=self.U, vmat=self.V)
+        # AuvInvZ = lau.solve_sadpnt_smw(self.A, self.J, self.Z, jmatT=self.Jt)
+
+        sysm1 = sps.hstack([self.A, self.Jt], format='csr')
+        sysm2 = sps.hstack([self.J, sps.csr_matrix((k, k))], format='csr')
+        mata = sps.vstack([sysm1, sysm2], format='csr')
+
+        umate = np.vstack([umat, np.zeros((k, umat.shape[1]))])
+        vmate = np.hstack([vmat, np.zeros((vmat.shape[0], k))])
+        ze = np.vstack([self.Z, np.zeros((k, self.Z.shape[1]))])
+
+        AAinvZ = mata * AuvInvZ - np.dot(umate, np.dot(vmate, AuvInvZ))
+
+        # likely to fail because of ill conditioned rand mats
+        self.assertTrue(np.allclose(AAinvZ, ze),
+                        msg='likely to fail because of ill cond')
+
+        # check whether it is a projection
+        auvAUVinv = self.A * AuvInvZ[:n, :] - \
+            lau.comp_uvz_spdns(self.U, self.V, AuvInvZ[:n, :])
+
+        AuvInv2Z = lau.solve_sadpnt_smw(self.A, self.J, auvAUVinv,
+                                        jmatT=self.Jt,
+                                        umat=self.U, vmat=self.V)
+
+        self.assertTrue(np.allclose(AuvInvZ[:n, :], AuvInv2Z[:n, :]),
+                        msg='likely to fail because of ill cond')
+
+        prjz = lau.app_prj_via_sadpnt(self.A, self.J, self.Z, jmatT=self.Jt)
+        prprjz = lau.app_prj_via_sadpnt(self.A, self.J, prjz, jmatT=self.Jt)
+
+        # check projector
+        self.assertTrue(np.allclose(prprjz, prjz))
+        # onto kernel J
+        self.assertTrue(np.linalg.norm(self.J*prjz)/np.linalg.norm(prjz)
+                        < 1e-6)
+
     def test_comp_frobnorm_factored_difference(self):
         """check the computation of the frobenius norm
 
         """
-
-        import lin_alg_utils as lau
 
         U = self.U
         Z = self.Z
