@@ -129,13 +129,16 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
             adi_rel_newZ_norms.append(rel_newZ_norm)
 
 
-            if np.mod(adi_step, 10) == 0:
-                sqrdprolyares = comp_proj_lyap_res_norm(Z, amat=A, mmat=M,
-                                                        wmat=W, jmat=J,
-                                                        umat=umat, vmat=vmat)
-                print 'adistep ', adi_step
-                print 'cur proj lyap res: ', np.sqrt(sqrdprolyares)
-                print 'rel Z norm: \n', rel_newZ_norm
+            try:
+                if adi_dict['check_lyap_res'] and np.mod(adi_step, 10) == 0:
+                    sqrdprolyares = comp_proj_lyap_res_norm(Z, amat=A, mmat=M,
+                                                            wmat=W, jmat=J,
+                                                            umat=umat, vmat=vmat)
+                    print 'adistep ', adi_step
+                    print 'cur proj lyap res: ', np.sqrt(sqrdprolyares)
+                    print 'rel Z norm: \n', rel_newZ_norm
+            except KeyError:
+                pass  # no such option specified 
 
         try:
             if adi_dict['verbose']:
