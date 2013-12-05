@@ -60,7 +60,6 @@ class TestInoutOpas(unittest.TestCase):
 
         """
         import dolfin
-        import scipy.sparse.linalg as spsla
         import dolfin_to_nparrays as dtn
         import cont_obs_utils as cou
 
@@ -108,59 +107,26 @@ class TestInoutOpas(unittest.TestCase):
         Cplus = cou.get_rightinv(MyC)
         self.assertTrue(np.allclose(np.eye(MyC.shape[0]), MyC * Cplus))
 
-        # MyCv = MyC*testv.vector().array()
-        # testy = spsla.spsolve(My, MyCv)
-        # print np.linalg.norm(testy)
-
-        # ymesh = dolfin.IntervalMesh(NY-1, odcoo['ymin'], odcoo['ymax'])
-        # Y = dolfin.FunctionSpace(ymesh, 'CG', 1)
-        # y1 = dolfin.Function(Y)
-        # y2 = dolfin.Function(Y)
-        # y3 = dolfin.Function(Y)
-        # y4 = dolfin.Function(Y)
-        # y5 = dolfin.Function(Y)
-        # y6 = dolfin.Function(Y)
-
-        # interactive(True)
-        # y1.vector().set_local(testy[:NY])
-        # plot(y1)
-        # y2.vector().set_local(testy[NY:])
-        # plot(y2)
-
-        # check the regularization of C
         rC = cou.get_regularized_c(
             MyC.T,
             J=stokesmats['J'],
             Mt=stokesmats['M']).T
 
         testvi = testv.vector().array()
+        testvi0 = testv.vector().array()
         testvi0 = cou.app_difffreeproj(
             M=stokesmats['M'],
             J=stokesmats['J'],
-            v=testvi)
+            v=testvi0)
 
         # check if divfree part is not zero
         self.assertTrue(np.linalg.norm(testvi0) > 1e-8)
 
-        testyv0 = spsla.spsolve(My, MyC * testvi0)
-        testry = spsla.spsolve(My, np.dot(rC, testvi))
+        testyv0 = MyC * testvi0
+        testry = np.dot(rC, testvi)
 
         self.assertTrue(np.allclose(testyv0, testry))
 
-        # testyg = spsla.spsolve(My, MyC*(testvi-testvi0))
-        # y3.vector().set_local(testry[NY:])
-        # plot(y3, title='rCv')
-        # y4.vector().set_local(testyv0[NY:])
-        # plot(y4, title='Cv0')
-        # y5.vector().set_local(testyg[NY:])
-        # plot(y5, title='Cvg')
-
-        # check if the projection is indeed a projection
-        # os.remove('data/regCNY14vdim3042.npy')
-        # Ci = cou.get_regularized_c(sps.csr_matrix(My*C).T,
-        #                             J=stokesmatsc['J'],
-        #                             Mt=stokesmatsc['M']).T
-        # print np.linalg.norm(np.dot(C,testvi) - np.dot(Ci,testvi))
 
 suite = unittest.TestLoader().loadTestsFromTestCase(TestInoutOpas)
 unittest.TextTestRunner(verbosity=2).run(suite)
