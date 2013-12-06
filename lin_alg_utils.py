@@ -5,20 +5,39 @@ import scipy.sparse.linalg as spsla
 import krypy.linsys
 
 
-def app_prj_via_sadpnt(amat, jmat, rhsv,
-                       jmatT=None, umat=None, vmat=None):
-    """apply projection via solving a sadpnt problem"""
+def app_prj_via_sadpnt(amat=None, jmat=None, rhsv=None,
+                       jmatT=None, umat=None, vmat=None,
+                       transposedprj=False):
+    """apply projection via solving a sadpnt problem
 
-    if umat is None and vmat is None:
-        arhsv = amat * rhsv
+    Pv = sadpointmat^-1 * amat * v
+
+    P.T v = amat.T * sadpointmat^-T *  v
+    
+    """
+    if jmatT is None:
+        jmatT = jmat.T
+    if jmat is None:
+        jmat = jmatT.T
+
+
+    if transposedprj:
+        return amat.T * solve_sadpnt_smw(amat=amat.T, jmat=jmatT.T, 
+                                         rhsv=rhsv, jmatT=jmat.T,
+                                         )[:amat.shape[0], :]
+
     else:
-        arhsv = amat * rhsv - \
-            np.dot(umat, np.dot(vmat, rhsv))
+        if umat is None and vmat is None:
+            arhsv = amat * rhsv
+        else:
+            arhsv = amat * rhsv - \
+                np.dot(umat, np.dot(vmat, rhsv))
 
-    return solve_sadpnt_smw(amat, jmat, arhsv, jmatT=jmatT)[:amat.shape[0], :]
+        return solve_sadpnt_smw(amat=amat, jmat=jmat, rhsv=arhsv, 
+                                jmatT=jmatT)[:amat.shape[0], :]
 
 
-def solve_sadpnt_smw(amat, jmat, rhsv,
+def solve_sadpnt_smw(amat=None, jmat=None, rhsv=None,
                      jmatT=None, umat=None, vmat=None,
                      rhsp=None):
     """solves with
@@ -30,6 +49,9 @@ def solve_sadpnt_smw(amat, jmat, rhsv,
 
     if jmatT is None:
         jmatT = jmat.T
+    if jmat is None:
+        jmat = jmatT.T
+
     if rhsp is None:
         rhsp = np.zeros((nnpp, rhsv.shape[1]))
 
@@ -37,7 +59,10 @@ def solve_sadpnt_smw(amat, jmat, rhsv,
     sysm2 = sps.hstack([jmat, sps.csr_matrix((nnpp, nnpp))], format='csr')
     mata = sps.vstack([sysm1, sysm2], format='csr')
 
-    rhs = np.vstack([rhsv, rhsp])
+    if sps.isspmatrix(rhsv):
+        rhs = np.vstack([np.array(rhsv.todense()), rhsp])
+    else:
+        rhs = np.vstack([rhsv, rhsp])
 
     if umat is not None:
         vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], nnpp))])
@@ -138,7 +163,8 @@ def app_luinv_to_spmat(alu_solve, Z):
     return ainvz
 
 
-def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
+def app_smw_inv(amat, umat=None, vmat=None, rhsa=None, Sinv=None,
+                savefactoredby=5):
     """compute the sherman morrison woodbury inverse
 
     of
@@ -146,6 +172,15 @@ def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
 
     applied to (array)rhs.
     """
+    
+
+    if rhsa.shape[1] >= savefactoredby:
+        try:
+            alu = spsla.factorized(amat)
+        except NotImplementedError:
+            alu = amat
+    else:
+        alu = amat
 
     auvirhs = np.zeros(rhsa.shape)
     for rhscol in range(rhsa.shape[1]):
@@ -153,14 +188,14 @@ def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
         # branch with u and v present
         if umat is not None:
             if Sinv is None:
-                Sinv = get_Sinv_smw(Alu, umat, vmat)
+                Sinv = get_Sinv_smw(alu, umat, vmat)
 
             # the corrected rhs: (I + U*Sinv*V*Ainv)*rhs
             try:
                 # if Alu comes factorized, e.g. LU-factored - fine
-                aicrhs = Alu(crhs)
+                aicrhs = alu(crhs)
             except TypeError:
-                aicrhs = spsla.spsolve(Alu, crhs)
+                aicrhs = spsla.spsolve(alu, crhs)
 
             if sps.isspmatrix(vmat):
                 crhs = crhs + np.dot(umat, np.dot(Sinv, vmat * aicrhs))
@@ -168,9 +203,9 @@ def app_smw_inv(Alu, umat=None, vmat=None, rhsa=None, Sinv=None):
                 crhs = crhs + np.dot(umat, np.dot(Sinv, np.dot(vmat, aicrhs)))
 
         try:
-            auvirhs[:, rhscol] = Alu(crhs)
+            auvirhs[:, rhscol] = alu(crhs)
         except TypeError:
-            auvirhs[:, rhscol] = spsla.spsolve(Alu, crhs)
+            auvirhs[:, rhscol] = spsla.spsolve(alu, crhs)
 
     return auvirhs
 

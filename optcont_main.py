@@ -39,7 +39,8 @@ def time_int_params(Nts):
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=1e-7,
                    verbose=True,
-                   full_upd_norm_check=False
+                   full_upd_norm_check=False,
+                   check_lyap_res=False
                ),
                compress_z=True,  # whether or not to compress Z
                comprz_maxc=500,  # compression of the columns of Z by QR

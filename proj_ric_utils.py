@@ -129,13 +129,16 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
             adi_rel_newZ_norms.append(rel_newZ_norm)
 
 
-            if np.mod(adi_step, 10) == 0:
-                sqrdprolyares = comp_proj_lyap_res_norm(Z, amat=A, mmat=M,
-                                                        wmat=W, jmat=J,
-                                                        umat=umat, vmat=vmat)
-                print 'adistep ', adi_step
-                print 'cur proj lyap res: ', np.sqrt(sqrdprolyares)
-                print 'rel Z norm: \n', rel_newZ_norm
+            try:
+                if adi_dict['check_lyap_res'] and np.mod(adi_step, 10) == 0:
+                    sqrdprolyares = comp_proj_lyap_res_norm(Z, amat=A, mmat=M,
+                                                            wmat=W, jmat=J,
+                                                            umat=umat, vmat=vmat)
+                    print 'adistep ', adi_step
+                    print 'cur proj lyap res: ', np.sqrt(sqrdprolyares)
+                    print 'rel Z norm: \n', rel_newZ_norm
+            except KeyError:
+                pass  # no such option specified 
 
         try:
             if adi_dict['verbose']:
@@ -295,12 +298,6 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
     return dict(zfac=znn, nwtn_upd_fnorms=nwtn_upd_fnorms)
 
 
-def comp_steady_state_track_sol(fmat, mmat, jmat, bmat, cmat,
-                                fl, fv, fg, fl2):
-    """compute the steady state solution (T -> oo) """
-    return Z, w
-
-
 def comp_proj_lyap_res_norm(Z, amat=None, mmat=None, wmat=None, 
                             jmat=None, umat=None, vmat=None, Sinv=None):
     """compute the squared f norm of projected lyap residual
@@ -322,13 +319,9 @@ def comp_proj_lyap_res_norm(Z, amat=None, mmat=None, wmat=None,
     if umat is None and vmat is None:
         amattZ = amat.T * Z
     else:
-        if sps.isspmatrix(umat):
-            amattZ = amat.T*Z - np.dot(vmat.T, umat.T * Z)
-        else:
-            amattZ = amat.T*Z - np.dot(vmat.T, np.dot(umat.T, Z))
+        amattZ = amat.T*Z - lau.comp_uvz_spdns(vmat.T, umat.T, Z)
 
-
-    PtFtZ = _app_pt(amat.T * Z, jmat, MinvJt, Sinv)
+    PtFtZ = _app_pt(amattZ, jmat, MinvJt, Sinv)
     PtMtZ = _app_pt(mmat.T * Z, jmat, MinvJt, Sinv)
     PtW = _app_pt(wmat, jmat, MinvJt, Sinv)
 

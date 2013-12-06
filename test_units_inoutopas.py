@@ -1,8 +1,11 @@
 import unittest
 import dolfin
 import numpy as np
-import cont_obs_utils as cou
 import scipy.sparse.linalg as spsla
+
+import cont_obs_utils as cou
+import lin_alg_utils as lau
+
 
 import warnings
 with warnings.catch_warnings():
@@ -14,13 +17,14 @@ with warnings.catch_warnings():
 
 class TestInoutOpas(unittest.TestCase):
 
+    # @unittest.skip("for now")
     def test_outopa_workingconfig(self):
         """ The innerproducts that assemble the output operator
 
-        are accurately sampled for this parameter set"""
+        are accurately sampled for this parameter set (NV=25, NY=5)"""
 
-        NV = 25
-        NY = 9
+        NV = 25 
+        NY = 5
 
         mesh = dolfin.UnitSquareMesh(NV, NV)
         V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
@@ -67,11 +71,11 @@ class TestInoutOpas(unittest.TestCase):
 
         dolfin.parameters.linear_algebra_backend = "uBLAS"
 
-        N = 24
+        N = 20
         mesh = dolfin.UnitSquareMesh(N, N)
         V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
 
-        NY = 7
+        NY = 8
 
         odcoo = dict(xmin=0.45,
                      xmax=0.55,
@@ -80,16 +84,16 @@ class TestInoutOpas(unittest.TestCase):
 
         # get the system matrices
         femp = drivcav_fems(N)
-        stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], 1)
+        stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], nu=1)
         # remove the freedom in the pressure
         stokesmats['J'] = stokesmats['J'][:-1, :][:, :]
         stokesmats['JT'] = stokesmats['JT'][:, :-1][:, :]
         # reduce the matrices by resolving the BCs
-        (stokesmatsc,
-         rhsd_stbc,
-         invinds,
-         bcinds,
-         bcvals) = dtn.condense_sysmatsbybcs(stokesmats, femp['diribcs'])
+        # (stokesmatsc,
+        #  rhsd_stbc,
+        #  invinds,
+        #  bcinds,
+        #  bcvals) = dtn.condense_sysmatsbybcs(stokesmats, femp['diribcs'])
 
         # check the C
         MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY)
@@ -107,23 +111,25 @@ class TestInoutOpas(unittest.TestCase):
         Cplus = cou.get_rightinv(MyC)
         self.assertTrue(np.allclose(np.eye(MyC.shape[0]), MyC * Cplus))
 
-        rC = cou.get_regularized_c(
-            MyC.T,
-            J=stokesmats['J'],
-            Mt=stokesmats['M']).T
+        # MyCc = MyC[:, invinds]
+
+        ptmct = lau.app_prj_via_sadpnt(amat=stokesmats['M'],
+                                       jmat=stokesmats['J'],
+                                       rhsv=MyC.T,
+                                       transposedprj=True)
 
         testvi = testv.vector().array()
-        testvi0 = testv.vector().array()
-        testvi0 = cou.app_difffreeproj(
-            M=stokesmats['M'],
-            J=stokesmats['J'],
-            v=testvi0)
+        testvi0 = np.atleast_2d(testv.vector().array()).T
+        testvi0 = lau.app_prj_via_sadpnt(amat=stokesmats['M'],
+                                         jmat=stokesmats['J'],
+                                         rhsv=testvi0)
 
         # check if divfree part is not zero
-        self.assertTrue(np.linalg.norm(testvi0) > 1e-8)
+        self.assertTrue(np.linalg.norm(testvi0) > 1e-8,
+                        msg='maybe nothing wrong, but this shouldnt be zero')
 
-        testyv0 = MyC * testvi0
-        testry = np.dot(rC, testvi)
+        testyv0 = np.atleast_2d(MyC * testvi0).T
+        testry = np.dot(ptmct.T, testvi)
 
         self.assertTrue(np.allclose(testyv0, testry))
 

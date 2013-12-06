@@ -1,14 +1,16 @@
 # this is rather optical checking
 import dolfin
 import scipy.sparse.linalg as spsla
+import numpy as np
 
 import dolfin_to_nparrays as dtn
 import cont_obs_utils as cou
+import lin_alg_utils as lau
 
 from optcont_main import drivcav_fems
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
-NV = 44
+NV = 20
 NY = 8
 
 mesh = dolfin.UnitSquareMesh(NV, NV)
@@ -17,7 +19,7 @@ Q = dolfin.FunctionSpace(mesh, "CG", 1)
 
 dolfin.plot(mesh)
 
-testcase = 2  # 2,3
+testcase = 3  # 2,3
 # testvelocities
 if testcase == 1:
     """case 1 -- not div free"""
@@ -70,27 +72,28 @@ y1 = dolfin.Function(Y)
 y2 = dolfin.Function(Y)
 y3 = dolfin.Function(Y)
 
-# check the regularization of C
-# rC = cou.get_regularized_c(MyC.T, J=stokesmatsc['J'], Mt=stokesmatsc['M']).T
+ptmct = lau.app_prj_via_sadpnt(amat=stokesmats['M'],
+                               jmat=stokesmats['J'],
+                               rhsv=MyC.T,
+                               transposedprj=True)
 
-# testvi = testv.vector().array()[invinds]
 testvi = testv.vector().array()
+testvi0 = np.atleast_2d(testv.vector().array()).T
+testvi0 = lau.app_prj_via_sadpnt(amat=stokesmats['M'],
+                                 jmat=stokesmats['J'],
+                                 rhsv=testvi0)
 
-# testvi0 = cou.app_difffreeproj(
-#     M=stokesmatsc['M'],
-#     J=stokesmatsc['J'],
-#     v=testvi)
 
-# print "||J*v|| = {0}".format(np.linalg.norm(stokesmatsc['J'] * testvi))
-# print "||J* v_df|| = {0}".format(np.linalg.norm(stokesmatsc['J'] * testvi0))
+print "||J*v|| = {0}".format(np.linalg.norm(stokesmats['J'] * testvi))
+print "||J* v_df|| = {0}".format(np.linalg.norm(stokesmats['J'] * testvi0))
 
 # # testsignals from the test velocities
 testy = spsla.spsolve(My, MyC * testvi)
-# testyv0 = spsla.spsolve(My, MyC * testvi0)
+testyv0 = spsla.spsolve(My, MyC * testvi0)
 # testyg = spsla.spsolve(My, MyC * (testvi.flatten() - testvi0))
-# testry = spsla.spsolve(My, np.dot(rC, testvi))
+testry = spsla.spsolve(My, np.dot(ptmct.T, testvi))
 
-# print "||C v_df - C_df v|| = {0}".format(np.linalg.norm(testyv0 - testry))
+print "||C v_df - C_df v|| = {0}".format(np.linalg.norm(testyv0 - testry))
 
 y1.vector().set_local(testy[:NY])
 dolfin.plot(y1, title="x-comp of C*v")

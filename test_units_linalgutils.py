@@ -11,8 +11,8 @@ class TestLinalgUtils(unittest.TestCase):
 
     def setUp(self):
 
-        self.n = 700
-        self.k = 10
+        self.n = 1000
+        self.k = 30
         self.A = 20 * sps.eye(self.n) + \
             sps.rand(self.n, self.n, format='csr')
         self.U = np.random.randn(self.n, self.k)
@@ -72,16 +72,15 @@ class TestLinalgUtils(unittest.TestCase):
 
         self.assertTrue(np.allclose(self.U, self.A * AinvZ))
 
-    def test_solve_sadpnt_smw(self):
+    def test_solve_proj_sadpnt_smw(self):
         """check the sadpnt solver"""
 
         umat, vmat, k, n = self.U, self.V, self.k, self.n
 
         # self.Jt = self.J.T
         # check the formula
-        AuvInvZ = lau.solve_sadpnt_smw(self.A, self.J, self.Z,
+        AuvInvZ = lau.solve_sadpnt_smw(amat=self.A, jmat=self.J, rhsv=self.Z,
                                        jmatT=self.Jt, umat=self.U, vmat=self.V)
-        # AuvInvZ = lau.solve_sadpnt_smw(self.A, self.J, self.Z, jmatT=self.Jt)
 
         sysm1 = sps.hstack([self.A, self.Jt], format='csr')
         sysm2 = sps.hstack([self.J, sps.csr_matrix((k, k))], format='csr')
@@ -97,25 +96,49 @@ class TestLinalgUtils(unittest.TestCase):
         self.assertTrue(np.allclose(AAinvZ, ze),
                         msg='likely to fail because of ill cond')
 
+    def test_sadpnt_smw(self):
+        """check the sadpnt as projection"""
+
+        umat, vmat, k, n = self.U, self.V, self.k, self.n
+
         # check whether it is a projection
+        AuvInvZ = lau.solve_sadpnt_smw(amat=self.A, jmat=self.J, rhsv=self.Z,
+                                       jmatT=self.Jt, umat=self.U, vmat=self.V)
+
         auvAUVinv = self.A * AuvInvZ[:n, :] - \
             lau.comp_uvz_spdns(self.U, self.V, AuvInvZ[:n, :])
 
-        AuvInv2Z = lau.solve_sadpnt_smw(self.A, self.J, auvAUVinv,
+        AuvInv2Z = lau.solve_sadpnt_smw(amat=self.A, jmat=self.J, rhsv=auvAUVinv,
                                         jmatT=self.Jt,
                                         umat=self.U, vmat=self.V)
 
         self.assertTrue(np.allclose(AuvInvZ[:n, :], AuvInv2Z[:n, :]),
                         msg='likely to fail because of ill cond')
 
-        prjz = lau.app_prj_via_sadpnt(self.A, self.J, self.Z, jmatT=self.Jt)
-        prprjz = lau.app_prj_via_sadpnt(self.A, self.J, prjz, jmatT=self.Jt)
+        prjz = lau.app_prj_via_sadpnt(amat=self.A, jmat=self.J, 
+                                      rhsv=self.Z, jmatT=self.Jt)
+        prprjz = lau.app_prj_via_sadpnt(amat=self.A, jmat=self.J,   
+                                        rhsv=self.Z, jmatT=self.Jt)
 
         # check projector
         self.assertTrue(np.allclose(prprjz, prjz))
+
         # onto kernel J
+        self.assertTrue(np.linalg.norm(prjz) > 1e-8)
         self.assertTrue(np.linalg.norm(self.J*prjz)/np.linalg.norm(prjz)
                         < 1e-6)
+
+        # check transpose
+        idmat = np.eye(n)
+        prj = lau.app_prj_via_sadpnt(amat=self.A, jmat=self.J, 
+                                     rhsv=idmat, jmatT=self.Jt)
+
+        prjT = lau.app_prj_via_sadpnt(amat=self.A, jmat=self.J, 
+                                      rhsv=idmat, jmatT=self.Jt,
+                                      transposedprj=True)
+
+        self.assertTrue(np.allclose(prj, prjT.T))
+
 
     def test_comp_frobnorm_factored_difference(self):
         """check the computation of the frobenius norm
