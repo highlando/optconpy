@@ -15,6 +15,11 @@ def app_prj_via_sadpnt(amat=None, jmat=None, rhsv=None,
     P.T v = amat.T * sadpointmat^-T *  v
     
     """
+    if jmatT is None:
+        jmatT = jmat.T
+    if jmat is None:
+        jmat = jmatT.T
+
 
     if transposedprj:
         return amat.T * solve_sadpnt_smw(amat=amat.T, jmat=jmatT.T, 
@@ -46,7 +51,7 @@ def solve_sadpnt_smw(amat=None, jmat=None, rhsv=None,
         jmatT = jmat.T
     if jmat is None:
         jmat = jmatT.T
-        
+
     if rhsp is None:
         rhsp = np.zeros((nnpp, rhsv.shape[1]))
 
@@ -54,7 +59,10 @@ def solve_sadpnt_smw(amat=None, jmat=None, rhsv=None,
     sysm2 = sps.hstack([jmat, sps.csr_matrix((nnpp, nnpp))], format='csr')
     mata = sps.vstack([sysm1, sysm2], format='csr')
 
-    rhs = np.vstack([rhsv, rhsp])
+    if sps.isspmatrix(rhsv):
+        rhs = np.vstack([np.array(rhsv.todense()), rhsp])
+    else:
+        rhs = np.vstack([rhsv, rhsp])
 
     if umat is not None:
         vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], nnpp))])

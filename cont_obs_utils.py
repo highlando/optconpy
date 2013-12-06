@@ -192,6 +192,9 @@ def get_regularized_c(Ct=None, J=None, Mt=None):
     rCT = [I - J.T*S.-T*J*M.-T]*C.T
     """
 
+    raise UserWarning('deprecated - use more explicit approach to proj via ' +\
+                      'sadpoints systems as implemented in linalg_utils')
+
     Nv, NY = Mt.shape[0], Ct.shape[1]
     try:
         rCt = np.load('data/regCNY{0}vdim{1}.npy'.format(NY, Nv))
