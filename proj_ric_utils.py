@@ -5,6 +5,30 @@ import scipy.sparse.linalg as spsla
 import lin_alg_utils as lau
 
 
+def solve_stst_feedbacknthrough(fmat=None, mmat=None, jmat=None,
+                                bmat=None, cmat=None,
+                                fv=None, fl=None, fg=None, fl2=None,
+                                nwtn_adi_dict=dict(adi_max_steps=150,
+                                                   adi_newZ_reltol=1e-5,
+                                                   nwtn_max_steps=14,
+                                                   nwtn_upd_reltol=1e-8)):
+    """solve for the stabilizing feedback gain and the feedthrough
+
+    for the lti case"""
+
+    Z = proj_alg_ric_newtonadi(mmat=mmat, fmat=fmat, jmat=jmat,
+                               bmat=bmat, wmat=cmat,
+                               nwtn_adi_dict=nwtn_adi_dict)
+
+    mtxb = get_mTzzTtb(mmat.T, Z, bmat)
+    mtxfv = get_mTzzTtb(mmat.T, Z, fv)
+
+    wft = lau.solve_sadpnt_smw(amat=fmat.T, jmat=jmat, rhsv=fl-mtxfv,
+                               umat=-mtxb, vmat=bmat.T)
+
+    return Z, wft
+
+
 def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
                           umat=None, vmat=None,
                           transposed=False,
@@ -128,17 +152,17 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
             muind = np.mod(muind+1, len(ms))
             adi_rel_newZ_norms.append(rel_newZ_norm)
 
-
             try:
                 if adi_dict['check_lyap_res'] and np.mod(adi_step, 10) == 0:
                     sqrdprolyares = comp_proj_lyap_res_norm(Z, amat=A, mmat=M,
                                                             wmat=W, jmat=J,
-                                                            umat=umat, vmat=vmat)
+                                                            umat=umat,
+                                                            vmat=vmat)
                     print 'adistep ', adi_step
                     print 'cur proj lyap res: ', np.sqrt(sqrdprolyares)
                     print 'rel Z norm: \n', rel_newZ_norm
             except KeyError:
-                pass  # no such option specified 
+                pass  # no such option specified
 
         try:
             if adi_dict['verbose']:
@@ -189,27 +213,25 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
                 adi_rel_newZ_norms=adi_rel_newZ_norms)
 
 
-def get_mTzzTg(MT, Z, tB):
-    """ compute the lyapunov coefficient related to the linearization
-
-    TODO:
-    - sparse or dense
-    - return just a factor
-    """
-    return (MT * (np.dot(Z, (Z.T * tB)))) * tB.T
+# def get_mTzzTg(MT, Z, tB):
+#     """ compute the lyapunov coefficient related to the linearization
+#
+#     TODO:
+#     - sparse or dense
+#     - return just a factor
+#     """
+#     return (MT * (np.dot(Z, (Z.T * tB)))) * tB.T
 
 
 def get_mTzzTtb(MT, Z, tB, output=None):
     """ compute the left factor of the lyapunov coefficient
 
     related to the linearization
-    TODO:
-    - sparse or dense
     """
-    if output == 'dense':
-        return MT * (np.dot(Z, (Z.T * tB)))
+    if sps.isspmatrix(tB):
+        return MT * (np.dot(Z, Z.T*tB))
     else:
-        return MT * (np.dot(Z, (Z.T * tB)))
+        return MT*(np.dot(Z, np.dot(Z.T, tB)))
 
 
 def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
@@ -240,12 +262,15 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
     while nwtn_stp < nwtn_adi_dict['nwtn_max_steps'] and \
             upd_fnorm > nwtn_adi_dict['nwtn_upd_reltol']:
 
-        try:
-            mtxb = mt * np.dot(znc, np.dot(znc.T, bmat))
-        except ValueError:  # if bmat is sparse
-            mtxb = mt * np.dot(znc, znc.T * bmat)
+        if znc is None:  # i.e., if z0 was None
+            rhsadi = wmat
+        else:
+            try:
+                mtxb = mt * np.dot(znc, np.dot(znc.T, bmat))
+            except ValueError:  # if bmat is sparse
+                mtxb = mt * np.dot(znc, znc.T * bmat)
 
-        rhsadi = np.hstack([mtxb, wmat])
+            rhsadi = np.hstack([mtxb, wmat])
 
         # to avoid a dense matrix we use the smw formula
         # to compute (A-UV).-T
@@ -298,7 +323,7 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
     return dict(zfac=znn, nwtn_upd_fnorms=nwtn_upd_fnorms)
 
 
-def comp_proj_lyap_res_norm(Z, amat=None, mmat=None, wmat=None, 
+def comp_proj_lyap_res_norm(Z, amat=None, mmat=None, wmat=None,
                             jmat=None, umat=None, vmat=None, Sinv=None):
     """compute the squared f norm of projected lyap residual
 

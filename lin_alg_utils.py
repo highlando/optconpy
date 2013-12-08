@@ -13,16 +13,15 @@ def app_prj_via_sadpnt(amat=None, jmat=None, rhsv=None,
     Pv = sadpointmat^-1 * amat * v
 
     P.T v = amat.T * sadpointmat^-T *  v
-    
+
     """
     if jmatT is None:
         jmatT = jmat.T
     if jmat is None:
         jmat = jmatT.T
 
-
     if transposedprj:
-        return amat.T * solve_sadpnt_smw(amat=amat.T, jmat=jmatT.T, 
+        return amat.T * solve_sadpnt_smw(amat=amat.T, jmat=jmatT.T,
                                          rhsv=rhsv, jmatT=jmat.T,
                                          )[:amat.shape[0], :]
 
@@ -33,7 +32,7 @@ def app_prj_via_sadpnt(amat=None, jmat=None, rhsv=None,
             arhsv = amat * rhsv - \
                 np.dot(umat, np.dot(vmat, rhsv))
 
-        return solve_sadpnt_smw(amat=amat, jmat=jmat, rhsv=arhsv, 
+        return solve_sadpnt_smw(amat=amat, jmat=jmat, rhsv=arhsv,
                                 jmatT=jmatT)[:amat.shape[0], :]
 
 
@@ -172,12 +171,11 @@ def app_smw_inv(amat, umat=None, vmat=None, rhsa=None, Sinv=None,
 
     applied to (array)rhs.
     """
-    
 
     if rhsa.shape[1] >= savefactoredby:
         try:
             alu = spsla.factorized(amat)
-        except NotImplementedError:
+        except (NotImplementedError, TypeError):
             alu = amat
     else:
         alu = amat

@@ -413,8 +413,10 @@ def optcon_nse(N=10, Nts=10):
     mc_mat = mc_mat[:, invinds][:, :]
     b_mat = b_mat[invinds, :][:, :]
 
-    mct_mat_reg = cou.get_regularized_c(Ct=mc_mat.T, J=stokesmatsc['J'],
-                                        Mt=stokesmatsc['MT'])
+    mct_mat_reg = lau.app_prj_via_sadpnt(amat=stokesmatsc['M'],
+                                         jmat=stokesmatsc['J'],
+                                         rhsv=mc_mat.T,
+                                         transposedprj=True)
 
     # set the weighing matrices
     # if contp.R is None:
@@ -534,7 +536,7 @@ def optcon_nse(N=10, Nts=10):
         # feedback mats
         next_zmat = dou.load_npa(ddir + ndatstr + cntpstr + '__Z')
         next_w = dou.load_npa(ddir + ndatstr + cntpstr + '__w')
-        print 'norm of w:' , np.linalg.norm(next_w)
+        print 'norm of w:', np.linalg.norm(next_w)
 
         umat = DT*MT*np.dot(next_zmat, next_zmat.T*tb_mat)
         vmat = tb_mat.T
@@ -566,4 +568,4 @@ def optcon_nse(N=10, Nts=10):
     print 'dim of v :', femp['V'].dim()
 
 if __name__ == '__main__':
-    optcon_nse(N=25, Nts=100)
+    optcon_nse(N=15, Nts=2)
