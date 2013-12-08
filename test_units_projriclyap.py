@@ -17,7 +17,7 @@ class TestProjLyap(unittest.TestCase):
         self.NP = 40
         self.NY = 5
         self.NU = self.NY+3
-        self.verbose = False
+        self.verbose = True
         self.compn = 15  # factor for comp Z ~~> compn*W.shape[1]
 
         self.nwtn_adi_dict = dict(adi_max_steps=300,
@@ -172,7 +172,18 @@ class TestProjLyap(unittest.TestCase):
                                        nwtn_adi_dict=
                                        self.nwtn_adi_dict)['zfac']
 
+        # for '0' initial value --> z0 = None
+        Z0 = pru.proj_alg_ric_newtonadi(mmat=self.M, fmat=self.F,
+                                        jmat=self.J, bmat=self.bmat,
+                                        wmat=self.W,
+                                        nwtn_adi_dict=
+                                        self.nwtn_adi_dict)['zfac']
+
         MtXM = self.M.T * np.dot(Z, Z.T) * self.M
+        MtX0M = self.M.T * np.dot(Z0, Z0.T) * self.M
+
+        self.assertTrue(np.allclose(MtXM, MtX0M))
+
         MtXb = self.M.T * np.dot(np.dot(Z, Z.T), self.bmat)
 
         FtXM = self.F.T * np.dot(Z, Z.T) * self.M

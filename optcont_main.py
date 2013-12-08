@@ -522,6 +522,8 @@ def optcon_nse(N=10, Nts=10):
     # solve the closed loop system
     set_vpfiles(tip, fstring=('results/' + 'closedloop' + cntpstr +
                               'NewtonIt{0}').format(newtk))
+
+    old_v = 
     for t in np.linspace(tip['t0']+DT, tip['tE'], Nts):
 
         # t for implicit scheme
@@ -546,7 +548,7 @@ def optcon_nse(N=10, Nts=10):
 
         fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
         # rhsn = M*next_v + DT*(fvn + tb_mat * (tb_mat.T * next_w))
-        rhsn = M*next_v + DT*(fvn + 0*tb_mat * (tb_mat.T * next_w))
+        rhsn = M*old_v + DT*(fvn + 0*tb_mat * (tb_mat.T * next_w))
 
         amat = M + DT*(A + convc_mat)
         rvec = np.random.randn(next_zmat.shape[0], 1)
@@ -557,6 +559,7 @@ def optcon_nse(N=10, Nts=10):
 
         vpn = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)
         # vpn = np.atleast_2d(sps.linalg.spsolve(amat, currhs)).T
+        old_v = vpn[:NV]
 
         yn = lau.apply_massinv(y_masmat, mc_mat*vpn[:NV])
         print 'current y: ', yn

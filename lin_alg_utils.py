@@ -38,7 +38,8 @@ def app_prj_via_sadpnt(amat=None, jmat=None, rhsv=None,
 
 def solve_sadpnt_smw(amat=None, jmat=None, rhsv=None,
                      jmatT=None, umat=None, vmat=None,
-                     rhsp=None):
+                     rhsp=None, sadlu=None,
+                     return_alu=False):
     """solves with
             A - np.dot(U,V)    J.T  *  X   =   rhsv
             J                   0              rhsp
@@ -54,9 +55,12 @@ def solve_sadpnt_smw(amat=None, jmat=None, rhsv=None,
     if rhsp is None:
         rhsp = np.zeros((nnpp, rhsv.shape[1]))
 
-    sysm1 = sps.hstack([amat, jmatT], format='csr')
-    sysm2 = sps.hstack([jmat, sps.csr_matrix((nnpp, nnpp))], format='csr')
-    mata = sps.vstack([sysm1, sysm2], format='csr')
+    if sadlu is None:
+        sysm1 = sps.hstack([amat, jmatT], format='csr')
+        sysm2 = sps.hstack([jmat, sps.csr_matrix((nnpp, nnpp))], format='csr')
+        mata = sps.vstack([sysm1, sysm2], format='csr')
+    else:
+        mata = sadlu
 
     if sps.isspmatrix(rhsv):
         rhs = np.vstack([np.array(rhsv.todense()), rhsp])
@@ -69,7 +73,11 @@ def solve_sadpnt_smw(amat=None, jmat=None, rhsv=None,
     else:
         umate, vmate = None, None
 
-    return app_smw_inv(mata, umat=umate, vmat=vmate, rhsa=rhs)
+    if return_alu:
+        return app_smw_inv(mata, umat=umate, vmat=vmate, rhsa=rhs,
+                           return_alu=True)
+    else:
+        return app_smw_inv(mata, umat=umate, vmat=vmate, rhsa=rhs)
 
 
 def stokes_steadystate(matdict=None, rhsdict=None, add_a=None):
@@ -163,7 +171,7 @@ def app_luinv_to_spmat(alu_solve, Z):
 
 
 def app_smw_inv(amat, umat=None, vmat=None, rhsa=None, Sinv=None,
-                savefactoredby=5):
+                savefactoredby=5, return_alu=False):
     """compute the sherman morrison woodbury inverse
 
     of
@@ -172,7 +180,7 @@ def app_smw_inv(amat, umat=None, vmat=None, rhsa=None, Sinv=None,
     applied to (array)rhs.
     """
 
-    if rhsa.shape[1] >= savefactoredby:
+    if rhsa.shape[1] >= savefactoredby or return_alu:
         try:
             alu = spsla.factorized(amat)
         except (NotImplementedError, TypeError):
@@ -205,7 +213,10 @@ def app_smw_inv(amat, umat=None, vmat=None, rhsa=None, Sinv=None,
         except TypeError:
             auvirhs[:, rhscol] = spsla.spsolve(alu, crhs)
 
-    return auvirhs
+    if return_alu:
+        return auvirhs, alu
+    else:
+        return auvirhs
 
 
 def app_schurc_inv(M, J, veca):

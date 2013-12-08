@@ -23,7 +23,7 @@ def solve_stst_feedbacknthrough(fmat=None, mmat=None, jmat=None,
     mtxb = get_mTzzTtb(mmat.T, Z, bmat)
     mtxfv = get_mTzzTtb(mmat.T, Z, fv)
 
-    wft = lau.solve_sadpnt_smw(amat=fmat.T, jmat=jmat, rhsv=fl-mtxfv,
+    wft = lau.solve_sadpnt_smw(amat=-fmat.T, jmat=jmat, rhsv=fl-mtxfv,
                                umat=-mtxb, vmat=bmat.T)
 
     return Z, wft
@@ -213,16 +213,6 @@ def solve_proj_lyap_stein(A=None, J=None, W=None, M=None,
                 adi_rel_newZ_norms=adi_rel_newZ_norms)
 
 
-# def get_mTzzTg(MT, Z, tB):
-#     """ compute the lyapunov coefficient related to the linearization
-#
-#     TODO:
-#     - sparse or dense
-#     - return just a factor
-#     """
-#     return (MT * (np.dot(Z, (Z.T * tB)))) * tB.T
-
-
 def get_mTzzTtb(MT, Z, tB, output=None):
     """ compute the left factor of the lyapunov coefficient
 
@@ -264,12 +254,13 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
 
         if znc is None:  # i.e., if z0 was None
             rhsadi = wmat
+            mtxbt = None
         else:
             try:
                 mtxb = mt * np.dot(znc, np.dot(znc.T, bmat))
             except ValueError:  # if bmat is sparse
                 mtxb = mt * np.dot(znc, znc.T * bmat)
-
+            mtxbt = mtxb.T
             rhsadi = np.hstack([mtxb, wmat])
 
         # to avoid a dense matrix we use the smw formula
@@ -278,15 +269,19 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
 
         znn = solve_proj_lyap_stein(A=ft, M=mt, J=jmat,
                                     W=rhsadi,
-                                    umat=bmat, vmat=mtxb.T,
+                                    umat=bmat, vmat=mtxbt,
                                     transposed=transposed,
                                     adi_dict=nwtn_adi_dict)['zfac']
 
         if nwtn_adi_dict['full_upd_norm_check']:
+            if znc is None:  # there was no initial guess
+                znc = 0*znn
             upd_fnorm = lau.comp_sqfnrm_factrd_diff(znn, znc)
             upd_fnorm = np.sqrt(np.abs(upd_fnorm))
 
         else:
+            if znc is None:  # there was no initial guess
+                znc = 0*znn
             vec = np.random.randn(znn.shape[0], 1)
             vecn1 = comp_diff_zzv(znn, znc, vec)
             vec = np.random.randn(znn.shape[0], 1)
