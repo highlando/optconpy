@@ -18,10 +18,15 @@ def time_int_params(Nts):
     t0 = 0.0
     tE = 1.0
     dt = (tE - t0) / Nts
+    sqzmeshexp=2.0,  # squeeze the mesh for shorter intervals towards the
+                     # terminal point, 1.0 for equidist
+    tmesh = get_tint(t0, tE, Nts, sqzmeshexp)
+
     tip = dict(t0=t0,
                tE=tE,
                dt=dt,
                Nts=Nts,
+               tmesh=tmesh,
                Navier=True,  # set 0 for Stokes flow and 1 for NS
                vfile=None,
                pfile=None,
@@ -35,7 +40,7 @@ def time_int_params(Nts):
                nwtn_adi_dict=dict(
                    adi_max_steps=100,
                    adi_newZ_reltol=1e-5,
-                   nwtn_max_steps=6,
+                   nwtn_max_steps=7,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=1e-7,
                    verbose=True,
@@ -68,7 +73,7 @@ class ContParams():
     def __init__(self):
 
         self.ystarx = dolfin.Expression('0.0', t=0)
-        self.ystary = dolfin.Expression('1.0', t=0)
+        self.ystary = dolfin.Expression('0.1', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
         self.NU, self.NY = 4, 4
@@ -117,6 +122,15 @@ class ContParams():
         ysy = dolfin.interpolate(self.ystary, self.Y)
         return np.vstack([np.atleast_2d(ysx.vector().array()).T,
                           np.atleast_2d(ysy.vector().array()).T])
+
+def get_tint(t0, tE, Nts, sqzexp):
+    """set up the time mesh """
+
+    uniaux = np.linspace(t0, tE, Nts)
+    uniaux = 1 - uniaux**sqzexp
+    uniaux.sort()
+
+    return t0 + (tE-t0)*uniaux
 
 
 def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
@@ -266,7 +280,7 @@ def optcon_nse(N=10, Nts=10):
     femp.update(bcdata)
 
     # casting some parameters
-    NV, DT, INVINDS = len(femp['invinds']), tip['dt'], femp['invinds']
+    NV, INVINDS = len(femp['invinds']), femp['invinds']
     NP = stokesmatsc['J'].shape[0]
     # and setting current values
     newtk, t = 0, None
@@ -329,7 +343,8 @@ def optcon_nse(N=10, Nts=10):
         print 'Computing Newton Iteration {0} -- ({1} timesteps)'.\
             format(newtk, Nts)
 
-        for t in np.linspace(tip['t0']+DT, tip['tE'], Nts):
+        for tk, t in enumerate(tip['tmesh'][1:]):
+            cts = t - tip['tmesh'][tk]
             cdatstr = get_datastr(nwtn=newtk, time=t,
                                   meshp=N, timps=tip)
 
@@ -350,12 +365,12 @@ def optcon_nse(N=10, Nts=10):
                                                               femp, tip)
 
             rhsd_cur = dict(fv=stokesmatsc['M'] * v_old +
-                            DT * (rhs_con[INVINDS, :] +
+                            cts * (rhs_con[INVINDS, :] +
                                   rhsv_conbc + rhsd_vfstbc['fv']),
                             fp=rhsd_vfstbc['fp'])
 
             matd_cur = dict(A=stokesmatsc['M'] +
-                            DT * (stokesmatsc['A'] + convc_mat),
+                            cts * (stokesmatsc['A'] + convc_mat),
                             JT=stokesmatsc['JT'],
                             J=stokesmatsc['J'])
 
@@ -369,7 +384,7 @@ def optcon_nse(N=10, Nts=10):
             dou.output_paraview(tip, femp, vp=vp, t=t),
 
             # integrate the Newton error
-            norm_nwtnupd += DT * np.dot((v_old - prev_v).T,
+            norm_nwtnupd += cts * np.dot((v_old - prev_v).T,
                                         stokesmatsc['M'] *
                                         (v_old - prev_v))
 
@@ -457,8 +472,11 @@ def optcon_nse(N=10, Nts=10):
     MT, AT = stokesmatsc['MT'], stokesmatsc['AT']
     M, A = stokesmatsc['M'], stokesmatsc['A']
 
-    for t in np.linspace(tip['tE'] - DT, tip['t0'], Nts):
-        print 'Time is {0}'.format(t)
+    for tk, t in reversed(list(enumerate(tip['tmesh'][:-1]))):
+    # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
+        cts = tip['tmesh'][tk+1] - t
+
+        print 'Time is {0}, DT is {1}'.format(t, cts)
 
         # get the previous time convection matrices
         pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, timps=tip)
@@ -471,15 +489,15 @@ def optcon_nse(N=10, Nts=10):
         except IOError:
 
             # coeffmat for nwtn adi
-            ft_mat = -(0.5*stokesmatsc['MT'] + DT*(stokesmatsc['AT'] +
+            ft_mat = -(0.5*stokesmatsc['MT'] + cts*(stokesmatsc['AT'] +
                                                    convc_mat.T))
             # rhs for nwtn adi
-            w_mat = np.hstack([stokesmatsc['MT']*Zc, np.sqrt(DT)*trct_mat])
+            w_mat = np.hstack([stokesmatsc['MT']*Zc, np.sqrt(cts)*trct_mat])
 
             Zp = pru.proj_alg_ric_newtonadi(mmat=stokesmatsc['MT'],
                                             fmat=ft_mat, transposed=True,
                                             jmat=stokesmatsc['J'],
-                                            bmat=np.sqrt(DT)*tb_mat,
+                                            bmat=np.sqrt(cts)*tb_mat,
                                             wmat=w_mat, z0=Zc,
                                             nwtn_adi_dict=tip['nwtn_adi_dict']
                                             )['zfac']
@@ -504,13 +522,13 @@ def optcon_nse(N=10, Nts=10):
 
         ### and the affine correction
         ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
-        at_mat = MT + DT*(AT + convc_mat.T)
-        rhswc = MT*wc + DT*(mc_mat.T*contp.ystarvec(t) -
+        at_mat = MT + cts*(AT + convc_mat.T)
+        rhswc = MT*wc + cts*(mc_mat.T*contp.ystarvec(t) -
                             MT*np.dot(Zc, np.dot(Zc.T, ftilde)))
 
         amat, currhs = setup_sadpnt_matsrhs(at_mat, stokesmatsc['J'], rhswc)
 
-        umat = DT*MT*np.dot(Zc, Zc.T*tb_mat)
+        umat = cts*MT*np.dot(Zc, Zc.T*tb_mat)
         vmat = tb_mat.T
 
         vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], NP))])
@@ -524,7 +542,8 @@ def optcon_nse(N=10, Nts=10):
                               'NewtonIt{0}').format(newtk))
 
     v_old = inivalvec
-    for t in np.linspace(tip['t0']+DT, tip['tE'], Nts):
+    for tk, t in enumerate(tip['tmesh'][1:]):
+        cts = t - tip['tmesh'][tk]
 
         # t for implicit scheme
         ndatstr = get_datastr(nwtn=newtk, time=t,
@@ -540,17 +559,17 @@ def optcon_nse(N=10, Nts=10):
         next_w = dou.load_npa(ddir + ndatstr + cntpstr + '__w')
         print 'norm of w:', np.linalg.norm(next_w)
 
-        umat = DT*MT*np.dot(next_zmat, next_zmat.T*tb_mat)
+        umat = cts*MT*np.dot(next_zmat, next_zmat.T*tb_mat)
         vmat = tb_mat.T
 
         vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], NP))])
-        umate = DT*np.vstack([umat, np.zeros((NP, umat.shape[1]))])
+        umate = cts*np.vstack([umat, np.zeros((NP, umat.shape[1]))])
 
         fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
-        # rhsn = M*next_v + DT*(fvn + tb_mat * (tb_mat.T * next_w))
-        rhsn = M*v_old + DT*(fvn + 0*tb_mat * (tb_mat.T * next_w))
+        # rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
+        rhsn = M*v_old + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
 
-        amat = M + DT*(A + convc_mat)
+        amat = M + cts*(A + convc_mat)
         rvec = np.random.randn(next_zmat.shape[0], 1)
         print 'norm of amat', np.linalg.norm(amat*rvec)
         print 'norm of gain mat', np.linalg.norm(np.dot(umat, vmat*rvec))
@@ -571,4 +590,4 @@ def optcon_nse(N=10, Nts=10):
     print 'dim of v :', femp['V'].dim()
 
 if __name__ == '__main__':
-    optcon_nse(N=15, Nts=2)
+    optcon_nse(N=25, Nts=50)
