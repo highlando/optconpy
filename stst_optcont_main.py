@@ -33,8 +33,8 @@ def time_int_params(Nts):
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
-                   adi_max_steps=100,
-                   adi_newZ_reltol=1e-5,
+                   adi_max_steps=200,
+                   adi_newZ_reltol=1e-6,
                    nwtn_max_steps=20,
                    nwtn_upd_reltol=4e-8,
                    nwtn_upd_abstol=1e-7,
@@ -69,7 +69,7 @@ class ContParams():
     """
     def __init__(self):
 
-        self.ystarx = dolfin.Expression('0.1', t=0)
+        self.ystarx = dolfin.Expression('0.5', t=0)
         self.ystary = dolfin.Expression('0.0', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
@@ -86,7 +86,7 @@ class ContParams():
 
         self.R = None
         # regularization parameter
-        self.alphau = 1e-6
+        self.alphau = 1e-4
         self.endpy = 1
         self.V = None
         self.W = None
@@ -442,9 +442,13 @@ def optcon_nse(N=10, Nts=10):
 
 #    trct_mat = lau.apply_invsqrt_fromleft(contp.endpy*y_masmat,
 #                                          mct_mat_reg, output='dense')
-    tct_mat = lau.apply_invsqrt_fromleft(contp.endpy*y_masmat,
-                                         mc_mat.T, output='sparse')
-    tct_mat = np.array(tct_mat.todense())
+    #tct_mat = lau.apply_invsqrt_fromleft(contp.endpy*y_masmat,
+    #                                     mc_mat.T, output='sparse')
+    tct_mat_sp = lau.apply_invsqrt_fromleft(y_masmat, mc_mat.T,
+                                            output='sparse')
+    tct_mat = np.array(tct_mat_sp.todense())
+
+    c_mat = lau.apply_massinv(y_masmat, mc_mat)
 
     cntpstr = 'NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY, contp.alphau)
 
@@ -548,7 +552,7 @@ def optcon_nse(N=10, Nts=10):
                                     jmat=stokesmatsc['J'],
                                     umat=mtxtb, vmat=tb_mat.T))
 
-    fl = mc_mat.T*(y_masmat * contp.ystarvec(0))
+    fl = mc_mat.T * contp.ystarvec(0)
 
     wft = lau.solve_sadpnt_smw(amat=A.T, jmat=stokesmatsc['J'],
                                rhsv=fl-mtxfv, umat=-mtxtb,
@@ -580,7 +584,8 @@ def optcon_nse(N=10, Nts=10):
                                           return_alu=True)
         old_v = vpn[:NV]
 
-        yn = lau.apply_massinv(y_masmat, mc_mat*vpn[:NV])
+        yn = np.dot(c_mat, vpn[:NV])
+        tip['yscomp'].append(yn)
         print 'current y: ', yn
 
         dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__stst_cont_vel')
