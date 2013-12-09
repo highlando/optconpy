@@ -562,8 +562,14 @@ def optcon_nse(N=10, Nts=10):
 
     print 'norms wft, Z', np.linalg.norm(wft), np.linalg.norm(Z)
     old_v = vp_stokes[:NV]
+
+    yn = np.dot(c_mat, old_v)
+    tip['yscomp'].append(yn)
+    tip['ystar'].append(contp.ystarvec(0))
+
     set_vpfiles(tip, fstring=('results/' +
                               'stst_closedloop').format(newtk))
+
     dou.output_paraview(tip, femp, vp=vp_stokes, t=0)
     sadlu = None
 
@@ -586,6 +592,7 @@ def optcon_nse(N=10, Nts=10):
 
         yn = np.dot(c_mat, vpn[:NV])
         tip['yscomp'].append(yn)
+        tip['ystar'].append(contp.ystarvec(t))
         print 'current y: ', yn
 
         dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__stst_cont_vel')
