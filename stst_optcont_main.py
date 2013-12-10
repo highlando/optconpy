@@ -18,10 +18,15 @@ def time_int_params(Nts):
     t0 = 0.0
     tE = 1.0
     dt = (tE - t0) / Nts
+    sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
+                     # initial and terminal point, False for equidist
+    tmesh = get_tint(t0, tE, Nts, sqzmesh)
+
     tip = dict(t0=t0,
                tE=tE,
                dt=dt,
                Nts=Nts,
+               tmesh=tmesh,
                Navier=True,  # set 0 for Stokes flow and 1 for NS
                vfile=None,
                pfile=None,
@@ -33,7 +38,7 @@ def time_int_params(Nts):
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
-                   adi_max_steps=200,
+                   adi_max_steps=100,
                    adi_newZ_reltol=1e-6,
                    nwtn_max_steps=20,
                    nwtn_upd_reltol=4e-8,
@@ -51,6 +56,17 @@ def time_int_params(Nts):
                )
 
     return tip
+
+
+def get_tint(t0, tE, Nts, sqzmesh):
+    """set up the time mesh """
+    if sqzmesh:
+        taux = np.linspace(-0.5*np.pi, 0.5*np.pi, Nts+1)
+        taux = (np.sin(taux) + 1)*0.5  # squeeze and adjust to [0, 1]
+        tint = (t0 + (tE-t0)*taux).flatten().tolist()  # adjust to [t0, tE]
+    else:
+        tint = np.linspace(t0, tE, Nts+1).flatten().tolist()
+    return tint
 
 
 def set_vpfiles(tip, fstring='not specified'):
@@ -546,11 +562,11 @@ def optcon_nse(N=10, Nts=10):
     mtxtb = pru.get_mTzzTtb(M.T, Z, tb_mat)
     mtxfv = pru.get_mTzzTtb(M.T, Z, rhsd_vfstbc['fv'])
 
-    print 'norm of riccati residual: {0}'.format(
-        pru.comp_proj_lyap_res_norm(Z, amat=-A, mmat=M,
-                                    wmat=tct_mat,
-                                    jmat=stokesmatsc['J'],
-                                    umat=mtxtb, vmat=tb_mat.T))
+    # print 'norm of riccati residual: {0}'.format(
+    #     pru.comp_proj_lyap_res_norm(Z, amat=-A, mmat=M,
+    #                                 wmat=tct_mat,
+    #                                 jmat=stokesmatsc['J'],
+    #                                 umat=mtxtb, vmat=tb_mat.T))
 
     fl = mc_mat.T * contp.ystarvec(0)
 
@@ -564,8 +580,8 @@ def optcon_nse(N=10, Nts=10):
     old_v = vp_stokes[:NV]
 
     yn = np.dot(c_mat, old_v)
-    tip['yscomp'].append(yn)
-    tip['ystar'].append(contp.ystarvec(0))
+    tip['yscomp'].append(yn.flatten().tolist())
+    tip['ystar'].append(contp.ystarvec(0).flatten().tolist())
 
     set_vpfiles(tip, fstring=('results/' +
                               'stst_closedloop').format(newtk))
@@ -591,8 +607,8 @@ def optcon_nse(N=10, Nts=10):
         old_v = vpn[:NV]
 
         yn = np.dot(c_mat, vpn[:NV])
-        tip['yscomp'].append(yn)
-        tip['ystar'].append(contp.ystarvec(t))
+        tip['yscomp'].append(yn.flatten().tolist())
+        tip['ystar'].append(contp.ystarvec(t).flatten().tolist())
         print 'current y: ', yn
 
         dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__stst_cont_vel')
@@ -600,6 +616,8 @@ def optcon_nse(N=10, Nts=10):
         # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
     print 'dim of v :', femp['V'].dim()
+    dou.save_output_json(tip['yscomp'], tip['tmesh'], ystar=tip['ystar'],
+                         fstring=ddir + cdatstr + cntpstr + '__sigout')
 
 if __name__ == '__main__':
-    optcon_nse(N=30, Nts=64)
+    optcon_nse(N=20, Nts=64)
