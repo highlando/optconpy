@@ -598,8 +598,11 @@ def optcon_nse(N=10, Nts=10):
 
         dou.output_paraview(tip, femp, vp=vpn, t=t),
 
+    sigstr = 'yxT{0}yyT{1}'.format(contp.ystarvec(t)[0, 0],
+                                   contp.ystarvec(t)[-1, 0])
+
     dou.save_output_json(tip['yscomp'], tip['tmesh'], ystar=tip['ystar'],
-                         fstring=ddir + cdatstr + cntpstr + '__sigout')
+                         fstring='results/'+cdatstr+cntpstr+sigstr+'.json')
 
     print 'dim of v :', femp['V'].dim()
 
