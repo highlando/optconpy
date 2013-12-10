@@ -46,7 +46,7 @@ def save_output_json(ycomp, tmesh, ystar=None, fstring=None):
     jsfile = open(fstring, mode='w')
     jsfile.write(json.dumps(dict(ycomp=ycomp,
                                  tmesh=tmesh,
-                                 ystar=None)))
+                                 ystar=ystar)))
 
 
 def load_json_dicts(StrToJs):

@@ -18,9 +18,9 @@ def time_int_params(Nts):
     t0 = 0.0
     tE = 1.0
     dt = (tE - t0) / Nts
-    sqzmeshexp = 2.0,  # squeeze the mesh for shorter intervals towards the
-                     # terminal point, 1.0 for equidist
-    tmesh = get_tint(t0, tE, Nts, sqzmeshexp)
+    sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
+                     # initial and terminal point, False for equidist
+    tmesh = get_tint(t0, tE, Nts, sqzmesh)
 
     tip = dict(t0=t0,
                tE=tE,
@@ -74,8 +74,8 @@ class ContParams():
     """
     def __init__(self):
 
-        self.ystarx = dolfin.Expression('0.0', t=0)
-        self.ystary = dolfin.Expression('0.1', t=0)
+        self.ystarx = dolfin.Expression('-0.1', t=0)
+        self.ystary = dolfin.Expression('0.0', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
         self.NU, self.NY = 4, 4
@@ -125,14 +125,16 @@ class ContParams():
                           np.atleast_2d(ysy.vector().array()).T])
 
 
-def get_tint(t0, tE, Nts, sqzexp):
+def get_tint(t0, tE, Nts, sqzmesh):
     """set up the time mesh """
+    if sqzmesh:
+        taux = np.linspace(-0.5*np.pi, 0.5*np.pi, Nts+1)
+        taux = (np.sin(taux) + 1)*0.5  # squeeze and adjust to [0, 1]
+        tint = (t0 + (tE-t0)*taux).flatten().tolist()  # adjust to [t0, tE]
+    else:
+        tint = np.linspace(t0, tE, Nts+1).flatten().tolist()
 
-    uniaux = np.linspace(t0, tE, Nts)
-    uniaux = 1 - uniaux**sqzexp
-    uniaux.sort()
-
-    return (t0 + (tE-t0)*uniaux).flatten().tolist()
+    return tint
 
 
 def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
@@ -465,7 +467,7 @@ def optcon_nse(N=10, Nts=10):
 
     # set/compute the terminal values aka starting point
     Zc = lau.apply_massinv(stokesmatsc['M'], trct_mat)
-    wc = -lau.apply_massinv(stokesmatsc['MT'],
+    wc = lau.apply_massinv(stokesmatsc['MT'],
                             np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
 
     cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, timps=tip)
@@ -554,6 +556,8 @@ def optcon_nse(N=10, Nts=10):
     for tk, t in enumerate(tip['tmesh'][1:]):
         cts = t - tip['tmesh'][tk]
 
+        print 'Time is {0}, DT is {1}'.format(t, cts)
+
         # t for implicit scheme
         ndatstr = get_datastr(nwtn=newtk, time=t,
                               meshp=N, timps=tip)
@@ -584,6 +588,7 @@ def optcon_nse(N=10, Nts=10):
         v_old = vpn[:NV]
 
         yn = np.dot(c_mat, vpn[:NV])
+        print 'norm of current w: ', np.linalg.norm(next_w)
         print 'current y: ', yn
 
         tip['yscomp'].append(yn.flatten().tolist())
@@ -599,4 +604,4 @@ def optcon_nse(N=10, Nts=10):
     print 'dim of v :', femp['V'].dim()
 
 if __name__ == '__main__':
-    optcon_nse(N=10, Nts=5)
+    optcon_nse(N=25, Nts=40)

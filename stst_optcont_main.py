@@ -16,7 +16,7 @@ dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 def time_int_params(Nts):
     t0 = 0.0
-    tE = 10.0
+    tE = 1.0
     dt = (tE - t0) / Nts
     tip = dict(t0=t0,
                tE=tE,
@@ -597,9 +597,9 @@ def optcon_nse(N=10, Nts=10):
 
         dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__stst_cont_vel')
 
-        dou.output_paraview(tip, femp, vp=vpn, t=t),
+        # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
     print 'dim of v :', femp['V'].dim()
 
 if __name__ == '__main__':
-    optcon_nse(N=25, Nts=1000)
+    optcon_nse(N=30, Nts=64)
