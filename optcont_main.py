@@ -74,7 +74,7 @@ class ContParams():
     """
     def __init__(self):
 
-        self.ystarx = dolfin.Expression('-0.1', t=0)
+        self.ystarx = dolfin.Expression('0.0', t=0)
         self.ystary = dolfin.Expression('0.0', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
@@ -468,7 +468,7 @@ def optcon_nse(N=10, Nts=10):
     # set/compute the terminal values aka starting point
     Zc = lau.apply_massinv(stokesmatsc['M'], trct_mat)
     wc = lau.apply_massinv(stokesmatsc['MT'],
-                            np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
+                           np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
 
     cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, timps=tip)
 
