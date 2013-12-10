@@ -18,7 +18,7 @@ def time_int_params(Nts):
     t0 = 0.0
     tE = 1.0
     dt = (tE - t0) / Nts
-    sqzmeshexp=2.0,  # squeeze the mesh for shorter intervals towards the
+    sqzmeshexp = 2.0,  # squeeze the mesh for shorter intervals towards the
                      # terminal point, 1.0 for equidist
     tmesh = get_tint(t0, tE, Nts, sqzmeshexp)
 
@@ -51,6 +51,8 @@ def time_int_params(Nts):
                comprz_maxc=500,  # compression of the columns of Z by QR
                comprz_thresh=5e-5,  # threshold for trunc of SVD
                save_full_z=False,  # whether or not to save the uncompressed Z
+               yscomp=[],
+               ystar=[]
                )
 
     return tip
@@ -90,7 +92,6 @@ class ContParams():
         self.R = None
         # regularization parameter
         self.alphau = 1e-7
-        self.endpy = 10
         self.V = None
         self.W = None
 
@@ -123,6 +124,7 @@ class ContParams():
         return np.vstack([np.atleast_2d(ysx.vector().array()).T,
                           np.atleast_2d(ysy.vector().array()).T])
 
+
 def get_tint(t0, tE, Nts, sqzexp):
     """set up the time mesh """
 
@@ -130,7 +132,7 @@ def get_tint(t0, tE, Nts, sqzexp):
     uniaux = 1 - uniaux**sqzexp
     uniaux.sort()
 
-    return t0 + (tE-t0)*uniaux
+    return (t0 + (tE-t0)*uniaux).flatten().tolist()
 
 
 def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
@@ -281,7 +283,7 @@ def optcon_nse(N=10, Nts=10):
 
     # casting some parameters
     NV, INVINDS = len(femp['invinds']), femp['invinds']
-    NP = stokesmatsc['J'].shape[0]
+    # NP = stokesmatsc['J'].shape[0]
     # and setting current values
     newtk, t = 0, None
 
@@ -366,7 +368,7 @@ def optcon_nse(N=10, Nts=10):
 
             rhsd_cur = dict(fv=stokesmatsc['M'] * v_old +
                             cts * (rhs_con[INVINDS, :] +
-                                  rhsv_conbc + rhsd_vfstbc['fv']),
+                                   rhsv_conbc + rhsd_vfstbc['fv']),
                             fp=rhsd_vfstbc['fp'])
 
             matd_cur = dict(A=stokesmatsc['M'] +
@@ -385,8 +387,8 @@ def optcon_nse(N=10, Nts=10):
 
             # integrate the Newton error
             norm_nwtnupd += cts * np.dot((v_old - prev_v).T,
-                                        stokesmatsc['M'] *
-                                        (v_old - prev_v))
+                                         stokesmatsc['M'] *
+                                         (v_old - prev_v))
 
         dou.save_npa(norm_nwtnupd, ddir + cdatstr + '__norm_nwtnupd')
         tip['norm_nwtnupd_list'].append(norm_nwtnupd[0])
@@ -428,6 +430,8 @@ def optcon_nse(N=10, Nts=10):
     mc_mat = mc_mat[:, invinds][:, :]
     b_mat = b_mat[invinds, :][:, :]
 
+    # for further use:
+    c_mat = lau.apply_massinv(y_masmat, mc_mat)
     mct_mat_reg = lau.app_prj_via_sadpnt(amat=stokesmatsc['M'],
                                          jmat=stokesmatsc['J'],
                                          rhsv=mc_mat.T,
@@ -452,8 +456,9 @@ def optcon_nse(N=10, Nts=10):
     # tilde B = BR^{-1/2}
     tb_mat = lau.apply_invsqrt_fromleft(contp.R, b_mat,
                                         output='sparse')
+    tb_dense = np.array(tb_mat.todense())
 
-    trct_mat = lau.apply_invsqrt_fromleft(contp.endpy*y_masmat,
+    trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
                                           mct_mat_reg, output='dense')
 
     cntpstr = 'NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY, contp.alphau)
@@ -490,7 +495,7 @@ def optcon_nse(N=10, Nts=10):
 
             # coeffmat for nwtn adi
             ft_mat = -(0.5*stokesmatsc['MT'] + cts*(stokesmatsc['AT'] +
-                                                   convc_mat.T))
+                                                    convc_mat.T))
             # rhs for nwtn adi
             w_mat = np.hstack([stokesmatsc['MT']*Zc, np.sqrt(cts)*trct_mat])
 
@@ -521,20 +526,20 @@ def optcon_nse(N=10, Nts=10):
                 dou.save_npa(Zc, fstring=ddir + pdatstr + cntpstr + '__Z')
 
         ### and the affine correction
-        ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
         at_mat = MT + cts*(AT + convc_mat.T)
-        rhswc = MT*wc + cts*(mc_mat.T*contp.ystarvec(t) -
-                            MT*np.dot(Zc, np.dot(Zc.T, ftilde)))
 
-        amat, currhs = setup_sadpnt_matsrhs(at_mat, stokesmatsc['J'], rhswc)
+        # current rhs
+        ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
+        mtxft = pru.get_mTzzTtb(M.T, Zc, ftilde)
+        fl1 = mc_mat.T * contp.ystarvec(t)
+        rhswc = MT*wc + cts*(fl1 - mtxft)
 
-        umat = cts*MT*np.dot(Zc, Zc.T*tb_mat)
-        vmat = tb_mat.T
+        mtxtb = pru.get_mTzzTtb(M.T, Zc, tb_mat)
 
-        vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], NP))])
-        umate = np.vstack([umat, np.zeros((NP, umat.shape[1]))])
+        wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=stokesmatsc['J'],
+                                  umat=-cts*mtxtb, vmat=tb_mat.T,
+                                  rhsv=rhswc)[:NV]
 
-        wc = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)[:NV]
         dou.save_npa(wc, fstring=ddir + pdatstr + cntpstr + '__w')
 
     # solve the closed loop system
@@ -542,6 +547,10 @@ def optcon_nse(N=10, Nts=10):
                               'NewtonIt{0}').format(newtk))
 
     v_old = inivalvec
+    yn = np.dot(c_mat, v_old)
+    tip['yscomp'].append(yn.flatten().tolist())
+    tip['ystar'].append(contp.ystarvec(0).flatten().tolist())
+
     for tk, t in enumerate(tip['tmesh'][1:]):
         cts = t - tip['tmesh'][tk]
 
@@ -554,40 +563,40 @@ def optcon_nse(N=10, Nts=10):
         convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(next_v,
                                                           femp, tip)
 
-        # feedback mats
+        # feedback mat and feedthrough
         next_zmat = dou.load_npa(ddir + ndatstr + cntpstr + '__Z')
         next_w = dou.load_npa(ddir + ndatstr + cntpstr + '__w')
-        print 'norm of w:', np.linalg.norm(next_w)
 
-        umat = cts*MT*np.dot(next_zmat, next_zmat.T*tb_mat)
-        vmat = tb_mat.T
-
-        vmate = sps.hstack([vmat, sps.csc_matrix((vmat.shape[0], NP))])
-        umate = cts*np.vstack([umat, np.zeros((NP, umat.shape[1]))])
-
+        # rhs
         fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
-        # rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
-        rhsn = M*v_old + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
+        rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
 
+        # coeffmats
         amat = M + cts*(A + convc_mat)
-        rvec = np.random.randn(next_zmat.shape[0], 1)
-        print 'norm of amat', np.linalg.norm(amat*rvec)
-        print 'norm of gain mat', np.linalg.norm(np.dot(umat, vmat*rvec))
+        mtxtb = pru.get_mTzzTtb(M.T, next_zmat, tb_mat)
 
-        amat, currhs = setup_sadpnt_matsrhs(amat, stokesmatsc['J'], rhsn)
+        # TODO: rhsp!!!
+        vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
+                                   rhsv=rhsn,
+                                   umat=-cts*tb_dense, vmat=mtxtb.T)
 
-        vpn = lau.app_smw_inv(amat, umat=-umate, vmat=vmate, rhsa=currhs)
         # vpn = np.atleast_2d(sps.linalg.spsolve(amat, currhs)).T
         v_old = vpn[:NV]
 
-        yn = lau.apply_massinv(y_masmat, mc_mat*vpn[:NV])
+        yn = np.dot(c_mat, vpn[:NV])
         print 'current y: ', yn
+
+        tip['yscomp'].append(yn.flatten().tolist())
+        tip['ystar'].append(contp.ystarvec(0).flatten().tolist())
 
         dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
 
         dou.output_paraview(tip, femp, vp=vpn, t=t),
 
+    dou.save_output_json(tip['yscomp'], tip['tmesh'], ystar=tip['ystar'],
+                         fstring=ddir + cdatstr + cntpstr + '__sigout')
+
     print 'dim of v :', femp['V'].dim()
 
 if __name__ == '__main__':
-    optcon_nse(N=25, Nts=50)
+    optcon_nse(N=10, Nts=5)

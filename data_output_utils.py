@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.io
+import json
 from dolfin_to_nparrays import expand_vp_dolfunc
 
 
@@ -34,3 +35,22 @@ def save_spa(sparray, fstring='notspecified'):
 
 def load_spa(fstring):
     return scipy.io.mmread(fstring).tocsc()
+
+
+def save_output_json(ycomp, tmesh, ystar=None, fstring=None):
+    """save the signals to json for postprocessing"""
+    if fstring is None:
+        fstring = 'nonspecified_output'
+
+    print 'output saved to ' + fstring
+    jsfile = open(fstring, mode='w')
+    jsfile.write(json.dumps(dict(ycomp=ycomp,
+                                 tmesh=tmesh,
+                                 ystar=None)))
+
+
+def load_json_dicts(StrToJs):
+
+    fjs = open(StrToJs)
+    JsDict = json.load(fjs)
+    return JsDict
