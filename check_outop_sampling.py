@@ -5,7 +5,7 @@ import cont_obs_utils as cou
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
 
-def check_outop(NV=20, NY=4, odcoo=dict(xmin=0.45,
+def check_outop(NV=20, NY=6, odcoo=dict(xmin=0.45,
                                         xmax=0.55,
                                         ymin=0.6,
                                         ymax=0.8)):
@@ -24,7 +24,7 @@ def check_outop(NV=20, NY=4, odcoo=dict(xmin=0.45,
     # check the C
     print ('assembling the output operator... ' +
            '(NV = {0}, NY = {1})').format(NV, NY)
-    MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY, NV=NV)
+    MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY)
     print 'done!'
     testvi = testv.vector().array()
     testy = spsla.spsolve(My, MyC * testvi)

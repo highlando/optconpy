@@ -10,6 +10,71 @@ from dolfin import dx, inner
 dolfin.parameters.linear_algebra_backend = "uBLAS"
 
 
+class ContParams():
+    """define the parameters of the control problem
+
+    as there are
+    - dimensions of in and output space
+    - extensions of the subdomains of control and observation
+    - weighting matrices (if None, then massmatrix)
+    - desired output
+    """
+    def __init__(self, V):
+
+        self.ystarx = dolfin.Expression('0.0', t=0)
+        self.ystary = dolfin.Expression('0.0', t=0)
+        # if t, then add t=0 to both comps !!1!!11
+
+        self.NU, self.NY = 4, 4
+
+        self.odcoo = dict(xmin=0.45,
+                          xmax=0.55,
+                          ymin=0.5,
+                          ymax=0.7)
+        self.cdcoo = dict(xmin=0.4,
+                          xmax=0.6,
+                          ymin=0.2,
+                          ymax=0.3)
+
+        self.R = None
+        # regularization parameter
+        self.alphau = 1e-7
+        self.V = None
+        self.W = None
+
+        self.ymesh = dolfin.IntervalMesh(self.NY-1, self.odcoo['ymin'],
+                                         self.odcoo['ymax'])
+        self.Y = dolfin.FunctionSpace(self.ymesh, 'CG', 1)
+        # todo pass this to get_mout_opa
+
+        self.B, self.Mu = get_inp_opa(cdcoo=self.cdcoo, NU=self.NU, V=V)
+        self.MyC, self.My = get_mout_opa(odcoo=self.odcoo, NY=8, V=V)
+
+    def ystarvec(self, t=None):
+        """return the current value of ystar
+
+        as np array [ystar1
+                     ystar2] """
+        if t is None:
+            try:
+                self.ystarx.t, self.ystary.t = t, t
+            except AttributeError:
+                pass  # everything's cool - ystar does not dep on t
+            else:
+                raise Warning('You need provide a time for ystar')
+        else:
+            try:
+                self.ystarx.t, self.ystary.t = t, t
+            except AttributeError:
+                raise UserWarning('no time dependency of ystar' +
+                                  'the provided t is ignored')
+
+        ysx = dolfin.interpolate(self.ystarx, self.Y)
+        ysy = dolfin.interpolate(self.ystary, self.Y)
+        return np.vstack([np.atleast_2d(ysx.vector().array()).T,
+                          np.atleast_2d(ysy.vector().array()).T])
+
+
 def get_inp_opa(cdcoo=None, NU=8, V=None):
     """dolfin.assemble the 'B' matrix
 
@@ -47,7 +112,7 @@ def get_inp_opa(cdcoo=None, NU=8, V=None):
     )
 
 
-def get_mout_opa(odcoo=None, NY=8, V=None, NV=20):
+def get_mout_opa(odcoo=None, NY=8, V=None):
     """dolfin.assemble the 'MyC' matrix
 
     the find an array representation
@@ -71,18 +136,12 @@ def get_mout_opa(odcoo=None, NY=8, V=None, NV=20):
     # factor to compute the average via \bar u = 1/h \int_0^h u(x) dx
     Ci = 1.0 / (odcoo['xmax'] - odcoo['xmin'])
 
+    # extrusion of the y-functions in x1 direction
     omega_y = dolfin.RectangleMesh(odcoo['xmin'], odcoo['ymin'],
                                    odcoo['xmax'], odcoo['ymax'],
-                                   NV/5, NY-1)
+                                   NY, NY-1)
 
     y_y = dolfin.VectorFunctionSpace(omega_y, 'CG', 1)
-    # vone_yx = dolfin.interpolate(vonex, y_y)
-    # vone_yy = dolfin.interpolate(voney, y_y)
-
-    # charfun = CharactFun(odom)
-    # v = dolfin.TestFunction(V)
-    # checkf = dolfin.assemble(inner(v, charfun) * dx)
-    # dofs_on_subd = np.where(checkf.array() > 0)[0]
 
     charfun = CharactFun(odom)
     v = dolfin.TestFunction(V)
@@ -192,7 +251,7 @@ def get_regularized_c(Ct=None, J=None, Mt=None):
     rCT = [I - J.T*S.-T*J*M.-T]*C.T
     """
 
-    raise UserWarning('deprecated - use more explicit approach to proj via ' +\
+    raise UserWarning('deprecated - use more explicit approach to proj via ' +
                       'sadpoints systems as implemented in linalg_utils')
 
     Nv, NY = Mt.shape[0], Ct.shape[1]

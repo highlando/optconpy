@@ -133,9 +133,9 @@ class OptConPyFunctions(unittest.TestCase):
         """ check the function that returns a time instance
 
         of the target signal as np.array"""
-        from optcont_main import ContParams
+        from cont_obs_utils import ContParams
 
-        contp = ContParams()
+        contp = ContParams(self.V)
         contp.ystarx = dolfin.Expression('t*1', t=0)
         contp.ystary = dolfin.Expression('1', t=0)
 

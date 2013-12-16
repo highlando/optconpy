@@ -64,68 +64,6 @@ def set_vpfiles(tip, fstring='not specified'):
     tip['vfile'] = dolfin.File(fstring+'_vel.pvd')
 
 
-class ContParams():
-    """define the parameters of the control problem
-
-    as there are
-    - dimensions of in and output space
-    - extensions of the subdomains of control and observation
-    - weighting matrices (if None, then massmatrix)
-    - desired output
-    """
-    def __init__(self):
-
-        self.ystarx = dolfin.Expression('0.0', t=0)
-        self.ystary = dolfin.Expression('0.0', t=0)
-        # if t, then add t=0 to both comps !!1!!11
-
-        self.NU, self.NY = 4, 4
-
-        self.odcoo = dict(xmin=0.45,
-                          xmax=0.55,
-                          ymin=0.5,
-                          ymax=0.7)
-        self.cdcoo = dict(xmin=0.4,
-                          xmax=0.6,
-                          ymin=0.2,
-                          ymax=0.3)
-
-        self.R = None
-        # regularization parameter
-        self.alphau = 1e-7
-        self.V = None
-        self.W = None
-
-        self.ymesh = dolfin.IntervalMesh(self.NY-1, self.odcoo['ymin'],
-                                         self.odcoo['ymax'])
-        self.Y = dolfin.FunctionSpace(self.ymesh, 'CG', 1)
-        # TODO: pass Y to cou.get_output_operator
-
-    def ystarvec(self, t=None):
-        """return the current value of ystar
-
-        as np array [ystar1
-                     ystar2] """
-        if t is None:
-            try:
-                self.ystarx.t, self.ystary.t = t, t
-            except AttributeError:
-                pass  # everything's cool - ystar does not dep on t
-            else:
-                raise Warning('You need provide a time for ystar')
-        else:
-            try:
-                self.ystarx.t, self.ystary.t = t, t
-            except AttributeError:
-                raise UserWarning('no time dependency of ystar' +
-                                  'the provided t is ignored')
-
-        ysx = dolfin.interpolate(self.ystarx, self.Y)
-        ysy = dolfin.interpolate(self.ystary, self.Y)
-        return np.vstack([np.atleast_2d(ysx.vector().array()).T,
-                          np.atleast_2d(ysy.vector().array()).T])
-
-
 def get_tint(t0, tE, Nts, sqzmesh):
     """set up the time mesh """
     if sqzmesh:
@@ -147,8 +85,7 @@ def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
 
     return (navsto + 'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
         nwtn, time, timps['nu'], meshp,
-        timps['Nts'], timps['dt']
-    )
+        timps['Nts'], timps['dt'])
 
 
 def drivcav_fems(N, NU=None, NY=None):
@@ -234,7 +171,7 @@ def optcon_nse(N=10, Nts=10):
 
     tip = time_int_params(Nts)
     femp = drivcav_fems(N)
-    contp = ContParams()
+    contp = cou.ContParams(femp['V'])
 
     # output
     ddir = 'data/'

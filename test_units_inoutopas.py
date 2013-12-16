@@ -23,7 +23,7 @@ class TestInoutOpas(unittest.TestCase):
 
         are accurately sampled for this parameter set (NV=25, NY=5)"""
 
-        NV = 25 
+        NV = 25
         NY = 5
 
         mesh = dolfin.UnitSquareMesh(NV, NV)
@@ -38,7 +38,7 @@ class TestInoutOpas(unittest.TestCase):
                      ymax=0.8)
 
         # check the C
-        MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY, NV=NV)
+        MyC, My = cou.get_mout_opa(odcoo=odcoo, V=V, NY=NY)
 
         # signal space
         ymesh = dolfin.IntervalMesh(NY - 1, odcoo['ymin'], odcoo['ymax'])
