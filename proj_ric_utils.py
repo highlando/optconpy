@@ -305,8 +305,6 @@ def proj_alg_ric_newtonadi(mmat=None, fmat=None, jmat=None,
                        'rel f norm of update: {0}').format(upd_fnorm,
                                                            nwtn_stp + 1)
                 if not nwtn_adi_dict['full_upd_norm_check']:
-                    print ('btw... we used an estimated norm:').\
-                        format(nwtn_stp + 1)
                     print '|| upd * vec || / || vec || = {0}'.format(vecn2)
 
         except KeyError:

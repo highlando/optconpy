@@ -18,7 +18,7 @@ def time_int_params(Nts):
     t0 = 0.0
     tE = 1.0
     dt = (tE - t0) / Nts
-    sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
+    sqzmesh = False,  # squeeze the mesh for shorter intervals towards the
                      # initial and terminal point, False for equidist
     tmesh = get_tint(t0, tE, Nts, sqzmesh)
 
@@ -85,8 +85,8 @@ class ContParams():
     """
     def __init__(self):
 
-        self.ystarx = dolfin.Expression('0.5', t=0)
-        self.ystary = dolfin.Expression('0.0', t=0)
+        self.ystarx = dolfin.Expression('0.0', t=0)
+        self.ystary = dolfin.Expression('0.1', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
         self.NU, self.NY = 4, 4

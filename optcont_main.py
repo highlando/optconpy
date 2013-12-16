@@ -10,6 +10,7 @@ import lin_alg_utils as lau
 import data_output_utils as dou
 import cont_obs_utils as cou
 import proj_ric_utils as pru
+import time
 
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
@@ -479,6 +480,7 @@ def optcon_nse(N=10, Nts=10):
     MT, AT = stokesmatsc['MT'], stokesmatsc['AT']
     M, A = stokesmatsc['M'], stokesmatsc['A']
 
+    time_before_soldaeric = time.time()
     for tk, t in reversed(list(enumerate(tip['tmesh'][:-1]))):
     # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
         cts = tip['tmesh'][tk+1] - t
@@ -544,6 +546,8 @@ def optcon_nse(N=10, Nts=10):
 
         dou.save_npa(wc, fstring=ddir + pdatstr + cntpstr + '__w')
 
+    time_after_soldaeric = time.time()
+
     # solve the closed loop system
     set_vpfiles(tip, fstring=('results/' + 'closedloop' + cntpstr +
                               'NewtonIt{0}').format(newtk))
@@ -602,6 +606,8 @@ def optcon_nse(N=10, Nts=10):
                          fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
+    print 'time for solving dae ric :', \
+        time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
     optcon_nse(N=25, Nts=40)
