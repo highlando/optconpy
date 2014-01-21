@@ -2,7 +2,7 @@ import numpy as np
 import scipy
 import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
-import krypy.linsys
+# import krypy.linsys
 
 
 def app_prj_via_sadpnt(amat=None, jmat=None, rhsv=None,
@@ -219,27 +219,27 @@ def app_smw_inv(amat, umat=None, vmat=None, rhsa=None, Sinv=None,
         return auvirhs
 
 
-def app_schurc_inv(M, J, veca):
-    """ apply the inverse of the Schurcomplement
-
-    for M is strictly positive definite
-    """
-
-    def _schurc(cveca):
-        try:
-            # if M comes with a solve routine
-            return J * M(J.T * cveca.flatten())
-        except TypeError:
-            return J * spsla.spsolve(M, J.T * cveca)
-
-    S = spsla.LinearOperator((J.shape[0], J.shape[0]), matvec=_schurc,
-                             dtype=np.float32)
-
-    auveca = np.zeros(veca.shape)
-    for ccol in range(veca.shape[1]):
-        auveca[:, ccol] = krypy.linsys.cg(S, veca[:, ccol], tol=1e-16)['xk']
-
-    return auveca
+#def app_schurc_inv(M, J, veca):
+#    """ apply the inverse of the Schurcomplement
+#
+#    for M is strictly positive definite
+#    """
+#
+#    def _schurc(cveca):
+#        try:
+#            # if M comes with a solve routine
+#            return J * M(J.T * cveca.flatten())
+#        except TypeError:
+#            return J * spsla.spsolve(M, J.T * cveca)
+#
+#    S = spsla.LinearOperator((J.shape[0], J.shape[0]), matvec=_schurc,
+#                             dtype=np.float32)
+#
+#    auveca = np.zeros(veca.shape)
+#    for ccol in range(veca.shape[1]):
+#        auveca[:, ccol] = krypy.linsys.cg(S, veca[:, ccol], tol=1e-16)['xk']
+#
+#    return auveca
 
 
 def comp_sqfnrm_factrd_diff(zone, ztwo, ret_sing_norms=False):
