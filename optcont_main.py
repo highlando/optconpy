@@ -607,4 +607,4 @@ def optcon_nse(N=10, Nts=10):
     print 'dim of v :', femp['V'].dim()
 
 if __name__ == '__main__':
-    optcon_nse(N=30, Nts=64)
+    optcon_nse(N=20, Nts=64)
