@@ -1,16 +1,16 @@
 import dolfin
 import numpy as np
-import scipy.sparse as sps
-# import matplotlib.pyplot as plt
 import os
-import glob
 
-import dolfin_to_nparrays as dtn
-import lin_alg_utils as lau
-import data_output_utils as dou
-import cont_obs_utils as cou
-import proj_ric_utils as pru
-import time
+import dolfin_navier_scipy.dolfin_to_sparrays as dts
+import dolfin_navier_scipy.data_output_utils as dou
+import dolfin_navier_scipy.stokes_navier_utils as snu
+import dolfin_navier_scipy.problem_setups as dnsps
+
+import sadptprj_riclyap_adi.lin_alg_utils as lau
+import sadptprj_riclyap_adi.proj_ric_utils as pru
+
+import distr_control_fenics.cont_obs_utils as cou
 
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
@@ -28,13 +28,13 @@ def time_int_params(Nts):
                dt=dt,
                Nts=Nts,
                tmesh=tmesh,
-               Navier=True,  # set 0 for Stokes flow and 1 for NS
                vfile=None,
                pfile=None,
                Residuals=[],
                ParaviewOutput=True,
-               nu=1e-2,
-               nnewtsteps=4,  # n nwtn stps for vel comp
+               proutdir='results/',
+               prfprfx='',
+               nnewtsteps=9,  # n nwtn stps for vel comp, 0 for Stokes flow
                vel_nwtn_tol=1e-14,
                norm_nwtnupd_list=[],
                # parameters for newton adi iteration
@@ -76,102 +76,34 @@ def get_tint(t0, tE, Nts, sqzmesh):
     return tint
 
 
-def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
+def get_datastr(nwtn=None, time=None,
+                meshp=None, nu=None, Nts=None, dt=None,
+                data_prfx=''):
 
-    if timps['Navier']:
-        navsto = 'NStokes'
-    else:
-        navsto = 'Stokes'
-
-    return (navsto + 'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
-        nwtn, time, timps['nu'], meshp,
-        timps['Nts'], timps['dt'])
+    return (data_prfx +
+            'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
+        nwtn, time, nu, meshp, Nts, dt)
 
 
-def drivcav_fems(N, NU=None, NY=None):
-    """dictionary for the fem items of the (unit) driven cavity
-
-    """
-    mesh = dolfin.UnitSquareMesh(N, N)
-    V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
-    Q = dolfin.FunctionSpace(mesh, "CG", 1)
-    # pressure node that is set to zero
-
-    # Boundaries
-    def top(x, on_boundary):
-        return x[1] > 1.0 - dolfin.DOLFIN_EPS
-
-    def leftbotright(x, on_boundary):
-        return (x[0] > 1.0 - dolfin.DOLFIN_EPS
-                or x[1] < dolfin.DOLFIN_EPS
-                or x[0] < dolfin.DOLFIN_EPS)
-
-    # No-slip boundary condition for velocity
-    noslip = dolfin.Constant((0.0, 0.0))
-    bc0 = dolfin.DirichletBC(V, noslip, leftbotright)
-    # Boundary condition for velocity at the lid
-    lid = dolfin.Constant(("1", "0.0"))
-    bc1 = dolfin.DirichletBC(V, lid, top)
-    # Collect boundary conditions
-    diribcs = [bc0, bc1]
-    # rhs of momentum eqn
-    fv = dolfin.Constant((0.0, 0.0))
-    # rhs of the continuity eqn
-    fp = dolfin.Constant(0.0)
-
-    dfems = dict(mesh=mesh,
-                 V=V,
-                 Q=Q,
-                 diribcs=diribcs,
-                 fv=fv,
-                 fp=fp)
-
-    return dfems
-
-
-def get_v_conv_conts(prev_v, femp, tip):
-
-    # get and condense the linearized convection
-    # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
-    if tip['Navier']:
-        N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v,
-                                           V=femp['V'],
-                                           invinds=femp['invinds'],
-                                           diribcs=femp['diribcs'])
-        convc_mat, rhsv_conbc = \
-            dtn.condense_velmatsbybcs(N1 + N2, femp['diribcs'])
-
-    else:
-        nnvv = femp['invinds'].size
-        convc_mat, rhsv_conbc = sps.csr_matrix((nnvv, nnvv)), 0
-        rhs_con = np.zeros((femp['V'].dim(), 1))
-
-    return convc_mat, rhs_con, rhsv_conbc
-
-
-def setup_sadpnt_matsrhs(amat, jmat, rhsv, rhsp=None, jmatT=None):
-
-    nnpp = jmat.shape[0]
-
-    if jmatT is None:
-        jmatT = jmat.T
-    if rhsp is None:
-        rhsp = np.zeros((nnpp, 1))
-
-    sysm1 = sps.hstack([amat, jmat.T], format='csr')
-    sysm2 = sps.hstack([jmat, sps.csr_matrix((nnpp, nnpp))], format='csr')
-
-    mata = sps.vstack([sysm1, sysm2], format='csr')
-    rhs = np.vstack([rhsv, rhsp])
-
-    return mata, rhs
-
-
-def optcon_nse(N=10, Nts=10):
+def optcon_nse(problemname='drivencavity',
+               N=10, Nts=10, nu=1e-2):
 
     tip = time_int_params(Nts)
-    femp = drivcav_fems(N)
-    contp = cou.ContParams(femp['V'])
+
+    problemdict = dict(drivencavity=dnsps.drivcav_fems,
+                       cylinderwake=dnsps.cyl_fems)
+
+    problemfem = problemdict[problemname]
+    femp = problemfem(N)
+
+    data_prfx = problemname + '__'
+    NU, NY = 3, 4
+
+    # specify in what spatial direction Bu changes. The remaining is constant
+    if problemname == 'drivencavity':
+        uspacedep = 0
+    elif problemname == 'cylinderwake':
+        uspacedep = 1
 
     # output
     ddir = 'data/'
@@ -181,20 +113,10 @@ def optcon_nse(N=10, Nts=10):
         raise Warning('need "' + ddir + '" subdir for storing the data')
     os.chdir('..')
 
-    if tip['ParaviewOutput']:
-        os.chdir('results/')
-        for fname in glob.glob('NewtonIt' + '*'):
-            os.remove(fname)
-        os.chdir('..')
-
-#
-# start with the Stokes problem for initialization
-#
-
-    stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'],
+    stokesmats = dts.get_stokessysmats(femp['V'], femp['Q'],
                                        tip['nu'])
 
-    rhsd_vf = dtn.setget_rhs(femp['V'], femp['Q'],
+    rhsd_vf = dts.setget_rhs(femp['V'], femp['Q'],
                              femp['fv'], femp['fp'], t=0)
 
     # remove the freedom in the pressure
@@ -207,13 +129,11 @@ def optcon_nse(N=10, Nts=10):
      rhsd_stbc,
      invinds,
      bcinds,
-     bcvals) = dtn.condense_sysmatsbybcs(stokesmats,
+     bcvals) = dts.condense_sysmatsbybcs(stokesmats,
                                          femp['diribcs'])
 
-    # we will need transposes, and explicit is better than implicit
-    # here, the coefficient matrices are symmetric
-    stokesmatsc.update(dict(MT=stokesmatsc['M'],
-                            AT=stokesmatsc['A']))
+    # pressure freedom and dirichlet reduced rhs
+    rhsd_vfrc = dict(fpr=rhsd_vf['fp'], fvc=rhsd_vf['fv'][invinds, ])
 
     # add the info on boundary and inner nodes
     bcdata = {'bcinds': bcinds,
@@ -222,118 +142,27 @@ def optcon_nse(N=10, Nts=10):
     femp.update(bcdata)
 
     # casting some parameters
-    NV, INVINDS = len(femp['invinds']), femp['invinds']
-    # NP = stokesmatsc['J'].shape[0]
-    # and setting current values
-    newtk, t = 0, None
+    NV, DT, INVINDS = len(femp['invinds']), tip['dt'], femp['invinds']
 
-    # compute the steady state stokes solution
-    rhsd_vfstbc = dict(fv=rhsd_stbc['fv'] +
-                       rhsd_vf['fv'][INVINDS, ],
-                       fp=rhsd_stbc['fp'] + rhsd_vf['fp'])
+    soldict = stokesmatsc  # containing A, J, JT
+    soldict.update(femp)  # adding V, Q, invinds, diribcs
+    soldict.update(rhsd_vfrc)  # adding fvc, fpr
+    soldict.update(fv_stbc=rhsd_stbc['fv'], fp_stbc=rhsd_stbc['fp'],
+                   N=N, nu=tip['nu'],
+                   nnewtsteps=tip['nnewtsteps'],
+                   vel_nwtn_tol=tip['vel_nwtn_tol'],
+                   ddir=ddir, get_datastring=get_datastr,
+                   data_prfx=data_prfx,
+                   paraviewoutput=tip['ParaviewOutput'],
+                   vfileprfx=tip['proutdir']+'vel_',
+                   pfileprfx=tip['proutdir']+'p_')
 
-    vp_stokes = lau.stokes_steadystate(matdict=stokesmatsc,
-                                       rhsdict=rhsd_vfstbc)
-
-    # save the data
-    cdatstr = get_datastr(nwtn=newtk, time=t,
-                          meshp=N, timps=tip)
-    dou.save_npa(vp_stokes[:NV, ], fstring=ddir + cdatstr + '__vel')
-
+    contp = cou.ContParams(femp['V'])
 #
-# Compute the time-dependent flow
+# compute the uncontrolled steady state Navier-Stokes solution
 #
-
-    # Stokes solution as initial value
-    inivalvec = vp_stokes[:NV, ]
-
-    norm_nwtnupd = 1
-    while newtk < tip['nnewtsteps']:
-        newtk += 1
-        # check for previously computed velocities
-        try:
-            cdatstr = get_datastr(nwtn=newtk, time=tip['tE'],
-                                  meshp=N, timps=tip)
-
-            norm_nwtnupd = dou.load_npa(ddir + cdatstr + '__norm_nwtnupd')
-            prev_v = dou.load_npa(ddir + cdatstr + '__vel')
-
-            tip['norm_nwtnupd_list'].append(norm_nwtnupd)
-            print 'found vel files of Newton iteration {0}'.format(newtk)
-            print 'norm of current Nwtn update: {0}'.format(norm_nwtnupd[0])
-
-        except IOError:
-            newtk -= 1
-            break
-
-    while (newtk < tip['nnewtsteps'] and
-           norm_nwtnupd > tip['vel_nwtn_tol']):
-        newtk += 1
-
-        cdatstr = get_datastr(nwtn=newtk, time=tip['t0'],
-                              meshp=N, timps=tip)
-
-        # save the inival value
-        dou.save_npa(inivalvec, fstring=ddir + cdatstr + '__vel')
-
-        set_vpfiles(tip, fstring=('results/' +
-                                  'NewtonIt{0}').format(newtk))
-        dou.output_paraview(tip, femp, vp=vp_stokes, t=0)
-
-        norm_nwtnupd = 0
-        v_old = inivalvec  # start vector in every Newtonit
-        print 'Computing Newton Iteration {0} -- ({1} timesteps)'.\
-            format(newtk, Nts)
-
-        for tk, t in enumerate(tip['tmesh'][1:]):
-            cts = t - tip['tmesh'][tk]
-            cdatstr = get_datastr(nwtn=newtk, time=t,
-                                  meshp=N, timps=tip)
-
-            # t for implicit scheme
-            pdatstr = get_datastr(nwtn=newtk-1, time=t,
-                                  meshp=N, timps=tip)
-
-            # try - except for linearizations about stationary sols
-            # for which t=None
-            try:
-                prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-            except IOError:
-                pdatstr = get_datastr(nwtn=newtk - 1, time=None,
-                                      meshp=N, timps=tip)
-                prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-
-            convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(prev_v,
-                                                              femp, tip)
-
-            rhsd_cur = dict(fv=stokesmatsc['M'] * v_old +
-                            cts * (rhs_con[INVINDS, :] +
-                                   rhsv_conbc + rhsd_vfstbc['fv']),
-                            fp=rhsd_vfstbc['fp'])
-
-            matd_cur = dict(A=stokesmatsc['M'] +
-                            cts * (stokesmatsc['A'] + convc_mat),
-                            JT=stokesmatsc['JT'],
-                            J=stokesmatsc['J'])
-
-            vp = lau.stokes_steadystate(matdict=matd_cur,
-                                        rhsdict=rhsd_cur)
-
-            v_old = vp[:NV, ]
-
-            dou.save_npa(v_old, fstring=ddir + cdatstr + '__vel')
-
-            dou.output_paraview(tip, femp, vp=vp, t=t),
-
-            # integrate the Newton error
-            norm_nwtnupd += cts * np.dot((v_old - prev_v).T,
-                                         stokesmatsc['M'] *
-                                         (v_old - prev_v))
-
-        dou.save_npa(norm_nwtnupd, ddir + cdatstr + '__norm_nwtnupd')
-        tip['norm_nwtnupd_list'].append(norm_nwtnupd[0])
-
-        print 'norm of current Newton update: {}'.format(norm_nwtnupd)
+    # v_ss_nse, list_norm_nwtnupd = snu.solve_steadystate_nse(**soldict)
+    newtk = snu.solve_nse(return_nwtn_step=True, **soldict)
 
 #
 # Prepare for control
@@ -342,7 +171,7 @@ def optcon_nse(N=10, Nts=10):
     # casting some parameters
     NY, NU = contp.NY, contp.NU
 
-    contsetupstr = 'NV{0}NU{1}NY{2}'.format(NV, NU, NY)
+    contsetupstr = problemname + '__NV{0}NU{1}NY{2}'.format(NV, NU, NY)
 
     # get the control and observation operators
     try:
@@ -351,8 +180,8 @@ def optcon_nse(N=10, Nts=10):
         print 'loaded `b_mat`'
     except IOError:
         print 'computing `b_mat`...'
-        b_mat, u_masmat = cou.get_inp_opa(cdcoo=contp.cdcoo,
-                                          V=femp['V'], NU=contp.NU)
+        b_mat, u_masmat = cou.get_inp_opa(cdcoo=femp['cdcoo'], V=femp['V'],
+                                          NU=NU, xcomp=uspacedep)
         dou.save_spa(b_mat, ddir + contsetupstr + '__b_mat')
         dou.save_spa(u_masmat, ddir + contsetupstr + '__u_masmat')
     try:
@@ -361,14 +190,15 @@ def optcon_nse(N=10, Nts=10):
         print 'loaded `c_mat`'
     except IOError:
         print 'computing `c_mat`...'
-        mc_mat, y_masmat = cou.get_mout_opa(odcoo=contp.odcoo,
-                                            V=femp['V'], NY=contp.NY)
+        mc_mat, y_masmat = cou.get_mout_opa(odcoo=femp['odcoo'],
+                                            V=femp['V'], NY=NY)
         dou.save_spa(mc_mat, ddir + contsetupstr + '__mc_mat')
         dou.save_spa(y_masmat, ddir + contsetupstr + '__y_masmat')
 
     # restrict the operators to the inner nodes
     mc_mat = mc_mat[:, invinds][:, :]
     b_mat = b_mat[invinds, :][:, :]
+    contsetupstr = 'NV{0}NU{1}NY{2}'.format(NV, NU, NY)
 
     # for further use:
     c_mat = lau.apply_massinv(y_masmat, mc_mat)
@@ -401,14 +231,16 @@ def optcon_nse(N=10, Nts=10):
     trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
                                           mct_mat_reg, output='dense')
 
-    cntpstr = 'NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY, contp.alphau)
+    cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY,
+                                                contp.alphau, NV)
 
     # set/compute the terminal values aka starting point
     Zc = lau.apply_massinv(stokesmatsc['M'], trct_mat)
     wc = lau.apply_massinv(stokesmatsc['MT'],
                            np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
 
-    cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, timps=tip)
+    cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N,
+                          Nts=Nts, data_prfx=data_prfx)
 
     dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
     dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
@@ -417,7 +249,7 @@ def optcon_nse(N=10, Nts=10):
     MT, AT = stokesmatsc['MT'], stokesmatsc['AT']
     M, A = stokesmatsc['M'], stokesmatsc['A']
 
-    time_before_soldaeric = time.time()
+    # time_before_soldaeric = time.time()
     for tk, t in reversed(list(enumerate(tip['tmesh'][:-1]))):
     # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
         cts = tip['tmesh'][tk+1] - t
@@ -425,10 +257,13 @@ def optcon_nse(N=10, Nts=10):
         print 'Time is {0}, DT is {1}'.format(t, cts)
 
         # get the previous time convection matrices
-        pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, timps=tip)
+        pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N,
+                              Nts=Nts, data_prfx=data_prfx)
         prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-        convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(prev_v,
-                                                          femp, tip)
+        (convc_mat, rhs_con,
+         rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
+                                            V=femp['V'],
+                                            diribcs=femp['diribcs'])
 
         try:
             Zc = dou.load_npa(ddir + pdatstr + cntpstr + '__Z')
