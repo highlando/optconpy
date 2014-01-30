@@ -1,5 +1,7 @@
 #directories
 data/
+results/
+pics/
 
 #files
 *.png
