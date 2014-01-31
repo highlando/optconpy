@@ -138,7 +138,7 @@ def get_datastr(nwtn=None, time=None,
 
 
 def optcon_nse(problemname='drivencavity',
-               N=10, Nts=10, nu=1e-2):
+               N=10, Nts=10, nu=1e-2, clearprvveldata=False):
 
     tip = time_int_params(Nts)
 
@@ -204,6 +204,7 @@ def optcon_nse(problemname='drivencavity',
                    vel_nwtn_tol=tip['vel_nwtn_tol'],
                    ddir=ddir, get_datastring=get_datastr,
                    data_prfx=data_prfx,
+                   clearprvdata=clearprvveldata,
                    paraviewoutput=tip['ParaviewOutput'],
                    vfileprfx=tip['proutdir']+'vel_',
                    pfileprfx=tip['proutdir']+'p_')
@@ -308,8 +309,9 @@ def optcon_nse(problemname='drivencavity',
         print 'Time is {0}, DT is {1}'.format(t, cts)
 
         # get the previous time convection matrices
-        pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N,
-                              Nts=Nts, data_prfx=data_prfx)
+        pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, nu=nu,
+                              Nts=Nts, data_prfx=data_prfx, dt=cts)
+        raise Warning('TODO: debug')
         prev_v = dou.load_npa(ddir + pdatstr + '__vel')
         (convc_mat, rhs_con,
          rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
@@ -380,7 +382,7 @@ def optcon_nse(problemname='drivencavity',
         print 'Time is {0}, DT is {1}'.format(t, cts)
 
         # t for implicit scheme
-        ndatstr = get_datastr(nwtn=newtk, time=t,
+        ndatstr = get_datastr(nwtn=newtk, time=t, nu=nu,
                               meshp=N, timps=tip)
 
         # convec mats
@@ -427,4 +429,4 @@ def optcon_nse(problemname='drivencavity',
     #     time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
-    optcon_nse(N=15, Nts=40)
+    optcon_nse(N=15, Nts=40, clearprvveldata=True)
