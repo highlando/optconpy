@@ -15,6 +15,59 @@ import distr_control_fenics.cont_obs_utils as cou
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 
+class ContParams():
+    """define the parameters of the control problem
+
+    as there are
+    - dimensions of in and output space
+    - extensions of the subdomains of control and observation
+    - weighting matrices (if None, then massmatrix)
+    - desired output
+    """
+    def __init__(self, odcoo, ystar=None):
+        # TODO: accept ystar as input for better scripting
+        self.ystarx = dolfin.Expression('0.0', t=0)
+        self.ystary = dolfin.Expression('0.0', t=0)
+        # if t, then add t=0 to both comps !!1!!11
+
+        self.NU, self.NY = 4, 4
+
+        self.R = None
+        # regularization parameter
+        self.alphau = 1e-7
+        self.V = None
+        self.W = None
+
+        self.ymesh = dolfin.IntervalMesh(self.NY-1, odcoo['ymin'],
+                                         odcoo['ymax'])
+        self.Y = dolfin.FunctionSpace(self.ymesh, 'CG', 1)
+        # TODO: pass Y to cou.get_output_operator
+
+    def ystarvec(self, t=None):
+        """return the current value of ystar
+
+        as np array [ystar1
+                     ystar2] """
+        if t is None:
+            try:
+                self.ystarx.t, self.ystary.t = t, t
+            except AttributeError:
+                pass  # everything's cool - ystar does not dep on t
+            else:
+                raise Warning('You need provide a time for ystar')
+        else:
+            try:
+                self.ystarx.t, self.ystary.t = t, t
+            except AttributeError:
+                raise UserWarning('no time dependency of ystar' +
+                                  'the provided t is ignored')
+
+        ysx = dolfin.interpolate(self.ystarx, self.Y)
+        ysy = dolfin.interpolate(self.ystary, self.Y)
+        return np.vstack([np.atleast_2d(ysx.vector().array()).T,
+                          np.atleast_2d(ysy.vector().array()).T])
+
+
 def time_int_params(Nts):
     t0 = 0.0
     tE = 1.0
@@ -59,19 +112,14 @@ def time_int_params(Nts):
     return tip
 
 
-def set_vpfiles(tip, fstring='not specified'):
-    tip['pfile'] = dolfin.File(fstring+'_p.pvd')
-    tip['vfile'] = dolfin.File(fstring+'_vel.pvd')
-
-
 def get_tint(t0, tE, Nts, sqzmesh):
     """set up the time mesh """
     if sqzmesh:
         taux = np.linspace(-0.5*np.pi, 0.5*np.pi, Nts+1)
         taux = (np.sin(taux) + 1)*0.5  # squeeze and adjust to [0, 1]
-        tint = (t0 + (tE-t0)*taux).flatten().tolist()  # adjust to [t0, tE]
+        tint = (t0 + (tE-t0)*taux).flatten()  # adjust to [t0, tE]
     else:
-        tint = np.linspace(t0, tE, Nts+1).flatten().tolist()
+        tint = np.linspace(t0, tE, Nts+1).flatten()
 
     return tint
 
@@ -79,6 +127,10 @@ def get_tint(t0, tE, Nts, sqzmesh):
 def get_datastr(nwtn=None, time=None,
                 meshp=None, nu=None, Nts=None, dt=None,
                 data_prfx=''):
+
+    print (data_prfx +
+           'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
+        nwtn, time, nu, meshp, Nts, dt)
 
     return (data_prfx +
             'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
@@ -97,7 +149,6 @@ def optcon_nse(problemname='drivencavity',
     femp = problemfem(N)
 
     data_prfx = problemname + '__'
-    NU, NY = 3, 4
 
     # specify in what spatial direction Bu changes. The remaining is constant
     if problemname == 'drivencavity':
@@ -113,8 +164,7 @@ def optcon_nse(problemname='drivencavity',
         raise Warning('need "' + ddir + '" subdir for storing the data')
     os.chdir('..')
 
-    stokesmats = dts.get_stokessysmats(femp['V'], femp['Q'],
-                                       tip['nu'])
+    stokesmats = dts.get_stokessysmats(femp['V'], femp['Q'], nu)
 
     rhsd_vf = dts.setget_rhs(femp['V'], femp['Q'],
                              femp['fv'], femp['fp'], t=0)
@@ -148,7 +198,8 @@ def optcon_nse(problemname='drivencavity',
     soldict.update(femp)  # adding V, Q, invinds, diribcs
     soldict.update(rhsd_vfrc)  # adding fvc, fpr
     soldict.update(fv_stbc=rhsd_stbc['fv'], fp_stbc=rhsd_stbc['fp'],
-                   N=N, nu=tip['nu'],
+                   N=N, nu=nu,
+                   trange=tip['tmesh'],
                    nnewtsteps=tip['nnewtsteps'],
                    vel_nwtn_tol=tip['vel_nwtn_tol'],
                    ddir=ddir, get_datastring=get_datastr,
@@ -157,10 +208,11 @@ def optcon_nse(problemname='drivencavity',
                    vfileprfx=tip['proutdir']+'vel_',
                    pfileprfx=tip['proutdir']+'p_')
 
-    contp = cou.ContParams(femp['V'])
-#
-# compute the uncontrolled steady state Navier-Stokes solution
-#
+    # compute the uncontrolled steady state Navier-Stokes solution
+    # as initial value
+    ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
+    soldict.update(dict(iniv=ini_vel))
+
     # v_ss_nse, list_norm_nwtnupd = snu.solve_steadystate_nse(**soldict)
     newtk = snu.solve_nse(return_nwtn_step=True, **soldict)
 
@@ -168,6 +220,7 @@ def optcon_nse(problemname='drivencavity',
 # Prepare for control
 #
 
+    contp = ContParams(femp['odcoo'])
     # casting some parameters
     NY, NU = contp.NY, contp.NU
 
@@ -198,7 +251,6 @@ def optcon_nse(problemname='drivencavity',
     # restrict the operators to the inner nodes
     mc_mat = mc_mat[:, invinds][:, :]
     b_mat = b_mat[invinds, :][:, :]
-    contsetupstr = 'NV{0}NU{1}NY{2}'.format(NV, NU, NY)
 
     # for further use:
     c_mat = lau.apply_massinv(y_masmat, mc_mat)
@@ -234,20 +286,19 @@ def optcon_nse(problemname='drivencavity',
     cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY,
                                                 contp.alphau, NV)
 
+    # we gonna use this quite often
+    MT, AT = stokesmatsc['M'].T, stokesmatsc['A'].T
+    M, A = stokesmatsc['M'], stokesmatsc['A']
+
     # set/compute the terminal values aka starting point
-    Zc = lau.apply_massinv(stokesmatsc['M'], trct_mat)
-    wc = lau.apply_massinv(stokesmatsc['MT'],
-                           np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
+    Zc = lau.apply_massinv(M, trct_mat)
+    wc = lau.apply_massinv(MT, np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
 
     cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N,
                           Nts=Nts, data_prfx=data_prfx)
 
     dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
     dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
-
-    # we gonna use this quite often
-    MT, AT = stokesmatsc['MT'], stokesmatsc['AT']
-    M, A = stokesmatsc['M'], stokesmatsc['A']
 
     # time_before_soldaeric = time.time()
     for tk, t in reversed(list(enumerate(tip['tmesh'][:-1]))):
@@ -305,7 +356,7 @@ def optcon_nse(problemname='drivencavity',
         at_mat = MT + cts*(AT + convc_mat.T)
 
         # current rhs
-        ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
+        ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_stbc['fv']
         mtxft = pru.get_mTzzTtb(M.T, Zc, ftilde)
         fl1 = mc_mat.T * contp.ystarvec(t)
         rhswc = MT*wc + cts*(fl1 - mtxft)
@@ -318,13 +369,7 @@ def optcon_nse(problemname='drivencavity',
 
         dou.save_npa(wc, fstring=ddir + pdatstr + cntpstr + '__w')
 
-    time_after_soldaeric = time.time()
-
-    # solve the closed loop system
-    set_vpfiles(tip, fstring=('results/' + 'closedloop' + cntpstr +
-                              'NewtonIt{0}').format(newtk))
-
-    v_old = inivalvec
+    v_old = ini_vel
     yn = np.dot(c_mat, v_old)
     tip['yscomp'].append(yn.flatten().tolist())
     tip['ystar'].append(contp.ystarvec(0).flatten().tolist())
@@ -340,15 +385,15 @@ def optcon_nse(problemname='drivencavity',
 
         # convec mats
         next_v = dou.load_npa(ddir + ndatstr + '__vel')
-        convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(next_v,
-                                                          femp, tip)
+        convc_mat, rhs_con, rhsv_conbc = snu.get_v_conv_conts(next_v,
+                                                              femp, tip)
 
         # feedback mat and feedthrough
         next_zmat = dou.load_npa(ddir + ndatstr + cntpstr + '__Z')
         next_w = dou.load_npa(ddir + ndatstr + cntpstr + '__w')
 
         # rhs
-        fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
+        fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_stbc['fv']
         rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
 
         # coeffmats
@@ -372,14 +417,14 @@ def optcon_nse(problemname='drivencavity',
 
         dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
 
-        dou.output_paraview(tip, femp, vp=vpn, t=t),
+        # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
     dou.save_output_json(tip['yscomp'], tip['tmesh'], ystar=tip['ystar'],
                          fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
-    print 'time for solving dae ric :', \
-        time_after_soldaeric - time_before_soldaeric
+    # print 'time for solving dae ric :', \
+    #     time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
-    optcon_nse(N=25, Nts=40)
+    optcon_nse(N=15, Nts=40)
