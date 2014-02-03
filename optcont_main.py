@@ -1,4 +1,5 @@
 import dolfin
+import json
 import numpy as np
 import os
 
@@ -26,8 +27,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         # TODO: accept ystar as input for better scripting
-        self.ystarx = dolfin.Expression('0.0', t=0)
-        self.ystary = dolfin.Expression('0.0', t=0)
+        self.ystarx = dolfin.Expression('0.1', t=0)
+        self.ystary = dolfin.Expression('0.1', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
         self.NU, self.NY = 4, 4
@@ -70,7 +71,7 @@ class ContParams():
 
 def time_int_params(Nts):
     t0 = 0.0
-    tE = 1.0
+    tE = 0.1
     dt = (tE - t0) / Nts
     sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
                      # initial and terminal point, False for equidist
@@ -128,13 +129,32 @@ def get_datastr(nwtn=None, time=None,
                 meshp=None, nu=None, Nts=None, dt=None,
                 data_prfx=''):
 
-    print (data_prfx +
-           'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
-        nwtn, time, nu, meshp, Nts, dt)
+    # print (data_prfx +
+    #        'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
+    #     nwtn, time, nu, meshp, Nts, dt)
 
     return (data_prfx +
             'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
         nwtn, time, nu, meshp, Nts, dt)
+
+
+def save_output_json(ycomp, tmesh, ystar=None, fstring=None):
+    """save the signals to json for postprocessing"""
+    if fstring is None:
+        fstring = 'nonspecified_output'
+
+    print 'output saved to ' + fstring
+    jsfile = open(fstring, mode='w')
+    jsfile.write(json.dumps(dict(ycomp=ycomp,
+                                 tmesh=tmesh,
+                                 ystar=ystar)))
+
+
+def load_json_dicts(StrToJs):
+
+    fjs = open(StrToJs)
+    JsDict = json.load(fjs)
+    return JsDict
 
 
 def optcon_nse(problemname='drivencavity',
@@ -209,10 +229,16 @@ def optcon_nse(problemname='drivencavity',
                    vfileprfx=tip['proutdir']+'vel_',
                    pfileprfx=tip['proutdir']+'p_')
 
-    # compute the uncontrolled steady state Navier-Stokes solution
+    # # compute the uncontrolled steady state Navier-Stokes solution
+    # # as initial value
+    # ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
+    # soldict.update(dict(iniv=ini_vel))
+
+    # compute the uncontrolled steady state Stokes solution
     # as initial value
+    soldict.update(dict(nnewtsteps=0, npicardsteps=0))
     ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
-    soldict.update(dict(iniv=ini_vel))
+    soldict.update(dict(iniv=ini_vel, nnewtsteps=tip['nnewtsteps']))
 
     # v_ss_nse, list_norm_nwtnupd = snu.solve_steadystate_nse(**soldict)
     newtk = snu.solve_nse(return_nwtn_step=True, **soldict)
@@ -248,6 +274,8 @@ def optcon_nse(problemname='drivencavity',
                                             V=femp['V'], NY=NY)
         dou.save_spa(mc_mat, ddir + contsetupstr + '__mc_mat')
         dou.save_spa(y_masmat, ddir + contsetupstr + '__y_masmat')
+
+    raise Warning('STOP: in the name of love')
 
     # restrict the operators to the inner nodes
     mc_mat = mc_mat[:, invinds][:, :]
@@ -295,23 +323,24 @@ def optcon_nse(problemname='drivencavity',
     Zc = lau.apply_massinv(M, trct_mat)
     wc = lau.apply_massinv(MT, np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
 
-    cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N,
-                          Nts=Nts, data_prfx=data_prfx)
+    pts = tip['tmesh'][-1] - tip['tmesh'][-2]
+    cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, nu=nu,
+                          Nts=Nts, data_prfx=data_prfx, dt=pts)
 
     dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
     dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
 
     # time_before_soldaeric = time.time()
-    for tk, t in reversed(list(enumerate(tip['tmesh'][:-1]))):
+    for tk, t in reversed(list(enumerate(tip['tmesh'][1:-1]))):
     # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
-        cts = tip['tmesh'][tk+1] - t
+        cts = tip['tmesh'][tk+2] - t
+        pts = tip['tmesh'][tk+1] - tip['tmesh'][tk]
 
-        print 'Time is {0}, DT is {1}'.format(t, cts)
+        print 'Time is {0}, timestep is {1}, next is {2}'.format(t, cts, pts)
 
         # get the previous time convection matrices
         pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, nu=nu,
-                              Nts=Nts, data_prfx=data_prfx, dt=cts)
-        raise Warning('TODO: debug')
+                              Nts=Nts, data_prfx=data_prfx, dt=pts)
         prev_v = dou.load_npa(ddir + pdatstr + '__vel')
         (convc_mat, rhs_con,
          rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
@@ -323,13 +352,12 @@ def optcon_nse(problemname='drivencavity',
         except IOError:
 
             # coeffmat for nwtn adi
-            ft_mat = -(0.5*stokesmatsc['MT'] + cts*(stokesmatsc['AT'] +
-                                                    convc_mat.T))
+            ft_mat = -(0.5*MT + cts*(A + convc_mat.T))
             # rhs for nwtn adi
-            w_mat = np.hstack([stokesmatsc['MT']*Zc, np.sqrt(cts)*trct_mat])
+            w_mat = np.hstack([MT*Zc, np.sqrt(cts)*trct_mat])
 
-            Zp = pru.proj_alg_ric_newtonadi(mmat=stokesmatsc['MT'],
-                                            fmat=ft_mat, transposed=True,
+            Zp = pru.proj_alg_ric_newtonadi(mmat=MT,
+                                            amat=ft_mat, transposed=True,
                                             jmat=stokesmatsc['J'],
                                             bmat=np.sqrt(cts)*tb_mat,
                                             wmat=w_mat, z0=Zc,
@@ -358,7 +386,7 @@ def optcon_nse(problemname='drivencavity',
         at_mat = MT + cts*(AT + convc_mat.T)
 
         # current rhs
-        ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_stbc['fv']
+        ftilde = rhs_con + rhsv_conbc + rhsd_stbc['fv']
         mtxft = pru.get_mTzzTtb(M.T, Zc, ftilde)
         fl1 = mc_mat.T * contp.ystarvec(t)
         rhswc = MT*wc + cts*(fl1 - mtxft)
@@ -381,21 +409,22 @@ def optcon_nse(problemname='drivencavity',
 
         print 'Time is {0}, DT is {1}'.format(t, cts)
 
-        # t for implicit scheme
-        ndatstr = get_datastr(nwtn=newtk, time=t, nu=nu,
-                              meshp=N, timps=tip)
-
+        cdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, nu=nu,
+                              Nts=Nts, data_prfx=data_prfx, dt=cts)
         # convec mats
-        next_v = dou.load_npa(ddir + ndatstr + '__vel')
-        convc_mat, rhs_con, rhsv_conbc = snu.get_v_conv_conts(next_v,
-                                                              femp, tip)
+        next_v = dou.load_npa(ddir + cdatstr + '__vel')
+
+        (convc_mat, rhs_con,
+         rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
+                                            V=femp['V'],
+                                            diribcs=femp['diribcs'])
 
         # feedback mat and feedthrough
-        next_zmat = dou.load_npa(ddir + ndatstr + cntpstr + '__Z')
-        next_w = dou.load_npa(ddir + ndatstr + cntpstr + '__w')
+        next_zmat = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+        next_w = dou.load_npa(ddir + cdatstr + cntpstr + '__w')
 
         # rhs
-        fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_stbc['fv']
+        fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv']
         rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
 
         # coeffmats
@@ -421,12 +450,12 @@ def optcon_nse(problemname='drivencavity',
 
         # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
-    dou.save_output_json(tip['yscomp'], tip['tmesh'], ystar=tip['ystar'],
-                         fstring=ddir + cdatstr + cntpstr + '__sigout')
+    save_output_json(tip['yscomp'], tip['tmesh'], ystar=tip['ystar'],
+                     fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
     # print 'time for solving dae ric :', \
     #     time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
-    optcon_nse(N=15, Nts=40, clearprvveldata=True)
+    optcon_nse(N=25, Nts=40, clearprvveldata=True)
