@@ -71,7 +71,7 @@ class ContParams():
 
 def time_int_params(Nts):
     t0 = 0.0
-    tE = 0.1
+    tE = 1.0
     dt = (tE - t0) / Nts
     sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
                      # initial and terminal point, False for equidist
@@ -105,9 +105,7 @@ def time_int_params(Nts):
                compress_z=True,  # whether or not to compress Z
                comprz_maxc=500,  # compression of the columns of Z by QR
                comprz_thresh=5e-5,  # threshold for trunc of SVD
-               save_full_z=False,  # whether or not to save the uncompressed Z
-               yscomp=[],
-               ystar=[]
+               save_full_z=False  # whether or not to save the uncompressed Z
                )
 
     return tip
@@ -275,12 +273,14 @@ def optcon_nse(problemname='drivencavity',
         dou.save_spa(mc_mat, ddir + contsetupstr + '__mc_mat')
         dou.save_spa(y_masmat, ddir + contsetupstr + '__y_masmat')
 
-    raise Warning('STOP: in the name of love')
+    # raise Warning('STOP: in the name of love')
 
     # restrict the operators to the inner nodes
     mc_mat = mc_mat[:, invinds][:, :]
     b_mat = b_mat[invinds, :][:, :]
 
+    print np.linalg.norm(mc_mat.todense())
+    print np.linalg.norm(b_mat.todense())
     # for further use:
     c_mat = lau.apply_massinv(y_masmat, mc_mat)
     mct_mat_reg = lau.app_prj_via_sadpnt(amat=stokesmatsc['M'],
@@ -307,7 +307,7 @@ def optcon_nse(problemname='drivencavity',
     # tilde B = BR^{-1/2}
     tb_mat = lau.apply_invsqrt_fromleft(contp.R, b_mat,
                                         output='sparse')
-    tb_dense = np.array(tb_mat.todense())
+    # tb_dense = np.array(tb_mat.todense())
 
     trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
                                           mct_mat_reg, output='dense')
@@ -321,6 +321,9 @@ def optcon_nse(problemname='drivencavity',
 
     # set/compute the terminal values aka starting point
     Zc = lau.apply_massinv(M, trct_mat)
+    print np.linalg.norm(Zc)
+    raise Warning('TODO: debug')
+
     wc = lau.apply_massinv(MT, np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
 
     pts = tip['tmesh'][-1] - tip['tmesh'][-2]
@@ -352,7 +355,7 @@ def optcon_nse(problemname='drivencavity',
         except IOError:
 
             # coeffmat for nwtn adi
-            ft_mat = -(0.5*MT + cts*(A + convc_mat.T))
+            ft_mat = -(0.5*MT + cts*(AT + convc_mat.T))
             # rhs for nwtn adi
             w_mat = np.hstack([MT*Zc, np.sqrt(cts)*trct_mat])
 
@@ -425,17 +428,20 @@ def optcon_nse(problemname='drivencavity',
 
         # rhs
         fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv']
-        rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
+        # rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
+        rhsn = M*next_v + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
 
         # coeffmats
         amat = M + cts*(A + convc_mat)
         mtxtb = pru.get_mTzzTtb(M.T, next_zmat, tb_mat)
 
         # TODO: rhsp!!!
-        vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
-                                   rhsv=rhsn,
-                                   umat=-cts*tb_dense, vmat=mtxtb.T)
+        # vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
+        #                            rhsv=rhsn,
+        #                            umat=-cts*tb_dense, vmat=mtxtb.T)
 
+        vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
+                                   rhsv=rhsn)
         # vpn = np.atleast_2d(sps.linalg.spsolve(amat, currhs)).T
         v_old = vpn[:NV]
 
@@ -450,7 +456,7 @@ def optcon_nse(problemname='drivencavity',
 
         # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
-    save_output_json(tip['yscomp'], tip['tmesh'], ystar=tip['ystar'],
+    save_output_json(tip['yscomp'], tip['tmesh'].tolist(), ystar=tip['ystar'],
                      fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
