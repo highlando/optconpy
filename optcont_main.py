@@ -27,8 +27,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         # TODO: accept ystar as input for better scripting
-        self.ystarx = dolfin.Expression('0.1', t=0)
-        self.ystary = dolfin.Expression('0.1', t=0)
+        self.ystarx = dolfin.Expression('0.8', t=0)
+        self.ystary = dolfin.Expression('0.0', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
         self.NU, self.NY = 4, 4
@@ -94,9 +94,9 @@ def time_int_params(Nts):
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
                    adi_max_steps=100,
-                   adi_newZ_reltol=1e-5,
-                   nwtn_max_steps=7,
-                   nwtn_upd_reltol=4e-8,
+                   adi_newZ_reltol=1e-8,
+                   nwtn_max_steps=6,
+                   nwtn_upd_reltol=5e-8,
                    nwtn_upd_abstol=1e-7,
                    verbose=True,
                    full_upd_norm_check=False,
@@ -104,7 +104,7 @@ def time_int_params(Nts):
                ),
                compress_z=True,  # whether or not to compress Z
                comprz_maxc=500,  # compression of the columns of Z by QR
-               comprz_thresh=5e-5,  # threshold for trunc of SVD
+               comprz_thresh=1e-2,  # threshold for trunc of SVD
                save_full_z=False  # whether or not to save the uncompressed Z
                )
 
@@ -156,7 +156,8 @@ def load_json_dicts(StrToJs):
 
 
 def optcon_nse(problemname='drivencavity',
-               N=10, Nts=10, nu=1e-2, clearprvveldata=False):
+               N=10, Nts=10, nu=1e-2, clearprvveldata=False,
+               ini_vel_stokes=False):
 
     tip = time_int_params(Nts)
 
@@ -227,18 +228,18 @@ def optcon_nse(problemname='drivencavity',
                    vfileprfx=tip['proutdir']+'vel_',
                    pfileprfx=tip['proutdir']+'p_')
 
-    # # compute the uncontrolled steady state Navier-Stokes solution
-    # # as initial value
-    # ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
-    # soldict.update(dict(iniv=ini_vel))
-
-    # compute the uncontrolled steady state Stokes solution
+    # compute the uncontrolled steady state (Navier-)Stokes solution
     # as initial value
-    soldict.update(dict(nnewtsteps=0, npicardsteps=0))
-    ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
-    soldict.update(dict(iniv=ini_vel, nnewtsteps=tip['nnewtsteps']))
+    if ini_vel_stokes:
+        # compute the uncontrolled steady state Stokes solution
+        soldict.update(dict(nnewtsteps=0, npicardsteps=0))
+        ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
+        soldict.update(dict(iniv=ini_vel, nnewtsteps=tip['nnewtsteps']))
+    else:
+        ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
+        soldict.update(dict(iniv=ini_vel))
 
-    # v_ss_nse, list_norm_nwtnupd = snu.solve_steadystate_nse(**soldict)
+    # compute the forward solution
     newtk = snu.solve_nse(return_nwtn_step=True, **soldict)
 
 #
@@ -455,20 +456,14 @@ def optcon_nse(problemname='drivencavity',
 
         # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
-<<<<<<< HEAD
-    sigstr = 'yxT{0}yyT{1}'.format(contp.ystarvec(t)[0, 0],
-                                   contp.ystarvec(t)[-1, 0])
-
-    dou.save_output_json(tip['yscomp'], tip['tmesh'], ystar=tip['ystar'],
-                         fstring='results/'+cdatstr+cntpstr+sigstr+'.json')
-=======
     save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
                      fstring=ddir + cdatstr + cntpstr + '__sigout')
->>>>>>> cleanupcode
 
     print 'dim of v :', femp['V'].dim()
     # print 'time for solving dae ric :', \
     #     time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
-    optcon_nse(N=25, Nts=40, clearprvveldata=True)
+    # optcon_nse(N=25, Nts=40, clearprvveldata=True)
+    optcon_nse(problemname='cylinderwake', N=2, Nts=60,
+               nu=2e-2, clearprvveldata=True)
