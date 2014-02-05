@@ -307,7 +307,7 @@ def optcon_nse(problemname='drivencavity',
     # tilde B = BR^{-1/2}
     tb_mat = lau.apply_invsqrt_fromleft(contp.R, b_mat,
                                         output='sparse')
-    # tb_dense = np.array(tb_mat.todense())
+    tb_dense = np.array(tb_mat.todense())
 
     trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
                                           mct_mat_reg, output='dense')
@@ -322,7 +322,6 @@ def optcon_nse(problemname='drivencavity',
     # set/compute the terminal values aka starting point
     Zc = lau.apply_massinv(M, trct_mat)
     print np.linalg.norm(Zc)
-    raise Warning('TODO: debug')
 
     wc = lau.apply_massinv(MT, np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
 
@@ -404,8 +403,8 @@ def optcon_nse(problemname='drivencavity',
 
     v_old = ini_vel
     yn = np.dot(c_mat, v_old)
-    tip['yscomp'].append(yn.flatten().tolist())
-    tip['ystar'].append(contp.ystarvec(0).flatten().tolist())
+    yscomplist = [yn.flatten().tolist()]
+    ystarlist = [contp.ystarvec(0).flatten().tolist()]
 
     for tk, t in enumerate(tip['tmesh'][1:]):
         cts = t - tip['tmesh'][tk]
@@ -428,20 +427,20 @@ def optcon_nse(problemname='drivencavity',
 
         # rhs
         fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv']
-        # rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
-        rhsn = M*next_v + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
+        rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
+        # rhsn = M*next_v + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
 
         # coeffmats
         amat = M + cts*(A + convc_mat)
         mtxtb = pru.get_mTzzTtb(M.T, next_zmat, tb_mat)
 
         # TODO: rhsp!!!
-        # vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
-        #                            rhsv=rhsn,
-        #                            umat=-cts*tb_dense, vmat=mtxtb.T)
-
         vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
-                                   rhsv=rhsn)
+                                   rhsv=rhsn,
+                                   umat=-cts*tb_dense, vmat=mtxtb.T)
+
+        # vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
+        #                            rhsv=rhsn)
         # vpn = np.atleast_2d(sps.linalg.spsolve(amat, currhs)).T
         v_old = vpn[:NV]
 
@@ -449,14 +448,14 @@ def optcon_nse(problemname='drivencavity',
         print 'norm of current w: ', np.linalg.norm(next_w)
         print 'current y: ', yn
 
-        tip['yscomp'].append(yn.flatten().tolist())
-        tip['ystar'].append(contp.ystarvec(0).flatten().tolist())
+        yscomplist.append(yn.flatten().tolist())
+        ystarlist.append(contp.ystarvec(0).flatten().tolist())
 
         dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
 
         # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
-    save_output_json(tip['yscomp'], tip['tmesh'].tolist(), ystar=tip['ystar'],
+    save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
                      fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
