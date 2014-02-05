@@ -4,4 +4,4 @@ git pull
 git status
 FILETOEDIT=optcont_main.py
 echo $FILETOEDIT
-gvim --remote-silent $FILETOEDIT 
+gvim $FILETOEDIT 

@@ -1,66 +1,19 @@
 import dolfin
+import json
 import numpy as np
-import scipy.sparse as sps
-# import matplotlib.pyplot as plt
 import os
-import glob
 
-import dolfin_to_nparrays as dtn
-import lin_alg_utils as lau
-import data_output_utils as dou
-import cont_obs_utils as cou
-import proj_ric_utils as pru
+import dolfin_navier_scipy.dolfin_to_sparrays as dts
+import dolfin_navier_scipy.data_output_utils as dou
+import dolfin_navier_scipy.stokes_navier_utils as snu
+import dolfin_navier_scipy.problem_setups as dnsps
+
+import sadptprj_riclyap_adi.lin_alg_utils as lau
+import sadptprj_riclyap_adi.proj_ric_utils as pru
+
+import distr_control_fenics.cont_obs_utils as cou
 
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
-
-
-def time_int_params(Nts):
-    t0 = 0.0
-    tE = 1.0
-    dt = (tE - t0) / Nts
-    sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
-                     # initial and terminal point, False for equidist
-    tmesh = get_tint(t0, tE, Nts, sqzmesh)
-
-    tip = dict(t0=t0,
-               tE=tE,
-               dt=dt,
-               Nts=Nts,
-               tmesh=tmesh,
-               Navier=True,  # set 0 for Stokes flow and 1 for NS
-               vfile=None,
-               pfile=None,
-               Residuals=[],
-               ParaviewOutput=True,
-               nu=1e-3,
-               nnewtsteps=5,  # n nwtn stps for vel comp
-               vel_nwtn_tol=1e-14,
-               norm_nwtnupd_list=[],
-               # parameters for newton adi iteration
-               nwtn_adi_dict=dict(
-                   adi_max_steps=100,
-                   adi_newZ_reltol=1e-5,
-                   nwtn_max_steps=7,
-                   nwtn_upd_reltol=4e-8,
-                   nwtn_upd_abstol=1e-7,
-                   verbose=True,
-                   full_upd_norm_check=False,
-                   check_lyap_res=False
-               ),
-               compress_z=True,  # whether or not to compress Z
-               comprz_maxc=500,  # compression of the columns of Z by QR
-               comprz_thresh=5e-5,  # threshold for trunc of SVD
-               save_full_z=False,  # whether or not to save the uncompressed Z
-               yscomp=[],
-               ystar=[]
-               )
-
-    return tip
-
-
-def set_vpfiles(tip, fstring='not specified'):
-    tip['pfile'] = dolfin.File(fstring+'_p.pvd')
-    tip['vfile'] = dolfin.File(fstring+'_vel.pvd')
 
 
 class ContParams():
@@ -72,22 +25,13 @@ class ContParams():
     - weighting matrices (if None, then massmatrix)
     - desired output
     """
-    def __init__(self):
-
-        self.ystarx = dolfin.Expression('0.0', t=0)
-        self.ystary = dolfin.Expression('0.0', t=0)
+    def __init__(self, odcoo, ystar=None):
+        # TODO: accept ystar as input for better scripting
+        self.ystarx = dolfin.Expression('0.1', t=0)
+        self.ystary = dolfin.Expression('0.1', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
         self.NU, self.NY = 4, 4
-
-        self.odcoo = dict(xmin=0.45,
-                          xmax=0.55,
-                          ymin=0.5,
-                          ymax=0.7)
-        self.cdcoo = dict(xmin=0.4,
-                          xmax=0.6,
-                          ymin=0.2,
-                          ymax=0.3)
 
         self.R = None
         # regularization parameter
@@ -95,8 +39,8 @@ class ContParams():
         self.V = None
         self.W = None
 
-        self.ymesh = dolfin.IntervalMesh(self.NY-1, self.odcoo['ymin'],
-                                         self.odcoo['ymax'])
+        self.ymesh = dolfin.IntervalMesh(self.NY-1, odcoo['ymin'],
+                                         odcoo['ymax'])
         self.Y = dolfin.FunctionSpace(self.ymesh, 'CG', 1)
         # TODO: pass Y to cou.get_output_operator
 
@@ -125,115 +69,110 @@ class ContParams():
                           np.atleast_2d(ysy.vector().array()).T])
 
 
+def time_int_params(Nts):
+    t0 = 0.0
+    tE = 1.0
+    dt = (tE - t0) / Nts
+    sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
+                     # initial and terminal point, False for equidist
+    tmesh = get_tint(t0, tE, Nts, sqzmesh)
+
+    tip = dict(t0=t0,
+               tE=tE,
+               dt=dt,
+               Nts=Nts,
+               tmesh=tmesh,
+               vfile=None,
+               pfile=None,
+               Residuals=[],
+               ParaviewOutput=True,
+               proutdir='results/',
+               prfprfx='',
+               nnewtsteps=9,  # n nwtn stps for vel comp, 0 for Stokes flow
+               vel_nwtn_tol=1e-14,
+               norm_nwtnupd_list=[],
+               # parameters for newton adi iteration
+               nwtn_adi_dict=dict(
+                   adi_max_steps=100,
+                   adi_newZ_reltol=1e-5,
+                   nwtn_max_steps=7,
+                   nwtn_upd_reltol=4e-8,
+                   nwtn_upd_abstol=1e-7,
+                   verbose=True,
+                   full_upd_norm_check=False,
+                   check_lyap_res=False
+               ),
+               compress_z=True,  # whether or not to compress Z
+               comprz_maxc=500,  # compression of the columns of Z by QR
+               comprz_thresh=5e-5,  # threshold for trunc of SVD
+               save_full_z=False  # whether or not to save the uncompressed Z
+               )
+
+    return tip
+
+
 def get_tint(t0, tE, Nts, sqzmesh):
     """set up the time mesh """
     if sqzmesh:
         taux = np.linspace(-0.5*np.pi, 0.5*np.pi, Nts+1)
         taux = (np.sin(taux) + 1)*0.5  # squeeze and adjust to [0, 1]
-        tint = (t0 + (tE-t0)*taux).flatten().tolist()  # adjust to [t0, tE]
+        tint = (t0 + (tE-t0)*taux).flatten()  # adjust to [t0, tE]
     else:
-        tint = np.linspace(t0, tE, Nts+1).flatten().tolist()
+        tint = np.linspace(t0, tE, Nts+1).flatten()
 
     return tint
 
 
-def get_datastr(nwtn=None, time=None, meshp=None, timps=None):
+def get_datastr(nwtn=None, time=None,
+                meshp=None, nu=None, Nts=None, dt=None,
+                data_prfx=''):
 
-    if timps['Navier']:
-        navsto = 'NStokes'
-    else:
-        navsto = 'Stokes'
+    # print (data_prfx +
+    #        'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
+    #     nwtn, time, nu, meshp, Nts, dt)
 
-    return (navsto + 'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
-        nwtn, time, timps['nu'], meshp,
-        timps['Nts'], timps['dt']
-    )
-
-
-def drivcav_fems(N, NU=None, NY=None):
-    """dictionary for the fem items of the (unit) driven cavity
-
-    """
-    mesh = dolfin.UnitSquareMesh(N, N)
-    V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
-    Q = dolfin.FunctionSpace(mesh, "CG", 1)
-    # pressure node that is set to zero
-
-    # Boundaries
-    def top(x, on_boundary):
-        return x[1] > 1.0 - dolfin.DOLFIN_EPS
-
-    def leftbotright(x, on_boundary):
-        return (x[0] > 1.0 - dolfin.DOLFIN_EPS
-                or x[1] < dolfin.DOLFIN_EPS
-                or x[0] < dolfin.DOLFIN_EPS)
-
-    # No-slip boundary condition for velocity
-    noslip = dolfin.Constant((0.0, 0.0))
-    bc0 = dolfin.DirichletBC(V, noslip, leftbotright)
-    # Boundary condition for velocity at the lid
-    lid = dolfin.Constant(("1", "0.0"))
-    bc1 = dolfin.DirichletBC(V, lid, top)
-    # Collect boundary conditions
-    diribcs = [bc0, bc1]
-    # rhs of momentum eqn
-    fv = dolfin.Constant((0.0, 0.0))
-    # rhs of the continuity eqn
-    fp = dolfin.Constant(0.0)
-
-    dfems = dict(mesh=mesh,
-                 V=V,
-                 Q=Q,
-                 diribcs=diribcs,
-                 fv=fv,
-                 fp=fp)
-
-    return dfems
+    return (data_prfx +
+            'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
+        nwtn, time, nu, meshp, Nts, dt)
 
 
-def get_v_conv_conts(prev_v, femp, tip):
+def save_output_json(ycomp, tmesh, ystar=None, fstring=None):
+    """save the signals to json for postprocessing"""
+    if fstring is None:
+        fstring = 'nonspecified_output'
 
-    # get and condense the linearized convection
-    # rhsv_con += (u_0*D_x)u_0 from the Newton scheme
-    if tip['Navier']:
-        N1, N2, rhs_con = dtn.get_convmats(u0_vec=prev_v,
-                                           V=femp['V'],
-                                           invinds=femp['invinds'],
-                                           diribcs=femp['diribcs'])
-        convc_mat, rhsv_conbc = \
-            dtn.condense_velmatsbybcs(N1 + N2, femp['diribcs'])
-
-    else:
-        nnvv = femp['invinds'].size
-        convc_mat, rhsv_conbc = sps.csr_matrix((nnvv, nnvv)), 0
-        rhs_con = np.zeros((femp['V'].dim(), 1))
-
-    return convc_mat, rhs_con, rhsv_conbc
+    print 'output saved to ' + fstring
+    jsfile = open(fstring, mode='w')
+    jsfile.write(json.dumps(dict(ycomp=ycomp,
+                                 tmesh=tmesh,
+                                 ystar=ystar)))
 
 
-def setup_sadpnt_matsrhs(amat, jmat, rhsv, rhsp=None, jmatT=None):
+def load_json_dicts(StrToJs):
 
-    nnpp = jmat.shape[0]
-
-    if jmatT is None:
-        jmatT = jmat.T
-    if rhsp is None:
-        rhsp = np.zeros((nnpp, 1))
-
-    sysm1 = sps.hstack([amat, jmat.T], format='csr')
-    sysm2 = sps.hstack([jmat, sps.csr_matrix((nnpp, nnpp))], format='csr')
-
-    mata = sps.vstack([sysm1, sysm2], format='csr')
-    rhs = np.vstack([rhsv, rhsp])
-
-    return mata, rhs
+    fjs = open(StrToJs)
+    JsDict = json.load(fjs)
+    return JsDict
 
 
-def optcon_nse(N=10, Nts=10):
+def optcon_nse(problemname='drivencavity',
+               N=10, Nts=10, nu=1e-2, clearprvveldata=False):
 
     tip = time_int_params(Nts)
-    femp = drivcav_fems(N)
-    contp = ContParams()
+
+    problemdict = dict(drivencavity=dnsps.drivcav_fems,
+                       cylinderwake=dnsps.cyl_fems)
+
+    problemfem = problemdict[problemname]
+    femp = problemfem(N)
+
+    data_prfx = problemname + '__'
+
+    # specify in what spatial direction Bu changes. The remaining is constant
+    if problemname == 'drivencavity':
+        uspacedep = 0
+    elif problemname == 'cylinderwake':
+        uspacedep = 1
 
     # output
     ddir = 'data/'
@@ -243,20 +182,9 @@ def optcon_nse(N=10, Nts=10):
         raise Warning('need "' + ddir + '" subdir for storing the data')
     os.chdir('..')
 
-    if tip['ParaviewOutput']:
-        os.chdir('results/')
-        for fname in glob.glob('NewtonIt' + '*'):
-            os.remove(fname)
-        os.chdir('..')
+    stokesmats = dts.get_stokessysmats(femp['V'], femp['Q'], nu)
 
-#
-# start with the Stokes problem for initialization
-#
-
-    stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'],
-                                       tip['nu'])
-
-    rhsd_vf = dtn.setget_rhs(femp['V'], femp['Q'],
+    rhsd_vf = dts.setget_rhs(femp['V'], femp['Q'],
                              femp['fv'], femp['fp'], t=0)
 
     # remove the freedom in the pressure
@@ -269,13 +197,11 @@ def optcon_nse(N=10, Nts=10):
      rhsd_stbc,
      invinds,
      bcinds,
-     bcvals) = dtn.condense_sysmatsbybcs(stokesmats,
+     bcvals) = dts.condense_sysmatsbybcs(stokesmats,
                                          femp['diribcs'])
 
-    # we will need transposes, and explicit is better than implicit
-    # here, the coefficient matrices are symmetric
-    stokesmatsc.update(dict(MT=stokesmatsc['M'],
-                            AT=stokesmatsc['A']))
+    # pressure freedom and dirichlet reduced rhs
+    rhsd_vfrc = dict(fpr=rhsd_vf['fp'], fvc=rhsd_vf['fv'][invinds, ])
 
     # add the info on boundary and inner nodes
     bcdata = {'bcinds': bcinds,
@@ -284,127 +210,46 @@ def optcon_nse(N=10, Nts=10):
     femp.update(bcdata)
 
     # casting some parameters
-    NV, INVINDS = len(femp['invinds']), femp['invinds']
-    # NP = stokesmatsc['J'].shape[0]
-    # and setting current values
-    newtk, t = 0, None
+    NV, DT, INVINDS = len(femp['invinds']), tip['dt'], femp['invinds']
 
-    # compute the steady state stokes solution
-    rhsd_vfstbc = dict(fv=rhsd_stbc['fv'] +
-                       rhsd_vf['fv'][INVINDS, ],
-                       fp=rhsd_stbc['fp'] + rhsd_vf['fp'])
+    soldict = stokesmatsc  # containing A, J, JT
+    soldict.update(femp)  # adding V, Q, invinds, diribcs
+    soldict.update(rhsd_vfrc)  # adding fvc, fpr
+    soldict.update(fv_stbc=rhsd_stbc['fv'], fp_stbc=rhsd_stbc['fp'],
+                   N=N, nu=nu,
+                   trange=tip['tmesh'],
+                   nnewtsteps=tip['nnewtsteps'],
+                   vel_nwtn_tol=tip['vel_nwtn_tol'],
+                   ddir=ddir, get_datastring=get_datastr,
+                   data_prfx=data_prfx,
+                   clearprvdata=clearprvveldata,
+                   paraviewoutput=tip['ParaviewOutput'],
+                   vfileprfx=tip['proutdir']+'vel_',
+                   pfileprfx=tip['proutdir']+'p_')
 
-    vp_stokes = lau.stokes_steadystate(matdict=stokesmatsc,
-                                       rhsdict=rhsd_vfstbc)
+    # # compute the uncontrolled steady state Navier-Stokes solution
+    # # as initial value
+    # ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
+    # soldict.update(dict(iniv=ini_vel))
 
-    # save the data
-    cdatstr = get_datastr(nwtn=newtk, time=t,
-                          meshp=N, timps=tip)
-    dou.save_npa(vp_stokes[:NV, ], fstring=ddir + cdatstr + '__vel')
+    # compute the uncontrolled steady state Stokes solution
+    # as initial value
+    soldict.update(dict(nnewtsteps=0, npicardsteps=0))
+    ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
+    soldict.update(dict(iniv=ini_vel, nnewtsteps=tip['nnewtsteps']))
 
-#
-# Compute the time-dependent flow
-#
-
-    # Stokes solution as initial value
-    inivalvec = vp_stokes[:NV, ]
-
-    norm_nwtnupd = 1
-    while newtk < tip['nnewtsteps']:
-        newtk += 1
-        # check for previously computed velocities
-        try:
-            cdatstr = get_datastr(nwtn=newtk, time=tip['tE'],
-                                  meshp=N, timps=tip)
-
-            norm_nwtnupd = dou.load_npa(ddir + cdatstr + '__norm_nwtnupd')
-            prev_v = dou.load_npa(ddir + cdatstr + '__vel')
-
-            tip['norm_nwtnupd_list'].append(norm_nwtnupd)
-            print 'found vel files of Newton iteration {0}'.format(newtk)
-            print 'norm of current Nwtn update: {0}'.format(norm_nwtnupd[0])
-
-        except IOError:
-            newtk -= 1
-            break
-
-    while (newtk < tip['nnewtsteps'] and
-           norm_nwtnupd > tip['vel_nwtn_tol']):
-        newtk += 1
-
-        cdatstr = get_datastr(nwtn=newtk, time=tip['t0'],
-                              meshp=N, timps=tip)
-
-        # save the inival value
-        dou.save_npa(inivalvec, fstring=ddir + cdatstr + '__vel')
-
-        set_vpfiles(tip, fstring=('results/' +
-                                  'NewtonIt{0}').format(newtk))
-        dou.output_paraview(tip, femp, vp=vp_stokes, t=0)
-
-        norm_nwtnupd = 0
-        v_old = inivalvec  # start vector in every Newtonit
-        print 'Computing Newton Iteration {0} -- ({1} timesteps)'.\
-            format(newtk, Nts)
-
-        for tk, t in enumerate(tip['tmesh'][1:]):
-            cts = t - tip['tmesh'][tk]
-            cdatstr = get_datastr(nwtn=newtk, time=t,
-                                  meshp=N, timps=tip)
-
-            # t for implicit scheme
-            pdatstr = get_datastr(nwtn=newtk-1, time=t,
-                                  meshp=N, timps=tip)
-
-            # try - except for linearizations about stationary sols
-            # for which t=None
-            try:
-                prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-            except IOError:
-                pdatstr = get_datastr(nwtn=newtk - 1, time=None,
-                                      meshp=N, timps=tip)
-                prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-
-            convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(prev_v,
-                                                              femp, tip)
-
-            rhsd_cur = dict(fv=stokesmatsc['M'] * v_old +
-                            cts * (rhs_con[INVINDS, :] +
-                                   rhsv_conbc + rhsd_vfstbc['fv']),
-                            fp=rhsd_vfstbc['fp'])
-
-            matd_cur = dict(A=stokesmatsc['M'] +
-                            cts * (stokesmatsc['A'] + convc_mat),
-                            JT=stokesmatsc['JT'],
-                            J=stokesmatsc['J'])
-
-            vp = lau.stokes_steadystate(matdict=matd_cur,
-                                        rhsdict=rhsd_cur)
-
-            v_old = vp[:NV, ]
-
-            dou.save_npa(v_old, fstring=ddir + cdatstr + '__vel')
-
-            dou.output_paraview(tip, femp, vp=vp, t=t),
-
-            # integrate the Newton error
-            norm_nwtnupd += cts * np.dot((v_old - prev_v).T,
-                                         stokesmatsc['M'] *
-                                         (v_old - prev_v))
-
-        dou.save_npa(norm_nwtnupd, ddir + cdatstr + '__norm_nwtnupd')
-        tip['norm_nwtnupd_list'].append(norm_nwtnupd[0])
-
-        print 'norm of current Newton update: {}'.format(norm_nwtnupd)
+    # v_ss_nse, list_norm_nwtnupd = snu.solve_steadystate_nse(**soldict)
+    newtk = snu.solve_nse(return_nwtn_step=True, **soldict)
 
 #
 # Prepare for control
 #
 
+    contp = ContParams(femp['odcoo'])
     # casting some parameters
     NY, NU = contp.NY, contp.NU
 
-    contsetupstr = 'NV{0}NU{1}NY{2}'.format(NV, NU, NY)
+    contsetupstr = problemname + '__NV{0}NU{1}NY{2}'.format(NV, NU, NY)
 
     # get the control and observation operators
     try:
@@ -413,8 +258,8 @@ def optcon_nse(N=10, Nts=10):
         print 'loaded `b_mat`'
     except IOError:
         print 'computing `b_mat`...'
-        b_mat, u_masmat = cou.get_inp_opa(cdcoo=contp.cdcoo,
-                                          V=femp['V'], NU=contp.NU)
+        b_mat, u_masmat = cou.get_inp_opa(cdcoo=femp['cdcoo'], V=femp['V'],
+                                          NU=NU, xcomp=uspacedep)
         dou.save_spa(b_mat, ddir + contsetupstr + '__b_mat')
         dou.save_spa(u_masmat, ddir + contsetupstr + '__u_masmat')
     try:
@@ -423,15 +268,19 @@ def optcon_nse(N=10, Nts=10):
         print 'loaded `c_mat`'
     except IOError:
         print 'computing `c_mat`...'
-        mc_mat, y_masmat = cou.get_mout_opa(odcoo=contp.odcoo,
-                                            V=femp['V'], NY=contp.NY)
+        mc_mat, y_masmat = cou.get_mout_opa(odcoo=femp['odcoo'],
+                                            V=femp['V'], NY=NY)
         dou.save_spa(mc_mat, ddir + contsetupstr + '__mc_mat')
         dou.save_spa(y_masmat, ddir + contsetupstr + '__y_masmat')
+
+    # raise Warning('STOP: in the name of love')
 
     # restrict the operators to the inner nodes
     mc_mat = mc_mat[:, invinds][:, :]
     b_mat = b_mat[invinds, :][:, :]
 
+    print np.linalg.norm(mc_mat.todense())
+    print np.linalg.norm(b_mat.todense())
     # for further use:
     c_mat = lau.apply_massinv(y_masmat, mc_mat)
     mct_mat_reg = lau.app_prj_via_sadpnt(amat=stokesmatsc['M'],
@@ -463,46 +312,54 @@ def optcon_nse(N=10, Nts=10):
     trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
                                           mct_mat_reg, output='dense')
 
-    cntpstr = 'NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY, contp.alphau)
+    cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY,
+                                                contp.alphau, NV)
+
+    # we gonna use this quite often
+    MT, AT = stokesmatsc['M'].T, stokesmatsc['A'].T
+    M, A = stokesmatsc['M'], stokesmatsc['A']
 
     # set/compute the terminal values aka starting point
-    Zc = lau.apply_massinv(stokesmatsc['M'], trct_mat)
-    wc = lau.apply_massinv(stokesmatsc['MT'],
-                           np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
+    Zc = lau.apply_massinv(M, trct_mat)
+    print np.linalg.norm(Zc)
 
-    cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, timps=tip)
+    wc = lau.apply_massinv(MT, np.dot(mct_mat_reg, contp.ystarvec(tip['tE'])))
+
+    pts = tip['tmesh'][-1] - tip['tmesh'][-2]
+    cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, nu=nu,
+                          Nts=Nts, data_prfx=data_prfx, dt=pts)
 
     dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
     dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
 
-    # we gonna use this quite often
-    MT, AT = stokesmatsc['MT'], stokesmatsc['AT']
-    M, A = stokesmatsc['M'], stokesmatsc['A']
-
-    for tk, t in reversed(list(enumerate(tip['tmesh'][:-1]))):
+    # time_before_soldaeric = time.time()
+    for tk, t in reversed(list(enumerate(tip['tmesh'][1:-1]))):
     # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
-        cts = tip['tmesh'][tk+1] - t
+        cts = tip['tmesh'][tk+2] - t
+        pts = tip['tmesh'][tk+1] - tip['tmesh'][tk]
 
-        print 'Time is {0}, DT is {1}'.format(t, cts)
+        print 'Time is {0}, timestep is {1}, next is {2}'.format(t, cts, pts)
 
         # get the previous time convection matrices
-        pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, timps=tip)
+        pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, nu=nu,
+                              Nts=Nts, data_prfx=data_prfx, dt=pts)
         prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-        convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(prev_v,
-                                                          femp, tip)
+        (convc_mat, rhs_con,
+         rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
+                                            V=femp['V'],
+                                            diribcs=femp['diribcs'])
 
         try:
             Zc = dou.load_npa(ddir + pdatstr + cntpstr + '__Z')
         except IOError:
 
             # coeffmat for nwtn adi
-            ft_mat = -(0.5*stokesmatsc['MT'] + cts*(stokesmatsc['AT'] +
-                                                    convc_mat.T))
+            ft_mat = -(0.5*MT + cts*(AT + convc_mat.T))
             # rhs for nwtn adi
-            w_mat = np.hstack([stokesmatsc['MT']*Zc, np.sqrt(cts)*trct_mat])
+            w_mat = np.hstack([MT*Zc, np.sqrt(cts)*trct_mat])
 
-            Zp = pru.proj_alg_ric_newtonadi(mmat=stokesmatsc['MT'],
-                                            fmat=ft_mat, transposed=True,
+            Zp = pru.proj_alg_ric_newtonadi(mmat=MT,
+                                            amat=ft_mat, transposed=True,
                                             jmat=stokesmatsc['J'],
                                             bmat=np.sqrt(cts)*tb_mat,
                                             wmat=w_mat, z0=Zc,
@@ -531,7 +388,7 @@ def optcon_nse(N=10, Nts=10):
         at_mat = MT + cts*(AT + convc_mat.T)
 
         # current rhs
-        ftilde = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
+        ftilde = rhs_con + rhsv_conbc + rhsd_stbc['fv']
         mtxft = pru.get_mTzzTtb(M.T, Zc, ftilde)
         fl1 = mc_mat.T * contp.ystarvec(t)
         rhswc = MT*wc + cts*(fl1 - mtxft)
@@ -544,36 +401,34 @@ def optcon_nse(N=10, Nts=10):
 
         dou.save_npa(wc, fstring=ddir + pdatstr + cntpstr + '__w')
 
-    # solve the closed loop system
-    set_vpfiles(tip, fstring=('results/' + 'closedloop' + cntpstr +
-                              'NewtonIt{0}').format(newtk))
-
-    v_old = inivalvec
+    v_old = ini_vel
     yn = np.dot(c_mat, v_old)
-    tip['yscomp'].append(yn.flatten().tolist())
-    tip['ystar'].append(contp.ystarvec(0).flatten().tolist())
+    yscomplist = [yn.flatten().tolist()]
+    ystarlist = [contp.ystarvec(0).flatten().tolist()]
 
     for tk, t in enumerate(tip['tmesh'][1:]):
         cts = t - tip['tmesh'][tk]
 
         print 'Time is {0}, DT is {1}'.format(t, cts)
 
-        # t for implicit scheme
-        ndatstr = get_datastr(nwtn=newtk, time=t,
-                              meshp=N, timps=tip)
-
+        cdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, nu=nu,
+                              Nts=Nts, data_prfx=data_prfx, dt=cts)
         # convec mats
-        next_v = dou.load_npa(ddir + ndatstr + '__vel')
-        convc_mat, rhs_con, rhsv_conbc = get_v_conv_conts(next_v,
-                                                          femp, tip)
+        next_v = dou.load_npa(ddir + cdatstr + '__vel')
+
+        (convc_mat, rhs_con,
+         rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
+                                            V=femp['V'],
+                                            diribcs=femp['diribcs'])
 
         # feedback mat and feedthrough
-        next_zmat = dou.load_npa(ddir + ndatstr + cntpstr + '__Z')
-        next_w = dou.load_npa(ddir + ndatstr + cntpstr + '__w')
+        next_zmat = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+        next_w = dou.load_npa(ddir + cdatstr + cntpstr + '__w')
 
         # rhs
-        fvn = rhs_con[INVINDS, :] + rhsv_conbc + rhsd_vfstbc['fv']
+        fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv']
         rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
+        # rhsn = M*next_v + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
 
         # coeffmats
         amat = M + cts*(A + convc_mat)
@@ -584,6 +439,8 @@ def optcon_nse(N=10, Nts=10):
                                    rhsv=rhsn,
                                    umat=-cts*tb_dense, vmat=mtxtb.T)
 
+        # vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
+        #                            rhsv=rhsn)
         # vpn = np.atleast_2d(sps.linalg.spsolve(amat, currhs)).T
         v_old = vpn[:NV]
 
@@ -591,20 +448,27 @@ def optcon_nse(N=10, Nts=10):
         print 'norm of current w: ', np.linalg.norm(next_w)
         print 'current y: ', yn
 
-        tip['yscomp'].append(yn.flatten().tolist())
-        tip['ystar'].append(contp.ystarvec(0).flatten().tolist())
+        yscomplist.append(yn.flatten().tolist())
+        ystarlist.append(contp.ystarvec(0).flatten().tolist())
 
         dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
 
-        dou.output_paraview(tip, femp, vp=vpn, t=t),
+        # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
+<<<<<<< HEAD
     sigstr = 'yxT{0}yyT{1}'.format(contp.ystarvec(t)[0, 0],
                                    contp.ystarvec(t)[-1, 0])
 
     dou.save_output_json(tip['yscomp'], tip['tmesh'], ystar=tip['ystar'],
                          fstring='results/'+cdatstr+cntpstr+sigstr+'.json')
+=======
+    save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
+                     fstring=ddir + cdatstr + cntpstr + '__sigout')
+>>>>>>> cleanupcode
 
     print 'dim of v :', femp['V'].dim()
+    # print 'time for solving dae ric :', \
+    #     time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
-    optcon_nse(N=20, Nts=64)
+    optcon_nse(N=25, Nts=40, clearprvveldata=True)
