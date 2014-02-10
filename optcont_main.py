@@ -27,8 +27,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         # TODO: accept ystar as input for better scripting
-        self.ystarx = dolfin.Expression('0.8', t=0)
-        self.ystary = dolfin.Expression('0.0', t=0)
+        self.ystarx = dolfin.Expression('-.1', t=0)
+        self.ystary = dolfin.Expression('0.1', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
         self.NU, self.NY = 4, 4
@@ -104,7 +104,7 @@ def time_int_params(Nts):
                ),
                compress_z=True,  # whether or not to compress Z
                comprz_maxc=500,  # compression of the columns of Z by QR
-               comprz_thresh=1e-2,  # threshold for trunc of SVD
+               comprz_thresh=5e-5,  # threshold for trunc of SVD
                save_full_z=False  # whether or not to save the uncompressed Z
                )
 
@@ -418,7 +418,7 @@ def optcon_nse(problemname='drivencavity',
         next_v = dou.load_npa(ddir + cdatstr + '__vel')
 
         (convc_mat, rhs_con,
-         rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
+         rhsv_conbc) = snu.get_v_conv_conts(prev_v=next_v, invinds=invinds,
                                             V=femp['V'],
                                             diribcs=femp['diribcs'])
 
@@ -428,8 +428,8 @@ def optcon_nse(problemname='drivencavity',
 
         # rhs
         fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv']
-        rhsn = M*next_v + cts*(fvn + tb_mat * (tb_mat.T * next_w))
-        # rhsn = M*next_v + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
+        rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * next_w))
+        # rhsn = M*v_old + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
 
         # coeffmats
         amat = M + cts*(A + convc_mat)
@@ -464,6 +464,6 @@ def optcon_nse(problemname='drivencavity',
     #     time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
-    # optcon_nse(N=25, Nts=40, clearprvveldata=True)
-    optcon_nse(problemname='cylinderwake', N=2, Nts=60,
-               nu=2e-2, clearprvveldata=True)
+    optcon_nse(N=25, Nts=40, clearprvveldata=True, ini_vel_stokes=True)
+    # optcon_nse(problemname='cylinderwake', N=2, Nts=60,
+    #            nu=2e-2, clearprvveldata=True)
