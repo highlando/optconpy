@@ -103,8 +103,8 @@ def time_int_params(Nts):
                    check_lyap_res=False
                ),
                compress_z=True,  # whether or not to compress Z
-               comprz_maxc=500,  # compression of the columns of Z by QR
-               comprz_thresh=5e-5,  # threshold for trunc of SVD
+               comprz_maxc=80,  # compression of the columns of Z by QR
+               comprz_thresh=5e-3,  # threshold for trunc of SVD
                save_full_z=False  # whether or not to save the uncompressed Z
                )
 
@@ -369,7 +369,8 @@ def optcon_nse(problemname='drivencavity',
 
             if tip['compress_z']:
                 # Zc = pru.compress_ZQR(Zp, kmax=tip['comprz_maxc'])
-                Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'])
+                Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'],
+                                       k=tip['comprz_maxc'])
                 # monitor the compression
                 vec = np.random.randn(Zp.shape[0], 1)
                 print 'dims of Z and Z_red: ', Zp.shape, Zc.shape
@@ -464,6 +465,6 @@ def optcon_nse(problemname='drivencavity',
     #     time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
-    optcon_nse(N=25, Nts=40, clearprvveldata=True, ini_vel_stokes=True)
-    # optcon_nse(problemname='cylinderwake', N=2, Nts=60,
-    #            nu=2e-2, clearprvveldata=True)
+    # optcon_nse(N=25, Nts=40, clearprvveldata=True, ini_vel_stokes=True)
+    optcon_nse(problemname='cylinderwake', N=2, Nts=60,
+               nu=2e-2, clearprvveldata=True)
