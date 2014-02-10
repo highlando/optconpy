@@ -27,7 +27,7 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         # TODO: accept ystar as input for better scripting
-        self.ystarx = dolfin.Expression('0.1', t=0)
+        self.ystarx = dolfin.Expression('0.8', t=0)
         self.ystary = dolfin.Expression('0.0', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
@@ -69,9 +69,7 @@ class ContParams():
                           np.atleast_2d(ysy.vector().array()).T])
 
 
-def time_int_params(Nts):
-    t0 = 0.0
-    tE = 1.0
+def time_int_params(Nts, t0=0.0, tE=1.0):
     dt = (tE - t0) / Nts
     sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
                      # initial and terminal point, False for equidist
@@ -141,11 +139,16 @@ def save_output_json(ycomp, tmesh, ystar=None, fstring=None):
     if fstring is None:
         fstring = 'nonspecified_output'
 
-    print 'output saved to ' + fstring
     jsfile = open(fstring, mode='w')
     jsfile.write(json.dumps(dict(ycomp=ycomp,
                                  tmesh=tmesh,
                                  ystar=ystar)))
+
+    print 'output saved to ' + fstring
+    print 'import plot_output as plo'
+    print 'import optcont_main as ocm'
+    print 'jsf = ocm.load_json_dicts("' + fstring + '")'
+    print 'plo.plot_optcont_json(jsf)'
 
 
 def load_json_dicts(StrToJs):
@@ -158,9 +161,10 @@ def load_json_dicts(StrToJs):
 def optcon_nse(problemname='drivencavity',
                N=10, Nts=10, nu=1e-2, clearprvveldata=False,
                ini_vel_stokes=False, stst_control=False,
-               t0=None, tE=None):
+               t0=None, tE=None,
+               comp_unco_out=False):
 
-    tip = time_int_params(Nts)
+    tip = time_int_params(Nts, t0=t0, tE=tE)
 
     problemdict = dict(drivencavity=dnsps.drivcav_fems,
                        cylinderwake=dnsps.cyl_fems)
@@ -327,7 +331,7 @@ def optcon_nse(problemname='drivencavity',
     MT, AT = stokesmatsc['M'].T, stokesmatsc['A'].T
     M, A = stokesmatsc['M'], stokesmatsc['A']
 
-    if stst_control:
+    if stst_control or comp_unco_out:
         # infinite control horizon, steady target state
         cdatstr = get_datastr(nwtn=None, time=None, meshp=N, nu=nu,
                               Nts=None, data_prfx=data_prfx, dt=None)
@@ -337,28 +341,34 @@ def optcon_nse(problemname='drivencavity',
                                             invinds=invinds,
                                             V=femp['V'],
                                             diribcs=femp['diribcs'])
-        try:
-            Z = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
-        except IOError:
-            print 'didnt find ' + ddir + cdatstr + cntpstr + '__Z'
-            Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
-                                           jmat=stokesmatsc['J'],
-                                           bmat=tb_mat, wmat=trct_mat,
-                                           nwtn_adi_dict=tip['nwtn_adi_dict']
-                                           )['zfac']
-            dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
+        if comp_unco_out:
+            fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
+            next_w = 0*fvnstst  # to be consistent with unsteady state
+        else:
+            try:
+                Z = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+            except IOError:
+                print 'didnt find ' + ddir + cdatstr + cntpstr + '__Z'
+                Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
+                                               jmat=stokesmatsc['J'],
+                                               bmat=tb_mat, wmat=trct_mat,
+                                               nwtn_adi_dict=
+                                               tip['nwtn_adi_dict']
+                                               )['zfac']
+                dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
 
-        fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
+            fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
 
-        mtxtb = pru.get_mTzzTtb(M.T, Z, tb_mat)
-        mtxfv = pru.get_mTzzTtb(M.T, Z, fvnstst)
+            mtxtb = pru.get_mTzzTtb(M.T, Z, tb_mat)
+            mtxfv = pru.get_mTzzTtb(M.T, Z, fvnstst)
 
-        fl = mc_mat.T * contp.ystarvec(0)
+            fl = mc_mat.T * contp.ystarvec(0)
 
-        wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T, jmat=stokesmatsc['J'],
-                                   rhsv=fl-mtxfv, umat=-mtxtb,
-                                   vmat=tb_mat.T)[:NV]
-        next_w = wft  # to be consistent with unsteady state
+            wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
+                                       jmat=stokesmatsc['J'],
+                                       rhsv=fl-mtxfv, umat=-mtxtb,
+                                       vmat=tb_mat.T)[:NV]
+            next_w = wft  # to be consistent with unsteady state
 
     else:
         # set/compute the terminal values aka starting point
@@ -463,44 +473,66 @@ def optcon_nse(problemname='drivencavity',
                               Nts=Nts, data_prfx=data_prfx, dt=cts)
 
         if stst_control:
-            rhsn = M*v_old + cts*(fvnstst + tb_mat * (tb_mat.T * wft))
+            if comp_unco_out:
+                rhsn = M*v_old + cts*(fvnstst)
+            else:
+                rhsn = M*v_old + cts*(fvnstst + tb_mat * (tb_mat.T * wft))
+
         else:
-            # convec mats
-            next_v = dou.load_npa(ddir + cdatstr + '__vel')
+            if comp_unco_out:
+                next_v = dou.load_npa(ddir + cdatstr + '__vel')
+                (convc_mat, rhs_con,
+                 rhsv_conbc) = snu.get_v_conv_conts(prev_v=next_v,
+                                                    invinds=invinds,
+                                                    V=femp['V'],
+                                                    diribcs=femp['diribcs'])
+                # rhs
+                fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
+                rhsn = M*v_old + cts*(fvn)
 
-            (convc_mat, rhs_con,
-             rhsv_conbc) = snu.get_v_conv_conts(prev_v=next_v, invinds=invinds,
-                                                V=femp['V'],
-                                                diribcs=femp['diribcs'])
+            else:
+                # convec mats
+                next_v = dou.load_npa(ddir + cdatstr + '__vel')
 
-            # feedback mat and feedthrough
-            next_zmat = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
-            next_w = dou.load_npa(ddir + cdatstr + cntpstr + '__w')
+                (convc_mat, rhs_con,
+                 rhsv_conbc) = snu.get_v_conv_conts(prev_v=next_v,
+                                                    invinds=invinds,
+                                                    V=femp['V'],
+                                                    diribcs=femp['diribcs'])
 
-            # rhs
-            fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv']
-            rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * next_w))
-            # rhsn = M*next_v + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
-            mtxtb = pru.get_mTzzTtb(M.T, next_zmat, tb_mat)
+                # feedback mat and feedthrough
+                next_zmat = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+                next_w = dou.load_npa(ddir + cdatstr + cntpstr + '__w')
+
+                # rhs
+                fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
+                rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * next_w))
+                # rhsn = M*next_v + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
+                mtxtb = pru.get_mTzzTtb(M.T, next_zmat, tb_mat)
 
         # coeffmats
         amat = M + cts*(A + convc_mat)
 
         # TODO: rhsp!!!
-        vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
-                                   rhsv=rhsn,
-                                   umat=-cts*tb_dense, vmat=mtxtb.T)
+        if comp_unco_out:
+            vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
+                                       rhsv=rhsn, rhsp=rhsd_stbc['fp'])
+        else:
+            vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
+                                       rhsv=rhsn, rhsp=rhsd_stbc['fp'],
+                                       umat=-cts*tb_dense, vmat=mtxtb.T)
 
         v_old = vpn[:NV]
+        # print 'norm of v: ', np.linalg.norm(v_old)
 
         yn = np.dot(c_mat, vpn[:NV])
-        print 'norm of current w: ', np.linalg.norm(next_w)
-        print 'current y: ', yn
+        # print 'norm of current w: ', np.linalg.norm(next_w)
+        # print 'current y: ', yn
 
         yscomplist.append(yn.flatten().tolist())
         ystarlist.append(contp.ystarvec(0).flatten().tolist())
 
-        dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
+        # dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
 
         # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
@@ -512,7 +544,8 @@ def optcon_nse(problemname='drivencavity',
     #     time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
-    optcon_nse(N=25, Nts=500, nu=2e-3, clearprvveldata=True, stst_control=True,
-               t0=0.0, tE=10.0)
-    # optcon_nse(problemname='cylinderwake', N=2, Nts=60,
-    #            nu=2e-2, clearprvveldata=True)
+    # optcon_nse(N=25, Nts=500, nu=2e-3, clearprvveldata=True,
+    #            stst_control=True, t0=0.0, tE=10.0)
+    optcon_nse(problemname='cylinderwake', N=1, nu=1e-3, clearprvveldata=True,
+               t0=0.0, tE=2.0, Nts=120, stst_control=True, comp_unco_out=False,
+               ini_vel_stokes=True)
