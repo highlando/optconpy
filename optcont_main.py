@@ -178,7 +178,7 @@ def optcon_nse(problemname='drivencavity',
                ini_vel_stokes=False, stst_control=False,
                t0=None, tE=None,
                comp_unco_out=False,
-               use_ric_ini_nu=None):
+               use_ric_ini_nu=None, alphau=None):
 
     tip = time_int_params(Nts, t0=t0, tE=tE)
 
@@ -279,6 +279,8 @@ def optcon_nse(problemname='drivencavity',
     contp = ContParams(femp['odcoo'])
     # casting some parameters
     NY, NU = contp.NY, contp.NU
+    if alphau is not None:
+        contp.alphau = alphau
 
     contsetupstr = problemname + '__NV{0}NU{1}NY{2}'.format(NV, NU, NY)
 
@@ -393,6 +395,19 @@ def optcon_nse(problemname='drivencavity',
                                                z0=zini)['zfac']
                 dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
                 print 'saved ' + ddir + cdatstr + cntpstr + '__Z'
+
+            if tip['compress_z']:
+                # Zc = pru.compress_ZQR(Zp, kmax=tip['comprz_maxc'])
+                Zc = pru.compress_Zsvd(Z, thresh=tip['comprz_thresh'])
+                # monitor the compression
+                vec = np.random.randn(Z.shape[0], 1)
+                print 'dims of Z and Z_red: ', Z.shape, Zc.shape
+                print '||(ZZ_rd - ZZ )*tstvec|| / ||ZZ_rd*tstvec|| = {0}'.\
+                    format(np.linalg.norm(np.dot(Z, np.dot(Z.T, vec)) -
+                           np.dot(Zc, np.dot(Zc.T, vec))) /
+                           np.linalg.norm(np.dot(Z, np.dot(Z.T, vec))))
+
+                Z = Zc
 
             fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
 
@@ -566,6 +581,6 @@ def optcon_nse(problemname='drivencavity',
 if __name__ == '__main__':
     # optcon_nse(N=25, Nts=500, nu=2e-3, clearprvveldata=True,
     #            stst_control=True, t0=0.0, tE=10.0)
-    optcon_nse(problemname='cylinderwake', N=2, nu=8e-4, clearprvveldata=False,
-               t0=0.0, tE=2.0, Nts=100, stst_control=True, comp_unco_out=False,
-               ini_vel_stokes=True, use_ric_ini_nu=1e-3)
+    optcon_nse(problemname='cylinderwake', N=3, nu=1e-3, clearprvveldata=False,
+               t0=0.0, tE=1.0, Nts=25, stst_control=True, comp_unco_out=False,
+               ini_vel_stokes=True, use_ric_ini_nu=None, alphau=1e-4)
