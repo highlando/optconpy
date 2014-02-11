@@ -116,8 +116,8 @@ def time_int_params(Nts, t0=0.0, tE=1.0):
                    check_lyap_res=False
                ),
                compress_z=True,  # whether or not to compress Z
-               comprz_maxc=80,  # compression of the columns of Z by QR
-               comprz_thresh=5e-3,  # threshold for trunc of SVD
+               comprz_maxc=50,  # compression of the columns of Z by QR
+               comprz_thresh=5e-5,  # threshold for trunc of SVD
                save_full_z=False  # whether or not to save the uncompressed Z
                )
 
@@ -178,9 +178,12 @@ def optcon_nse(problemname='drivencavity',
                ini_vel_stokes=False, stst_control=False,
                t0=None, tE=None,
                comp_unco_out=False,
-               use_ric_ini_nu=None, alphau=None):
+               use_ric_ini_nu=None, alphau=None,
+               spec_tip_dict=None):
 
     tip = time_int_params(Nts, t0=t0, tE=tE)
+    if spec_tip_dict is not None:
+        tip.update(spec_tip_dict)
 
     problemdict = dict(drivencavity=dnsps.drivcav_fems,
                        cylinderwake=dnsps.cyl_fems)
@@ -458,7 +461,7 @@ def optcon_nse(problemname='drivencavity',
             try:
                 Zc = dou.load_npa(ddir + pdatstr + cntpstr + '__Z')
             except IOError:
-
+                print 'didnt find ' + ddir + pdatstr + cntpstr + '__Z'
                 # coeffmat for nwtn adi
                 ft_mat = -(0.5*MT + cts*(AT + convc_mat.T))
                 # rhs for nwtn adi
@@ -579,8 +582,10 @@ def optcon_nse(problemname='drivencavity',
     print 'Re = cyl_dia / nu = {0}'.format(0.15/nu)
 
 if __name__ == '__main__':
-    # optcon_nse(N=25, Nts=500, nu=2e-3, clearprvveldata=True,
-    #            stst_control=True, t0=0.0, tE=10.0)
-    optcon_nse(problemname='cylinderwake', N=3, nu=1e-3, clearprvveldata=False,
-               t0=0.0, tE=1.0, Nts=25, stst_control=True, comp_unco_out=False,
-               ini_vel_stokes=True, use_ric_ini_nu=None, alphau=1e-4)
+    optcon_nse(N=25, Nts=40, nu=1e-2,  # clearprvveldata=True,
+               stst_control=False, t0=0.0, tE=1.0)
+    # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
+    #            clearprvveldata=False,
+    #            t0=0.0, tE=1.0, Nts=25, stst_control=True,
+    #            comp_unco_out=False,
+    #            ini_vel_stokes=True, use_ric_ini_nu=None, alphau=1e-4)
