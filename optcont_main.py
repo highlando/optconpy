@@ -27,7 +27,7 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         # TODO: accept ystar as input for better scripting
-        self.ystarx = dolfin.Expression('0.8', t=0)
+        self.ystarx = None  # dolfin.Expression('0.8', t=0)
         self.ystary = dolfin.Expression('0.0', t=0)
         # if t, then add t=0 to both comps !!1!!11
 
@@ -60,13 +60,28 @@ class ContParams():
             try:
                 self.ystarx.t, self.ystary.t = t, t
             except AttributeError:
-                raise UserWarning('no time dependency of ystar' +
-                                  'the provided t is ignored')
+                if self.ystarx is None:
+                    pass
+                else:
+                    raise UserWarning('no time dependency of ystar' +
+                                      'the provided t is ignored')
 
-        ysx = dolfin.interpolate(self.ystarx, self.Y)
-        ysy = dolfin.interpolate(self.ystary, self.Y)
-        return np.vstack([np.atleast_2d(ysx.vector().array()).T,
-                          np.atleast_2d(ysy.vector().array()).T])
+        if self.ystarx is None and self.ystary is not None:
+            ysy = dolfin.interpolate(self.ystary, self.Y)
+            return np.atleast_2d(ysy.vector().array()).T
+
+        elif self.ystary is None and self.ystarx is not None:
+            ysx = dolfin.interpolate(self.ystarx, self.Y)
+            return np.atleast_2d(ysx.vector().array()).T
+
+        elif self.ystary is not None and self.ystarx is not None:
+            ysx = dolfin.interpolate(self.ystarx, self.Y)
+            ysy = dolfin.interpolate(self.ystary, self.Y)
+            return np.vstack([np.atleast_2d(ysx.vector().array()).T,
+                              np.atleast_2d(ysy.vector().array()).T])
+
+        else:
+            raise UserWarning('need provide at least one component of ystar')
 
 
 def time_int_params(Nts, t0=0.0, tE=1.0):
@@ -291,10 +306,13 @@ def optcon_nse(problemname='drivencavity',
     mc_mat = mc_mat[:, invinds][:, :]
     b_mat = b_mat[invinds, :][:, :]
 
-    print np.linalg.norm(mc_mat.todense())
-    print np.linalg.norm(b_mat.todense())
     # for further use:
     c_mat = lau.apply_massinv(y_masmat, mc_mat)
+    if contp.ystarx is None:
+        c_mat = c_mat[NY:, :][:, :]  # TODO: Do this right
+        mc_mat = mc_mat[NY:, :][:, :]  # TODO: Do this right
+        y_masmat = y_masmat[:NY, :][:, :NY]  # TODO: Do this right
+
     mct_mat_reg = lau.app_prj_via_sadpnt(amat=stokesmatsc['M'],
                                          jmat=stokesmatsc['J'],
                                          rhsv=mc_mat.T,
@@ -356,6 +374,7 @@ def optcon_nse(problemname='drivencavity',
                                                tip['nwtn_adi_dict']
                                                )['zfac']
                 dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
+                print 'saved ' + ddir + cdatstr + cntpstr + '__Z'
 
             fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
 
@@ -533,19 +552,16 @@ def optcon_nse(problemname='drivencavity',
         ystarlist.append(contp.ystarvec(0).flatten().tolist())
 
         # dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
-
         # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
     save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
                      fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
-    # print 'time for solving dae ric :', \
-    #     time_after_soldaeric - time_before_soldaeric
 
 if __name__ == '__main__':
     # optcon_nse(N=25, Nts=500, nu=2e-3, clearprvveldata=True,
     #            stst_control=True, t0=0.0, tE=10.0)
-    optcon_nse(problemname='cylinderwake', N=1, nu=1e-3, clearprvveldata=True,
-               t0=0.0, tE=2.0, Nts=120, stst_control=True, comp_unco_out=False,
+    optcon_nse(problemname='cylinderwake', N=2, nu=1e-3, clearprvveldata=True,
+               t0=0.0, tE=2.0, Nts=12, stst_control=True, comp_unco_out=False,
                ini_vel_stokes=True)
