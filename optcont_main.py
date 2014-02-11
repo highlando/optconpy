@@ -177,7 +177,8 @@ def optcon_nse(problemname='drivencavity',
                N=10, Nts=10, nu=1e-2, clearprvveldata=False,
                ini_vel_stokes=False, stst_control=False,
                t0=None, tE=None,
-               comp_unco_out=False):
+               comp_unco_out=False,
+               use_ric_ini_nu=None):
 
     tip = time_int_params(Nts, t0=t0, tE=tE)
 
@@ -257,14 +258,17 @@ def optcon_nse(problemname='drivencavity',
         # compute the uncontrolled steady state Stokes solution
         soldict.update(dict(nnewtsteps=0, npicardsteps=0))
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
-        soldict.update(dict(iniv=ini_vel, nnewtsteps=tip['nnewtsteps']))
-        newtk = 0
+        soldict.update(dict(iniv=ini_vel, nnewtsteps=tip['nnewtsteps'],
+                            npicardsteps=4))
     else:
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
         soldict.update(dict(iniv=ini_vel))
         newtk = len(newtonnorms)-1
 
-    if not stst_control:
+    if stst_control:
+        lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
+        newtk = None
+    else:
         # compute the forward solution
         newtk = snu.solve_nse(return_nwtn_step=True, **soldict)
 
@@ -355,7 +359,7 @@ def optcon_nse(problemname='drivencavity',
                               Nts=None, data_prfx=data_prfx, dt=None)
 
         (convc_mat, rhs_con,
-         rhsv_conbc) = snu.get_v_conv_conts(prev_v=ini_vel,
+         rhsv_conbc) = snu.get_v_conv_conts(prev_v=lin_point,
                                             invinds=invinds,
                                             V=femp['V'],
                                             diribcs=femp['diribcs'])
@@ -365,27 +369,41 @@ def optcon_nse(problemname='drivencavity',
         else:
             try:
                 Z = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+                print 'loaded ' + ddir + cdatstr + cntpstr + '__Z'
             except IOError:
-                print 'didnt find ' + ddir + cdatstr + cntpstr + '__Z'
+                if use_ric_ini_nu is not None:
+                    cdatstr = get_datastr(nwtn=None, time=None, meshp=N,
+                                          nu=use_ric_ini_nu, Nts=None,
+                                          data_prfx=data_prfx, dt=None)
+                    try:
+                        zini = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+                        print 'Initialize Newton ADI by Z from ' + cdatstr
+                    except IOError:
+                        raise Warning('No data for initialization of '
+                                      ' Newton ADI need ' + cdatstr + '__Z')
+                    cdatstr = get_datastr(meshp=N, nu=nu, data_prfx=data_prfx)
+
+                else:
+                    zini = None
                 Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
                                                jmat=stokesmatsc['J'],
                                                bmat=tb_mat, wmat=trct_mat,
                                                nwtn_adi_dict=
-                                               tip['nwtn_adi_dict']
-                                               )['zfac']
+                                               tip['nwtn_adi_dict'],
+                                               z0=zini)['zfac']
                 dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
                 print 'saved ' + ddir + cdatstr + cntpstr + '__Z'
 
             fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
 
-            mtxtb = pru.get_mTzzTtb(M.T, Z, tb_mat)
-            mtxfv = pru.get_mTzzTtb(M.T, Z, fvnstst)
+            mtxtb_stst = pru.get_mTzzTtb(M.T, Z, tb_mat)
+            mtxfv_stst = pru.get_mTzzTtb(M.T, Z, fvnstst)
 
             fl = mc_mat.T * contp.ystarvec(0)
 
             wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
                                        jmat=stokesmatsc['J'],
-                                       rhsv=fl-mtxfv, umat=-mtxtb,
+                                       rhsv=fl-mtxfv_stst, umat=-mtxtb_stst,
                                        vmat=tb_mat.T)[:NV]
             next_w = wft  # to be consistent with unsteady state
 
@@ -480,7 +498,7 @@ def optcon_nse(problemname='drivencavity',
     yscomplist = [yn.flatten().tolist()]
     ystarlist = [contp.ystarvec(0).flatten().tolist()]
 
-    if stst_control:
+    if stst_control:  # TODO: move this to tip
         tip['tmesh'] = np.linspace(t0, tE, Nts+1).flatten()
 
     for tk, t in enumerate(tip['tmesh'][1:]):
@@ -491,48 +509,33 @@ def optcon_nse(problemname='drivencavity',
         cdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, nu=nu,
                               Nts=Nts, data_prfx=data_prfx, dt=cts)
 
-        if stst_control:
-            if comp_unco_out:
-                rhsn = M*v_old + cts*(fvnstst)
-            else:
-                rhsn = M*v_old + cts*(fvnstst + tb_mat * (tb_mat.T * wft))
+        next_v = v_old  # dou.load_npa(ddir + cdatstr + '__vel')
+        (convc_mat, rhs_con,
+         rhsv_conbc) = snu.get_v_conv_conts(prev_v=next_v,
+                                            invinds=invinds,
+                                            V=femp['V'],
+                                            diribcs=femp['diribcs'])
+
+        fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
+
+        if comp_unco_out:
+            rhsn = M*v_old + cts*(fvn)
 
         else:
-            if comp_unco_out:
-                next_v = dou.load_npa(ddir + cdatstr + '__vel')
-                (convc_mat, rhs_con,
-                 rhsv_conbc) = snu.get_v_conv_conts(prev_v=next_v,
-                                                    invinds=invinds,
-                                                    V=femp['V'],
-                                                    diribcs=femp['diribcs'])
-                # rhs
-                fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
-                rhsn = M*v_old + cts*(fvn)
-
+            if stst_control:
+                rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * wft))
+                mtxtb = mtxtb_stst
             else:
-                # convec mats
-                next_v = dou.load_npa(ddir + cdatstr + '__vel')
-
-                (convc_mat, rhs_con,
-                 rhsv_conbc) = snu.get_v_conv_conts(prev_v=next_v,
-                                                    invinds=invinds,
-                                                    V=femp['V'],
-                                                    diribcs=femp['diribcs'])
-
                 # feedback mat and feedthrough
                 next_zmat = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
                 next_w = dou.load_npa(ddir + cdatstr + cntpstr + '__w')
 
-                # rhs
-                fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
                 rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * next_w))
-                # rhsn = M*next_v + cts*(fvn + 0*tb_mat * (tb_mat.T * next_w))
                 mtxtb = pru.get_mTzzTtb(M.T, next_zmat, tb_mat)
 
-        # coeffmats
+        # coeffmats for linear implicit scheme
         amat = M + cts*(A + convc_mat)
 
-        # TODO: rhsp!!!
         if comp_unco_out:
             vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
                                        rhsv=rhsn, rhsp=rhsd_stbc['fp'])
@@ -558,10 +561,11 @@ def optcon_nse(problemname='drivencavity',
                      fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
+    print 'Re = cyl_dia / nu = {0}'.format(0.15/nu)
 
 if __name__ == '__main__':
     # optcon_nse(N=25, Nts=500, nu=2e-3, clearprvveldata=True,
     #            stst_control=True, t0=0.0, tE=10.0)
-    optcon_nse(problemname='cylinderwake', N=2, nu=1e-3, clearprvveldata=True,
-               t0=0.0, tE=2.0, Nts=12, stst_control=True, comp_unco_out=False,
-               ini_vel_stokes=True)
+    optcon_nse(problemname='cylinderwake', N=2, nu=8e-4, clearprvveldata=False,
+               t0=0.0, tE=2.0, Nts=100, stst_control=True, comp_unco_out=False,
+               ini_vel_stokes=True, use_ric_ini_nu=1e-3)
