@@ -27,15 +27,19 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         # TODO: accept ystar as input for better scripting
-        self.ystarx = None  # dolfin.Expression('0.8', t=0)
-        self.ystary = dolfin.Expression('0.0', t=0)
-        # if t, then add t=0 to both comps !!1!!11
+        if ystar is None:
+            self.ystarx = dolfin.Expression('0.0', t=0)
+            self.ystary = dolfin.Expression('0.0', t=0)
+            # if t, then add t=0 to both comps !!1!!11
+        else:
+            self.ystarx = ystar[0]
+            self.ystary = ystar[1]
 
         self.NU, self.NY = 4, 4
 
         self.R = None
         # regularization parameter
-        self.alphau = 1e-7
+        self.alphau = 1e-4
         self.V = None
         self.W = None
 
@@ -160,10 +164,11 @@ def save_output_json(ycomp, tmesh, ystar=None, fstring=None):
                                  ystar=ystar)))
 
     print 'output saved to ' + fstring
+    print '\n to plot run the commands \n'
     print 'import plot_output as plo'
     print 'import optcont_main as ocm'
     print 'jsf = ocm.load_json_dicts("' + fstring + '")'
-    print 'plo.plot_optcont_json(jsf)'
+    print 'plo.plot_optcont_json(jsf, fname="' + fstring + '")\n'
 
 
 def load_json_dicts(StrToJs):
@@ -179,7 +184,8 @@ def optcon_nse(problemname='drivencavity',
                t0=None, tE=None,
                comp_unco_out=False,
                use_ric_ini_nu=None, alphau=None,
-               spec_tip_dict=None):
+               spec_tip_dict=None,
+               ystar=None):
 
     tip = time_int_params(Nts, t0=t0, tE=tE)
     if spec_tip_dict is not None:
@@ -262,7 +268,7 @@ def optcon_nse(problemname='drivencavity',
         soldict.update(dict(nnewtsteps=0, npicardsteps=0))
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
         soldict.update(dict(iniv=ini_vel, nnewtsteps=tip['nnewtsteps'],
-                            npicardsteps=4))
+                            npicardsteps=None))
     else:
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
         soldict.update(dict(iniv=ini_vel))
@@ -279,7 +285,7 @@ def optcon_nse(problemname='drivencavity',
 # Prepare for control
 #
 
-    contp = ContParams(femp['odcoo'])
+    contp = ContParams(femp['odcoo'], ystar)
     # casting some parameters
     NY, NU = contp.NY, contp.NU
     if alphau is not None:
@@ -400,8 +406,8 @@ def optcon_nse(problemname='drivencavity',
                 print 'saved ' + ddir + cdatstr + cntpstr + '__Z'
 
             if tip['compress_z']:
-                # Zc = pru.compress_ZQR(Zp, kmax=tip['comprz_maxc'])
-                Zc = pru.compress_Zsvd(Z, thresh=tip['comprz_thresh'])
+                Zc = pru.compress_Zsvd(Z, thresh=tip['comprz_thresh'],
+                                       k=tip['comprz_maxc'])
                 # monitor the compression
                 vec = np.random.randn(Z.shape[0], 1)
                 print 'dims of Z and Z_red: ', Z.shape, Zc.shape
@@ -461,7 +467,6 @@ def optcon_nse(problemname='drivencavity',
             try:
                 Zc = dou.load_npa(ddir + pdatstr + cntpstr + '__Z')
             except IOError:
-                print 'didnt find ' + ddir + pdatstr + cntpstr + '__Z'
                 # coeffmat for nwtn adi
                 ft_mat = -(0.5*MT + cts*(AT + convc_mat.T))
                 # rhs for nwtn adi
@@ -478,7 +483,8 @@ def optcon_nse(problemname='drivencavity',
 
                 if tip['compress_z']:
                     # Zc = pru.compress_ZQR(Zp, kmax=tip['comprz_maxc'])
-                    Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'])
+                    Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'],
+                                           k=tip['comprz_maxc'])
                     # monitor the compression
                     vec = np.random.randn(Zp.shape[0], 1)
                     print 'dims of Z and Z_red: ', Zp.shape, Zc.shape
@@ -575,8 +581,12 @@ def optcon_nse(problemname='drivencavity',
         # dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
         # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
-    save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
-                     fstring=ddir + cdatstr + cntpstr + '__sigout')
+    if comp_unco_out:
+        save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
+                         fstring=ddir + cdatstr + cntpstr + '__sigout_unco')
+    else:
+        save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
+                         fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
     print 'Re = cyl_dia / nu = {0}'.format(0.15/nu)
