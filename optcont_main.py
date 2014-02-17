@@ -105,9 +105,6 @@ def time_int_params(Nts, t0=0.0, tE=1.0):
                ParaviewOutput=True,
                proutdir='results/',
                prfprfx='',
-               nnewtsteps=9,  # n nwtn stps for vel comp, 0 for Stokes flow
-               vel_nwtn_tol=1e-14,
-               norm_nwtnupd_list=[],
                # parameters for newton adi iteration
                nwtn_adi_dict=dict(
                    adi_max_steps=200,
@@ -140,8 +137,7 @@ def get_tint(t0, tE, Nts, sqzmesh):
     return tint
 
 
-def get_datastr(nwtn=None, time=None,
-                meshp=None, nu=None, Nts=None, dt=None,
+def get_datastr(time=None, meshp=None, nu=None, Nts=None, dt=None,
                 data_prfx=''):
 
     # print (data_prfx +
@@ -149,8 +145,8 @@ def get_datastr(nwtn=None, time=None,
     #     nwtn, time, nu, meshp, Nts, dt)
 
     return (data_prfx +
-            'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
-        nwtn, time, nu, meshp, Nts, dt)
+            'time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
+        None, time, nu, meshp, Nts, dt)
 
 
 def save_output_json(ycomp, tmesh, ystar=None, fstring=None):
@@ -252,8 +248,6 @@ def optcon_nse(problemname='drivencavity',
     soldict.update(fv_stbc=rhsd_stbc['fv'], fp_stbc=rhsd_stbc['fp'],
                    N=N, nu=nu,
                    trange=tip['tmesh'],
-                   nnewtsteps=tip['nnewtsteps'],
-                   vel_nwtn_tol=tip['vel_nwtn_tol'],
                    ddir=ddir, get_datastring=get_datastr,
                    data_prfx=data_prfx,
                    clearprvdata=clearprvveldata,
@@ -265,21 +259,19 @@ def optcon_nse(problemname='drivencavity',
     # as initial value
     if ini_vel_stokes:
         # compute the uncontrolled steady state Stokes solution
-        soldict.update(dict(nnewtsteps=0, npicardsteps=0))
-        ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
-        soldict.update(dict(iniv=ini_vel, nnewtsteps=tip['nnewtsteps'],
-                            npicardsteps=None))
+        ini_vel, newtonnorms = snu.solve_steadystate_nse(vel_nwtn_stps=0,
+                                                         vel_pcrd_stps=0,
+                                                         **soldict)
+        soldict.update(dict(iniv=ini_vel))
     else:
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
         soldict.update(dict(iniv=ini_vel))
-        newtk = len(newtonnorms)-1
 
     if stst_control:
         lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
-        newtk = None
     else:
         # compute the forward solution
-        newtk = snu.solve_nse(return_nwtn_step=True, **soldict)
+        snu.solve_nse(**soldict)
 
 #
 # Prepare for control
@@ -440,7 +432,7 @@ def optcon_nse(problemname='drivencavity',
                                           contp.ystarvec(tip['tE'])))
 
         pts = tip['tmesh'][-1] - tip['tmesh'][-2]
-        cdatstr = get_datastr(nwtn=newtk, time=tip['tE'], meshp=N, nu=nu,
+        cdatstr = get_datastr(time=tip['tE'], meshp=N, nu=nu,
                               Nts=Nts, data_prfx=data_prfx, dt=pts)
 
         dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
@@ -456,7 +448,7 @@ def optcon_nse(problemname='drivencavity',
                 format(t, cts, pts)
 
             # get the previous time convection matrices
-            pdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, nu=nu,
+            pdatstr = get_datastr(time=t, meshp=N, nu=nu,
                                   Nts=Nts, data_prfx=data_prfx, dt=pts)
             prev_v = dou.load_npa(ddir + pdatstr + '__vel')
             (convc_mat, rhs_con,
@@ -530,7 +522,7 @@ def optcon_nse(problemname='drivencavity',
 
         print 'Time is {0}, DT is {1}'.format(t, cts)
 
-        cdatstr = get_datastr(nwtn=newtk, time=t, meshp=N, nu=nu,
+        cdatstr = get_datastr(time=t, meshp=N, nu=nu,
                               Nts=Nts, data_prfx=data_prfx, dt=cts)
 
         next_v = v_old  # dou.load_npa(ddir + cdatstr + '__vel')
@@ -592,7 +584,7 @@ def optcon_nse(problemname='drivencavity',
     print 'Re = cyl_dia / nu = {0}'.format(0.15/nu)
 
 if __name__ == '__main__':
-    optcon_nse(N=25, Nts=40, nu=1e-2,  # clearprvveldata=True,
+    optcon_nse(N=15, Nts=10, nu=1e-2,  # clearprvveldata=True,
                stst_control=False, t0=0.0, tE=1.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,

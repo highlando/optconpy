@@ -1,4 +1,10 @@
 from optcont_main import optcon_nse
+from dolfin import Expression
+
+# the target signal
+# for cylinder wake,  y[1] -> 0 means stabilization
+ystar = [None, Expression('0.0', t=0)]
+
 spec_tip_dict = dict(nwtn_adi_dict=dict(
                      adi_max_steps=199,
                      adi_newZ_reltol=1e-8,
@@ -19,7 +25,8 @@ probsetupdict = dict(problemname='cylinderwake', N=3,
                      spec_tip_dict=spec_tip_dict,
                      clearprvveldata=True,
                      t0=0.0, tE=2.0, Nts=50, stst_control=True,
-                     ini_vel_stokes=True, alphau=1e-4)
+                     ini_vel_stokes=True, alphau=1e-4, ystar=ystar)
+
 
 # for nu=1e-3, i.e. Re = 150, the sys is stable
 probsetupdict.update(dict(nu=1e-3, comp_unco_out=False,
@@ -32,15 +39,12 @@ probsetupdict.update(dict(nu=8e-4, comp_unco_out=False,
                      use_ric_ini_nu=1e-3))
 optcon_nse(**probsetupdict)
 
-# for nu=8e-4 (Re=187.5) we need stabilizing initial guess
+# for nu=6e-4 (Re=250) we need stabilizing initial guess
 probsetupdict.update(dict(nu=6e-4, comp_unco_out=False,
                      use_ric_ini_nu=8e-4))
 optcon_nse(**probsetupdict)
 
 # compute the uncontrolled solution
-optcon_nse(problemname='cylinderwake', N=3, nu=6e-4,
-           spec_tip_dict=spec_tip_dict,
-           clearprvveldata=True,
-           t0=0.0, tE=2.0, Nts=50, stst_control=True,
-           comp_unco_out=True,
-           ini_vel_stokes=True, use_ric_ini_nu=8e-4, alphau=1e-4)
+probsetupdict.update(dict(nu=6e-4, comp_unco_out=True,
+                     use_ric_ini_nu=8e-4))
+optcon_nse(**probsetupdict)
