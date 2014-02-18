@@ -435,8 +435,17 @@ def optcon_nse(problemname='drivencavity',
         cdatstr = get_datastr(time=tip['tE'], meshp=N, nu=nu,
                               Nts=Nts, data_prfx=data_prfx, dt=pts)
 
+        mtxtb = pru.get_mTzzTtb(M.T, Zc, tb_mat)
+
         dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
         dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
+        dou.save_npa(mtxtb, fstring=ddir + cdatstr + cntpstr + '__mtxtb')
+
+        auxstr = ddir + cdatstr + cntpstr
+
+        feedbackthroughdict = {tip['tmesh'][-1]:
+                               dict(w=auxstr + '__w',
+                                    mtxtb=auxstr + '__mtxtb')}
 
         # time_before_soldaeric = time.time()
         for tk, t in reversed(list(enumerate(tip['tmesh'][1:-1]))):
@@ -508,6 +517,10 @@ def optcon_nse(problemname='drivencavity',
                                       rhsv=rhswc)[:NV]
 
             dou.save_npa(wc, fstring=ddir + pdatstr + cntpstr + '__w')
+            dou.save_npa(mtxtb, fstring=ddir + pdatstr + cntpstr + '__mtxtb')
+            auxstr = ddir + pdatstr + cntpstr
+            feedbackthroughdict.update({t: dict(w=auxstr + '__w',
+                                                mtxtb=auxstr + '__mtxtb')})
 
     v_old = ini_vel
     yn = np.dot(c_mat, v_old)
