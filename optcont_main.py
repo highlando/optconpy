@@ -47,6 +47,11 @@ class ContParams():
                                          odcoo['ymax'])
         self.Y = dolfin.FunctionSpace(self.ymesh, 'CG', 1)
         # TODO: pass Y to cou.get_output_operator
+        # TODO: by now we tacitly assume that V, W = MyC.T My^-1 MyC
+        # if contp.V is None:
+        #     contp.V = My
+        # if contp.W is None:
+        #     contp.W = My
 
     def ystarvec(self, t=None):
         """return the current value of ystar
@@ -178,7 +183,6 @@ def optcon_nse(problemname='drivencavity',
                N=10, Nts=10, nu=1e-2, clearprvveldata=False,
                ini_vel_stokes=False, stst_control=False,
                t0=None, tE=None,
-               comp_unco_out=False,
                use_ric_ini_nu=None, alphau=None,
                spec_tip_dict=None,
                ystar=None):
@@ -222,20 +226,15 @@ def optcon_nse(problemname='drivencavity',
     rhsd_vf['fp'] = rhsd_vf['fp'][:-1, :]
 
     # reduce the matrices by resolving the BCs
-    (stokesmatsc,
-     rhsd_stbc,
-     invinds,
-     bcinds,
-     bcvals) = dts.condense_sysmatsbybcs(stokesmats,
-                                         femp['diribcs'])
+    (stokesmatsc, rhsd_stbc,
+     invinds, bcinds, bcvals) = dts.condense_sysmatsbybcs(stokesmats,
+                                                          femp['diribcs'])
 
     # pressure freedom and dirichlet reduced rhs
     rhsd_vfrc = dict(fpr=rhsd_vf['fp'], fvc=rhsd_vf['fv'][invinds, ])
 
     # add the info on boundary and inner nodes
-    bcdata = {'bcinds': bcinds,
-              'bcvals': bcvals,
-              'invinds': invinds}
+    bcdata = {'bcinds': bcinds, 'bcvals': bcvals, 'invinds': invinds}
     femp.update(bcdata)
 
     # casting some parameters
@@ -253,24 +252,6 @@ def optcon_nse(problemname='drivencavity',
                    paraviewoutput=tip['ParaviewOutput'],
                    vfileprfx=tip['proutdir']+'vel_',
                    pfileprfx=tip['proutdir']+'p_')
-
-    # compute the uncontrolled steady state (Navier-)Stokes solution
-    # as initial value
-    if ini_vel_stokes:
-        # compute the uncontrolled steady state Stokes solution
-        ini_vel, newtonnorms = snu.solve_steadystate_nse(vel_nwtn_stps=0,
-                                                         vel_pcrd_stps=0,
-                                                         **soldict)
-        soldict.update(dict(iniv=ini_vel))
-    else:
-        ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
-        soldict.update(dict(iniv=ini_vel))
-
-    if stst_control:
-        lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
-    else:
-        # compute the forward solution
-        snu.solve_nse(**soldict)
 
 #
 # Prepare for control
@@ -323,13 +304,7 @@ def optcon_nse(problemname='drivencavity',
                                          transposedprj=True)
 
     # set the weighing matrices
-    # if contp.R is None:
     contp.R = contp.alphau * u_masmat
-    # TODO: by now we tacitly assume that V, W = MyC.T My^-1 MyC
-    # if contp.V is None:
-    #     contp.V = My
-    # if contp.W is None:
-    #     contp.W = My
 
 #
 # solve the differential-alg. Riccati eqn for the feedback gain X
@@ -353,7 +328,20 @@ def optcon_nse(problemname='drivencavity',
     MT, AT = stokesmatsc['M'].T, stokesmatsc['A'].T
     M, A = stokesmatsc['M'], stokesmatsc['A']
 
-    if stst_control or comp_unco_out:
+    # compute the uncontrolled steady state (Navier-)Stokes solution
+    # as initial value
+    if ini_vel_stokes:
+        # compute the uncontrolled steady state Stokes solution
+        ini_vel, newtonnorms = snu.solve_steadystate_nse(vel_nwtn_stps=0,
+                                                         vel_pcrd_stps=0,
+                                                         **soldict)
+        soldict.update(dict(iniv=ini_vel))
+    else:
+        ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
+        soldict.update(dict(iniv=ini_vel))
+
+    if stst_control:
+        lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
         # infinite control horizon, steady target state
         cdatstr = get_datastr(nwtn=None, time=None, meshp=N, nu=nu,
                               Nts=None, data_prfx=data_prfx, dt=None)
@@ -363,64 +351,62 @@ def optcon_nse(problemname='drivencavity',
                                             invinds=invinds,
                                             V=femp['V'],
                                             diribcs=femp['diribcs'])
-        if comp_unco_out:
-            fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
-            next_w = 0*fvnstst  # to be consistent with unsteady state
-        else:
-            try:
-                Z = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
-                print 'loaded ' + ddir + cdatstr + cntpstr + '__Z'
-            except IOError:
-                if use_ric_ini_nu is not None:
-                    cdatstr = get_datastr(nwtn=None, time=None, meshp=N,
-                                          nu=use_ric_ini_nu, Nts=None,
-                                          data_prfx=data_prfx, dt=None)
-                    try:
-                        zini = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
-                        print 'Initialize Newton ADI by Z from ' + cdatstr
-                    except IOError:
-                        raise Warning('No data for initialization of '
-                                      ' Newton ADI -- need ' + cdatstr + '__Z')
-                    cdatstr = get_datastr(meshp=N, nu=nu, data_prfx=data_prfx)
 
-                else:
-                    zini = None
-                Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
-                                               jmat=stokesmatsc['J'],
-                                               bmat=tb_mat, wmat=trct_mat,
-                                               nwtn_adi_dict=
-                                               tip['nwtn_adi_dict'],
-                                               z0=zini)['zfac']
-                dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
-                print 'saved ' + ddir + cdatstr + cntpstr + '__Z'
+        try:
+            Z = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+            print 'loaded ' + ddir + cdatstr + cntpstr + '__Z'
+        except IOError:
+            if use_ric_ini_nu is not None:
+                cdatstr = get_datastr(nwtn=None, time=None, meshp=N,
+                                      nu=use_ric_ini_nu, Nts=None,
+                                      data_prfx=data_prfx, dt=None)
+                try:
+                    zini = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+                    print 'Initialize Newton ADI by Z from ' + cdatstr
+                except IOError:
+                    raise Warning('No data for initialization of '
+                                  ' Newton ADI -- need ' + cdatstr + '__Z')
+                cdatstr = get_datastr(meshp=N, nu=nu, data_prfx=data_prfx)
+            else:
+                zini = None
+
+            Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
+                                           jmat=stokesmatsc['J'],
+                                           bmat=tb_mat, wmat=trct_mat,
+                                           nwtn_adi_dict=
+                                           tip['nwtn_adi_dict'],
+                                           z0=zini)['zfac']
+            dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
+            print 'saved ' + ddir + cdatstr + cntpstr + '__Z'
 
             if tip['compress_z']:
                 Zc = pru.compress_Zsvd(Z, thresh=tip['comprz_thresh'],
                                        k=tip['comprz_maxc'])
-                # monitor the compression
-                vec = np.random.randn(Z.shape[0], 1)
-                print 'dims of Z and Z_red: ', Z.shape, Zc.shape
-                print '||(ZZ_rd - ZZ )*tstvec|| / ||ZZ_rd*tstvec|| = {0}'.\
-                    format(np.linalg.norm(np.dot(Z, np.dot(Z.T, vec)) -
-                           np.dot(Zc, np.dot(Zc.T, vec))) /
-                           np.linalg.norm(np.dot(Z, np.dot(Z.T, vec))))
-
                 Z = Zc
 
-            fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
+        fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
 
-            mtxtb_stst = pru.get_mTzzTtb(M.T, Z, tb_mat)
-            mtxfv_stst = pru.get_mTzzTtb(M.T, Z, fvnstst)
+        mtxtb_stst = pru.get_mTzzTtb(M.T, Z, tb_mat)
+        mtxfv_stst = pru.get_mTzzTtb(M.T, Z, fvnstst)
 
-            fl = mc_mat.T * contp.ystarvec(0)
+        fl = mc_mat.T * contp.ystarvec(0)
 
-            wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
-                                       jmat=stokesmatsc['J'],
-                                       rhsv=fl-mtxfv_stst, umat=-mtxtb_stst,
-                                       vmat=tb_mat.T)[:NV]
-            next_w = wft  # to be consistent with unsteady state
+        wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
+                                   jmat=stokesmatsc['J'],
+                                   rhsv=fl-mtxfv_stst, umat=-mtxtb_stst,
+                                   vmat=tb_mat.T)[:NV]
+        next_w = wft  # to be consistent with unsteady state
+
+        dou.save_npa(wft, fstring=ddir + cdatstr + cntpstr + '__w')
+        dou.save_npa(mtxtb, fstring=ddir + cdatstr + cntpstr + '__mtxtb')
+        feedbackthroughdict = {None:
+                               dict(w=auxstr + '__w',
+                                    mtxtb=auxstr + '__mtxtb')}
 
     else:
+        # compute the forward solution
+        snu.solve_nse(**soldict)
+
         # set/compute the terminal values aka starting point
         Zc = lau.apply_massinv(M, trct_mat)
         print np.linalg.norm(Zc)
@@ -444,7 +430,6 @@ def optcon_nse(problemname='drivencavity',
                                dict(w=auxstr + '__w',
                                     mtxtb=auxstr + '__mtxtb')}
 
-        # time_before_soldaeric = time.time()
         for tk, t in reversed(list(enumerate(tip['tmesh'][1:-1]))):
         # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
             cts = tip['tmesh'][tk+2] - t
@@ -483,13 +468,6 @@ def optcon_nse(problemname='drivencavity',
                     # Zc = pru.compress_ZQR(Zp, kmax=tip['comprz_maxc'])
                     Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'],
                                            k=tip['comprz_maxc'])
-                    # monitor the compression
-                    vec = np.random.randn(Zp.shape[0], 1)
-                    print 'dims of Z and Z_red: ', Zp.shape, Zc.shape
-                    print '||(ZZ_rd - ZZ )*tstvec|| / ||ZZ_rd*tstvec|| = {0}'.\
-                        format(np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec)) -
-                               np.dot(Zc, np.dot(Zc.T, vec))) /
-                               np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec))))
                 else:
                     Zc = Zp
 
@@ -519,6 +497,10 @@ def optcon_nse(problemname='drivencavity',
             feedbackthroughdict.update({t: dict(w=auxstr + '__w',
                                                 mtxtb=auxstr + '__mtxtb')})
 
+    snu.solve_nse(feedbackthroughdict=feedbackthroughdict,
+                  closed_loop=True, static_feedback=stst_control,
+                  **soldict)
+
     v_old = ini_vel
     yn = np.dot(c_mat, v_old)
     yscomplist = [yn.flatten().tolist()]
@@ -544,31 +526,23 @@ def optcon_nse(problemname='drivencavity',
 
         fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
 
-        if comp_unco_out:
-            rhsn = M*v_old + cts*(fvn)
-
+        if stst_control:
+            rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * wft))
+            mtxtb = mtxtb_stst
         else:
-            if stst_control:
-                rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * wft))
-                mtxtb = mtxtb_stst
-            else:
-                # feedback mat and feedthrough
-                next_zmat = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
-                next_w = dou.load_npa(ddir + cdatstr + cntpstr + '__w')
+            # feedback mat and feedthrough
+            next_zmat = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+            next_w = dou.load_npa(ddir + cdatstr + cntpstr + '__w')
 
-                rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * next_w))
-                mtxtb = pru.get_mTzzTtb(M.T, next_zmat, tb_mat)
+            rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * next_w))
+            mtxtb = pru.get_mTzzTtb(M.T, next_zmat, tb_mat)
 
         # coeffmats for linear implicit scheme
         amat = M + cts*(A + convc_mat)
 
-        if comp_unco_out:
-            vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
-                                       rhsv=rhsn, rhsp=rhsd_stbc['fp'])
-        else:
-            vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
-                                       rhsv=rhsn, rhsp=rhsd_stbc['fp'],
-                                       umat=-cts*tb_dense, vmat=mtxtb.T)
+        vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
+                                   rhsv=rhsn, rhsp=rhsd_stbc['fp'],
+                                   umat=-cts*tb_dense, vmat=mtxtb.T)
 
         v_old = vpn[:NV]
         # print 'norm of v: ', np.linalg.norm(v_old)
@@ -583,12 +557,8 @@ def optcon_nse(problemname='drivencavity',
         # dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
         # dou.output_paraview(tip, femp, vp=vpn, t=t),
 
-    if comp_unco_out:
-        save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
-                         fstring=ddir + cdatstr + cntpstr + '__sigout_unco')
-    else:
-        save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
-                         fstring=ddir + cdatstr + cntpstr + '__sigout')
+    save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
+                     fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
     print 'Re = cyl_dia / nu = {0}'.format(0.15/nu)
