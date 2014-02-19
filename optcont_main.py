@@ -213,7 +213,6 @@ def optcon_nse(problemname='drivencavity',
     os.chdir('..')
 
     stokesmats = dts.get_stokessysmats(femp['V'], femp['Q'], nu)
-
     rhsd_vf = dts.setget_rhs(femp['V'], femp['Q'],
                              femp['fv'], femp['fp'], t=0)
 
@@ -307,8 +306,6 @@ def optcon_nse(problemname='drivencavity',
         dou.save_spa(mc_mat, ddir + contsetupstr + '__mc_mat')
         dou.save_spa(y_masmat, ddir + contsetupstr + '__y_masmat')
 
-    # raise Warning('STOP: in the name of love')
-
     # restrict the operators to the inner nodes
     mc_mat = mc_mat[:, invinds][:, :]
     b_mat = b_mat[invinds, :][:, :]
@@ -383,7 +380,7 @@ def optcon_nse(problemname='drivencavity',
                         print 'Initialize Newton ADI by Z from ' + cdatstr
                     except IOError:
                         raise Warning('No data for initialization of '
-                                      ' Newton ADI need ' + cdatstr + '__Z')
+                                      ' Newton ADI -- need ' + cdatstr + '__Z')
                     cdatstr = get_datastr(meshp=N, nu=nu, data_prfx=data_prfx)
 
                 else:
