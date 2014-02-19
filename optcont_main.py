@@ -311,7 +311,7 @@ def optcon_nse(problemname='drivencavity',
     b_mat = b_mat[invinds, :][:, :]
 
     # for further use:
-    c_mat = lau.apply_massinv(y_masmat, mc_mat)
+    c_mat = lau.apply_massinv(y_masmat, mc_mat, output='sparse')
     if contp.ystarx is None:
         c_mat = c_mat[NY:, :][:, :]  # TODO: Do this right
         mc_mat = mc_mat[NY:, :][:, :]  # TODO: Do this right
@@ -483,13 +483,6 @@ def optcon_nse(problemname='drivencavity',
                     # Zc = pru.compress_ZQR(Zp, kmax=tip['comprz_maxc'])
                     Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'],
                                            k=tip['comprz_maxc'])
-                    # monitor the compression
-                    vec = np.random.randn(Zp.shape[0], 1)
-                    print 'dims of Z and Z_red: ', Zp.shape, Zc.shape
-                    print '||(ZZ_rd - ZZ )*tstvec|| / ||ZZ_rd*tstvec|| = {0}'.\
-                        format(np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec)) -
-                               np.dot(Zc, np.dot(Zc.T, vec))) /
-                               np.linalg.norm(np.dot(Zp, np.dot(Zp.T, vec))))
                 else:
                     Zc = Zp
 
@@ -594,7 +587,7 @@ def optcon_nse(problemname='drivencavity',
     print 'Re = cyl_dia / nu = {0}'.format(0.15/nu)
 
 if __name__ == '__main__':
-    optcon_nse(N=15, Nts=10, nu=1e-2,  # clearprvveldata=True,
+    optcon_nse(N=11, Nts=10, nu=1e-2,  # clearprvveldata=True,
                stst_control=False, t0=0.0, tE=1.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,
