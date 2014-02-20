@@ -292,7 +292,7 @@ def optcon_nse(problemname='drivencavity',
     b_mat = b_mat[invinds, :][:, :]
 
     # for further use:
-    c_mat = lau.apply_massinv(y_masmat, mc_mat)
+    c_mat = lau.apply_massinv(y_masmat, mc_mat, output='sparse')
     if contp.ystarx is None:
         c_mat = c_mat[NY:, :][:, :]  # TODO: Do this right
         mc_mat = mc_mat[NY:, :][:, :]  # TODO: Do this right
@@ -343,7 +343,7 @@ def optcon_nse(problemname='drivencavity',
     if stst_control:
         lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
         # infinite control horizon, steady target state
-        cdatstr = get_datastr(nwtn=None, time=None, meshp=N, nu=nu,
+        cdatstr = get_datastr(time=None, meshp=N, nu=nu,
                               Nts=None, data_prfx=data_prfx, dt=None)
 
         (convc_mat, rhs_con,
@@ -368,6 +368,12 @@ def optcon_nse(problemname='drivencavity',
                                   ' Newton ADI -- need ' + cdatstr + '__Z')
                 cdatstr = get_datastr(meshp=N, nu=nu, data_prfx=data_prfx)
             else:
+                zini = None
+
+            Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
+                                           jmat=stokesmatsc['J'],
+                                           bmat=tb_mat, wmat=trct_mat,
+                                           nwtn_adi_dict=
                 zini = None
 
             Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
@@ -502,7 +508,8 @@ def optcon_nse(problemname='drivencavity',
                   **soldict)
 
     v_old = ini_vel
-    yn = np.dot(c_mat, v_old)
+    yn = c_mat*v_old
+
     yscomplist = [yn.flatten().tolist()]
     ystarlist = [contp.ystarvec(0).flatten().tolist()]
 
@@ -547,7 +554,7 @@ def optcon_nse(problemname='drivencavity',
         v_old = vpn[:NV]
         # print 'norm of v: ', np.linalg.norm(v_old)
 
-        yn = np.dot(c_mat, vpn[:NV])
+        yn = c_mat * vpn[:NV]
         # print 'norm of current w: ', np.linalg.norm(next_w)
         # print 'current y: ', yn
 
@@ -564,8 +571,8 @@ def optcon_nse(problemname='drivencavity',
     print 'Re = cyl_dia / nu = {0}'.format(0.15/nu)
 
 if __name__ == '__main__':
-    optcon_nse(N=15, Nts=10, nu=1e-2,  # clearprvveldata=True,
-               stst_control=False, t0=0.0, tE=1.0)
+    optcon_nse(N=11, Nts=10, nu=1e-2,  # clearprvveldata=True,
+               stst_control=True, t0=0.0, tE=1.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,
     #            t0=0.0, tE=1.0, Nts=25, stst_control=True,
