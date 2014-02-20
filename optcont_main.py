@@ -374,12 +374,6 @@ def optcon_nse(problemname='drivencavity',
                                            jmat=stokesmatsc['J'],
                                            bmat=tb_mat, wmat=trct_mat,
                                            nwtn_adi_dict=
-                zini = None
-
-            Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
-                                           jmat=stokesmatsc['J'],
-                                           bmat=tb_mat, wmat=trct_mat,
-                                           nwtn_adi_dict=
                                            tip['nwtn_adi_dict'],
                                            z0=zini)['zfac']
             dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
@@ -403,11 +397,12 @@ def optcon_nse(problemname='drivencavity',
                                    vmat=tb_mat.T)[:NV]
         next_w = wft  # to be consistent with unsteady state
 
+        auxstrg = ddir + cdatstr + cntpstr
         dou.save_npa(wft, fstring=ddir + cdatstr + cntpstr + '__w')
-        dou.save_npa(mtxtb, fstring=ddir + cdatstr + cntpstr + '__mtxtb')
+        dou.save_npa(mtxtb_stst, fstring=ddir + cdatstr + cntpstr + '__mtxtb')
         feedbackthroughdict = {None:
-                               dict(w=auxstr + '__w',
-                                    mtxtb=auxstr + '__mtxtb')}
+                               dict(w=auxstrg + '__w',
+                                    mtxtb=auxstrg + '__mtxtb')}
 
     else:
         # compute the forward solution
