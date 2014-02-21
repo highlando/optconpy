@@ -196,6 +196,22 @@ def load_json_dicts(StrToJs):
     return JsDict
 
 
+def get_convmats_rhs(strtodata, invinds=None, V=None, diribcs=None, **kw):
+    """retrieving the time varying coefficient matrix and associated rhs,
+
+
+    where the latter also contains the dirichlet bcs
+    """
+
+    prev_v = dou.load_npa(strtodata)
+
+    (convc_mat, rhs_con,
+     rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
+                                        V=V, diribcs=diribcs)
+
+    return convc_mat, rhsv_conbc + rhs_con
+
+
 def optcon_nse(problemname='drivencavity',
                N=10, Nts=10, nu=1e-2, clearprvveldata=False,
                ini_vel_stokes=False, stst_control=False,
@@ -333,6 +349,7 @@ def optcon_nse(problemname='drivencavity',
     # tilde B = BR^{-1/2}
     tb_mat = lau.apply_invsqrt_fromleft(contp.R, b_mat,
                                         output='sparse')
+    # tb_dense = np.array(tb_mat.todense())
 
     trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
                                           mct_mat_reg, output='dense')
@@ -344,7 +361,8 @@ def optcon_nse(problemname='drivencavity',
     MT, AT = stokesmatsc['M'].T, stokesmatsc['A'].T
     M, A = stokesmatsc['M'], stokesmatsc['A']
 
-    # computation initial value
+    # compute the uncontrolled steady state (Navier-)Stokes solution
+    # as initial value
     if ini_vel_stokes:
         # compute the uncontrolled steady state Stokes solution
         ini_vel, newtonnorms = snu.solve_steadystate_nse(vel_nwtn_stps=0,
@@ -352,7 +370,6 @@ def optcon_nse(problemname='drivencavity',
                                                          **soldict)
         soldict.update(dict(iniv=ini_vel))
     else:
-        # compute the uncontrolled steady state (Navier-)Stokes solution
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
         soldict.update(dict(iniv=ini_vel))
 
