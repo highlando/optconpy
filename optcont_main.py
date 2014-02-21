@@ -28,7 +28,7 @@ class ContParams():
     def __init__(self, odcoo, ystar=None):
         # TODO: accept ystar as input for better scripting
         if ystar is None:
-            self.ystarx = dolfin.Expression('0.0', t=0)
+            self.ystarx = dolfin.Expression('-0.0', t=0)
             self.ystary = dolfin.Expression('0.0', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
@@ -93,6 +93,28 @@ class ContParams():
             raise UserWarning('need provide at least one component of ystar')
 
 
+def extract_output(get_datastr=None, datastrdict=None,
+                   ddir=None, tmesh=None, c_mat=None,
+                   ystarvec=None):
+
+    datastrdict.update(time=tmesh[0])
+    cdatstr = get_datastr(**datastrdict)
+    cur_v = dou.load_npa(ddir + cdatstr + '__vel')
+    yn = c_mat*cur_v
+    yscomplist = [yn.flatten().tolist()]
+    ystarlist = [ystarvec(0).flatten().tolist()]
+
+    for t in tmesh[1:]:
+        datastrdict.update(time=t)
+        cdatstr = get_datastr(**datastrdict)
+        cur_v = dou.load_npa(ddir + cdatstr + '__vel')
+        yn = c_mat*cur_v
+        yscomplist.append(yn.flatten().tolist())
+        ystarlist.append(ystarvec(0).flatten().tolist())
+
+    return yscomplist, ystarlist
+
+
 def time_int_params(Nts, t0=0.0, tE=1.0):
     dt = (tE - t0) / Nts
     sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
@@ -142,16 +164,11 @@ def get_tint(t0, tE, Nts, sqzmesh):
     return tint
 
 
-def get_datastr(time=None, meshp=None, nu=None, Nts=None, dt=None,
-                data_prfx=''):
+def get_datastr(time=None, meshp=None, nu=None, Nts=None,
+                data_prfx='', **kw):
 
-    # print (data_prfx +
-    #        'Nwtnit{0}_time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
-    #     nwtn, time, nu, meshp, Nts, dt)
-
-    return (data_prfx +
-            'time{1}_nu{2}_mesh{3}_Nts{4}_dt{5}').format(
-        None, time, nu, meshp, Nts, dt)
+    return (data_prfx + 'time{1}_nu{2}_mesh{3}_Nts{4}').format(
+        None, time, nu, meshp, Nts)
 
 
 def save_output_json(ycomp, tmesh, ystar=None, fstring=None):
@@ -316,7 +333,6 @@ def optcon_nse(problemname='drivencavity',
     # tilde B = BR^{-1/2}
     tb_mat = lau.apply_invsqrt_fromleft(contp.R, b_mat,
                                         output='sparse')
-    tb_dense = np.array(tb_mat.todense())
 
     trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
                                           mct_mat_reg, output='dense')
@@ -328,8 +344,7 @@ def optcon_nse(problemname='drivencavity',
     MT, AT = stokesmatsc['M'].T, stokesmatsc['A'].T
     M, A = stokesmatsc['M'], stokesmatsc['A']
 
-    # compute the uncontrolled steady state (Navier-)Stokes solution
-    # as initial value
+    # computation initial value
     if ini_vel_stokes:
         # compute the uncontrolled steady state Stokes solution
         ini_vel, newtonnorms = snu.solve_steadystate_nse(vel_nwtn_stps=0,
@@ -337,6 +352,7 @@ def optcon_nse(problemname='drivencavity',
                                                          **soldict)
         soldict.update(dict(iniv=ini_vel))
     else:
+        # compute the uncontrolled steady state (Navier-)Stokes solution
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
         soldict.update(dict(iniv=ini_vel))
 
@@ -344,7 +360,7 @@ def optcon_nse(problemname='drivencavity',
         lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
         # infinite control horizon, steady target state
         cdatstr = get_datastr(time=None, meshp=N, nu=nu,
-                              Nts=None, data_prfx=data_prfx, dt=None)
+                              Nts=None, data_prfx=data_prfx)
 
         (convc_mat, rhs_con,
          rhsv_conbc) = snu.get_v_conv_conts(prev_v=lin_point,
@@ -359,7 +375,7 @@ def optcon_nse(problemname='drivencavity',
             if use_ric_ini_nu is not None:
                 cdatstr = get_datastr(nwtn=None, time=None, meshp=N,
                                       nu=use_ric_ini_nu, Nts=None,
-                                      data_prfx=data_prfx, dt=None)
+                                      data_prfx=data_prfx)
                 try:
                     zini = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
                     print 'Initialize Newton ADI by Z from ' + cdatstr
@@ -395,7 +411,7 @@ def optcon_nse(problemname='drivencavity',
                                    jmat=stokesmatsc['J'],
                                    rhsv=fl-mtxfv_stst, umat=-mtxtb_stst,
                                    vmat=tb_mat.T)[:NV]
-        next_w = wft  # to be consistent with unsteady state
+        # next_w = wft  # to be consistent with unsteady state
 
         auxstrg = ddir + cdatstr + cntpstr
         dou.save_npa(wft, fstring=ddir + cdatstr + cntpstr + '__w')
@@ -417,7 +433,7 @@ def optcon_nse(problemname='drivencavity',
 
         pts = tip['tmesh'][-1] - tip['tmesh'][-2]
         cdatstr = get_datastr(time=tip['tE'], meshp=N, nu=nu,
-                              Nts=Nts, data_prfx=data_prfx, dt=pts)
+                              Nts=Nts, data_prfx=data_prfx)
 
         mtxtb = pru.get_mTzzTtb(M.T, Zc, tb_mat)
 
@@ -441,7 +457,7 @@ def optcon_nse(problemname='drivencavity',
 
             # get the previous time convection matrices
             pdatstr = get_datastr(time=t, meshp=N, nu=nu,
-                                  Nts=Nts, data_prfx=data_prfx, dt=pts)
+                                  Nts=Nts, data_prfx=data_prfx)
             prev_v = dou.load_npa(ddir + pdatstr + '__vel')
             (convc_mat, rhs_con,
              rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
@@ -498,76 +514,31 @@ def optcon_nse(problemname='drivencavity',
             feedbackthroughdict.update({t: dict(w=auxstr + '__w',
                                                 mtxtb=auxstr + '__mtxtb')})
 
+    soldict.update(clearprvdata=True)
+
     snu.solve_nse(feedbackthroughdict=feedbackthroughdict,
+                  tb_mat=tb_mat,
                   closed_loop=True, static_feedback=stst_control,
                   **soldict)
 
-    v_old = ini_vel
-    yn = c_mat*v_old
+    datastrdict = dict(time=None, meshp=N, nu=nu, Nts=Nts, data_prfx=data_prfx)
 
-    yscomplist = [yn.flatten().tolist()]
-    ystarlist = [contp.ystarvec(0).flatten().tolist()]
-
-    if stst_control:  # TODO: move this to tip
-        tip['tmesh'] = np.linspace(t0, tE, Nts+1).flatten()
-
-    for tk, t in enumerate(tip['tmesh'][1:]):
-        cts = t - tip['tmesh'][tk]
-
-        print 'Time is {0}, DT is {1}'.format(t, cts)
-
-        cdatstr = get_datastr(time=t, meshp=N, nu=nu,
-                              Nts=Nts, data_prfx=data_prfx, dt=cts)
-
-        next_v = v_old  # dou.load_npa(ddir + cdatstr + '__vel')
-        (convc_mat, rhs_con,
-         rhsv_conbc) = snu.get_v_conv_conts(prev_v=next_v,
-                                            invinds=invinds,
-                                            V=femp['V'],
-                                            diribcs=femp['diribcs'])
-
-        fvn = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
-
-        if stst_control:
-            rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * wft))
-            mtxtb = mtxtb_stst
-        else:
-            # feedback mat and feedthrough
-            next_zmat = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
-            next_w = dou.load_npa(ddir + cdatstr + cntpstr + '__w')
-
-            rhsn = M*v_old + cts*(fvn + tb_mat * (tb_mat.T * next_w))
-            mtxtb = pru.get_mTzzTtb(M.T, next_zmat, tb_mat)
-
-        # coeffmats for linear implicit scheme
-        amat = M + cts*(A + convc_mat)
-
-        vpn = lau.solve_sadpnt_smw(amat=amat, jmat=stokesmatsc['J'],
-                                   rhsv=rhsn, rhsp=rhsd_stbc['fp'],
-                                   umat=-cts*tb_dense, vmat=mtxtb.T)
-
-        v_old = vpn[:NV]
-        # print 'norm of v: ', np.linalg.norm(v_old)
-
-        yn = c_mat * vpn[:NV]
-        # print 'norm of current w: ', np.linalg.norm(next_w)
-        # print 'current y: ', yn
-
-        yscomplist.append(yn.flatten().tolist())
-        ystarlist.append(contp.ystarvec(0).flatten().tolist())
-
-        # dou.save_npa(vpn[:NV], fstring=ddir + cdatstr + '__cont_vel')
-        # dou.output_paraview(tip, femp, vp=vpn, t=t),
+    (yscomplist,
+     ystarlist) = extract_output(get_datastr=get_datastr,
+                                 datastrdict=datastrdict,
+                                 ddir=ddir, tmesh=tip['tmesh'],
+                                 c_mat=c_mat, ystarvec=contp.ystarvec)
 
     save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
                      fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
-    print 'Re = cyl_dia / nu = {0}'.format(0.15/nu)
+    charlene = .15 if problemname == 'cylinderwake' else 1.0
+    print 'Re = charL / nu = {0}'.format(charlene/nu)
 
 if __name__ == '__main__':
-    optcon_nse(N=11, Nts=10, nu=1e-2,  # clearprvveldata=True,
-               stst_control=True, t0=0.0, tE=1.0)
+    optcon_nse(N=15, Nts=30, nu=1e-2,  # clearprvveldata=True,
+               ini_vel_stokes=True, stst_control=True, t0=0.0, tE=5.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,
     #            t0=0.0, tE=1.0, Nts=25, stst_control=True,
