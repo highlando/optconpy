@@ -5,14 +5,37 @@ import sadptprj_riclyap_adi.proj_ric_utils as pru
 
 
 def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
-                      cmat=None, zzero=None, tmesh=None, tdatadict=None,
-                      ystarvec=None, mycmat=None, rhsv=None, rhsp=None,
+                      cmat=None, mu_mat=None, my_mat=None,
+                      rhsv=None, rhsp=None,
+                      tmesh=None, tdatadict=None,
+                      ystarvec=None,
                       nwtn_adi_dict=None,
                       comprz_thresh=None, comprz_maxc=None, save_full_z=False,
                       get_tdpart=None, gttdprtargs=None,
-                      get_datastr=None, gtdtstrargs=None):
+                      get_datastr=None, gtdtstrargs=None,
+                      check_c_consist=True):
 
     """
+    Routine for the solution of the DAE Riccati
+
+    .. math::
+
+        \\dot{MXM^T} + F^TXM + M^TXM + M^TXGXM + L(Y) = W \\\\
+                JXM = 0 \\quad \\text{and} \\quad M^TXJ = 0 \\\\
+                M^TX(T)M = W
+
+    where :math:`F=A+N(t)`,
+    where :math:`W:=C^T M_y C`, :math:`G:=B M_u^{-1} B^T`,
+    and where :math:`L(Y)` is the Lagrange multiplier term.
+
+    Simultaneously we solve for the feedforward term :math:`w`:
+
+    .. math::
+
+        \\dot{M^Tw} - [M^TXG+F^T]w - J^Tv = C^T M_y y^* + M^T[Xf + Yg] \\\\
+                Jw = 0 \\\\
+                M^Tw(T) = C^T M_y y^*(T)
+
 
     Parameters
     ----------
@@ -22,14 +45,27 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     gttdprtargs : dictionary
         `**kwargs` to get_tdpart
 
+    Returns
+    -------
+    feedbackthroughdict : dictionary
+        with time instances as keys and
+        | `w` -- the current feedthrough value
+        | `mtxtb` -- the current feedback gain part `(B.T * X * M).T`
+        as values
     """
+    if check_c_consist:
+        mic = lau.apply_massinv(mmat.T, cmat.T, output='sparse')
+        if np.linalg.norm(jmat*mic) > 1e-12:
+            raise Warning('cmat need to be projected')
 
     MT, AT, NV = mmat.T, amat.T, amat.shape[0]
     # set/compute the terminal values aka starting point
-    # Zc = lau.apply_massinv(mmat, trct_mat)
-    Zc = zzero
 
-    cdatstr = get_datastr(time=tmesh[-1])
+    tct_mat = lau.apply_invsqrt_fromleft(my_mat,
+                                         cmat.T, output='dense')
+    Zc = lau.apply_massinv(mmat, tct_mat)
+
+    cdatstr = get_datastr(time=tmesh[-1], **gtdtstrargs)
 
     mtxtb = pru.get_mTzzTtb(mmat.T, Zc, bmat)
 
@@ -52,7 +88,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
             format(t, cts)
 
         # get the previous time time-dep matrices
-        cdatstr = get_datastr(time=t)
+        cdatstr = get_datastr(time=t, **gttdprtargs)
         nmattd, rhsvtd = get_tdpart(time=t, **gttdprtargs)
 
         try:
@@ -101,4 +137,5 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
         feedbackthroughdict.update({t: dict(w=cdatstr + '__w',
                                             mtxtb=cdatstr + '__mtxtb')})
+
     return feedbackthroughdict

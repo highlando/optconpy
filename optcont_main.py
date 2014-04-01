@@ -26,7 +26,6 @@ class ContParams():
     - desired output
     """
     def __init__(self, odcoo, ystar=None):
-        # TODO: accept ystar as input for better scripting
         if ystar is None:
             self.ystarx = dolfin.Expression('-0.0', t=0)
             self.ystary = dolfin.Expression('0.0', t=0)
@@ -439,11 +438,24 @@ def optcon_nse(problemname='drivencavity',
 
     else:
         # compute the forward solution
-        snu.solve_nse(**soldict)
+        dictofvels = snu.solve_nse(return_dictofvelstrs=True, **soldict)
+
+        # function for the time depending parts -- to be passed to the solver
+        def get_tdparts(time=None, dictofvels=None, V=None,
+                        invinds=None, diribcs=None, **kw):
+            curvel = dou.load_npa(dictofvels[time])
+            convc_mat, rhs_con, rhsv_conbc = \
+                snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
+                                     V=V, diribcs=diribcs)
+            return convc_mat, rhsv_conbc+rhs_con
+
+        gttdprtsargs = dict(dictofvels=dictofvels,
+                            V=femp['V'],
+                            diribcs=femp['diribcs'],
+                            invinds=invinds)
 
         # set/compute the terminal values aka starting point
-        Zc = lau.apply_massinv(M, trct_mat)
-        print np.linalg.norm(Zc)
+        zzero = lau.apply_massinv(M, trct_mat)
 
         wc = lau.apply_massinv(MT, np.dot(mct_mat_reg,
                                           contp.ystarvec(tip['tE'])))
