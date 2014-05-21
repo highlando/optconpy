@@ -1,11 +1,13 @@
 import unittest
 
 import numpy as np
-import proj_ric_utils as pru
-import dolfin_to_nparrays as dtn
+import sadptprj_riclyap_adi.proj_ric_utils as pru
+import dolfin_navier_scipy.dolfin_to_sparrays as dtn
 import scipy.sparse.linalg as spsla
-import lin_alg_utils as lau
+import sadptprj_riclyap_adi.lin_alg_utils as lau
 import scipy.sparse as sps
+
+from dolfin_navier_scipy.problem_setups import drivcav_fems
 
 
 class TestProjLyap(unittest.TestCase):
@@ -25,7 +27,7 @@ class TestProjLyap(unittest.TestCase):
                              nwtn_upd_abstol=4e-8,
                              verbose=verbose)
 
-        femp = ocm.drivcav_fems(N)
+        femp = drivcav_fems(N)
         stokesmats = dtn.get_stokessysmats(femp['V'], femp['Q'], nu=1)
 
         # remove the freedom in the pressure
@@ -57,8 +59,8 @@ class TestProjLyap(unittest.TestCase):
                              full_upd_norm_check=True,
                              verbose=verbose)
 
-        Z = pru.solve_proj_lyap_stein(A=F, M=M,
-                                      J=J, W=W,
+        Z = pru.solve_proj_lyap_stein(amat=F, mmat=M,
+                                      jmat=J, wmat=W,
                                       adi_dict=nwtn_adi_dict)['zfac']
 
         MtZ = M.T * Z

@@ -116,8 +116,9 @@ def extract_output(get_datastr=None, datastrdict=None,
 
 def time_int_params(Nts, t0=0.0, tE=1.0):
     dt = (tE - t0) / Nts
-    sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
-                     # initial and terminal point, False for equidist
+    sqzmesh = True
+    # squeeze the mesh for shorter intervals towards the
+    # initial and terminal point, False for equidist
     tmesh = get_tint(t0, tE, Nts, sqzmesh)
 
     tip = dict(t0=t0,
@@ -270,7 +271,7 @@ def optcon_nse(problemname='drivencavity',
     femp.update(bcdata)
 
     # casting some parameters
-    NV, DT, INVINDS = len(femp['invinds']), tip['dt'], femp['invinds']
+    NV = len(femp['invinds'])
 
     soldict = stokesmatsc  # containing A, J, JT
     soldict.update(femp)  # adding V, Q, invinds, diribcs
@@ -405,9 +406,9 @@ def optcon_nse(problemname='drivencavity',
             Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
                                            jmat=stokesmatsc['J'],
                                            bmat=tb_mat, wmat=trct_mat,
-                                           nwtn_adi_dict=
-                                           tip['nwtn_adi_dict'],
+                                           nwtn_adi_dict=tip['nwtn_adi_dict'],
                                            z0=zini)['zfac']
+
             dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
             print 'saved ' + ddir + cdatstr + cntpstr + '__Z'
 
@@ -441,6 +442,7 @@ def optcon_nse(problemname='drivencavity',
         dictofvels = snu.solve_nse(return_dictofvelstrs=True, **soldict)
 
         # function for the time depending parts -- to be passed to the solver
+
         def get_tdparts(time=None, dictofvels=None, V=None,
                         invinds=None, diribcs=None, **kw):
             curvel = dou.load_npa(dictofvels[time])
@@ -449,99 +451,26 @@ def optcon_nse(problemname='drivencavity',
                                      V=V, diribcs=diribcs)
             return convc_mat, rhsv_conbc+rhs_con
 
-        gttdprtsargs = dict(dictofvels=dictofvels,
-                            V=femp['V'],
-                            diribcs=femp['diribcs'],
-                            invinds=invinds)
+        gttdprtargs = dict(dictofvels=dictofvels,
+                           V=femp['V'],
+                           diribcs=femp['diribcs'],
+                           invinds=invinds)
 
-        # set/compute the terminal values aka starting point
         zzero = lau.apply_massinv(M, trct_mat)
 
         wc = lau.apply_massinv(MT, np.dot(mct_mat_reg,
                                           contp.ystarvec(tip['tE'])))
 
-        pts = tip['tmesh'][-1] - tip['tmesh'][-2]
-        cdatstr = get_datastr(time=tip['tE'], meshp=N, nu=nu,
-                              Nts=Nts, data_prfx=data_prfx)
+    solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
+                      cmat=trct_mat, mu_mat=None, my_mat=None,
+                      rhsv=None, rhsp=None,
+                      tmesh=None, tdatadict=None,
+                      ystarvec=None,
+                      nwtn_adi_dict=None,
+                      comprz_thresh=None, comprz_maxc=None, save_full_z=False,
+                      get_tdpart=None, gttdprtargs=gttdprtargs,
+                      get_datastr=None, gtdtstrargs=None)
 
-        mtxtb = pru.get_mTzzTtb(M.T, Zc, tb_mat)
-
-        dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
-        dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
-        dou.save_npa(mtxtb, fstring=ddir + cdatstr + cntpstr + '__mtxtb')
-
-        auxstr = ddir + cdatstr + cntpstr
-
-        feedbackthroughdict = {tip['tmesh'][-1]:
-                               dict(w=auxstr + '__w',
-                                    mtxtb=auxstr + '__mtxtb')}
-
-        for tk, t in reversed(list(enumerate(tip['tmesh'][1:-1]))):
-        # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
-            cts = tip['tmesh'][tk+2] - t
-            pts = tip['tmesh'][tk+1] - tip['tmesh'][tk]
-
-            print 'Time is {0}, timestep is {1}, next is {2}'.\
-                format(t, cts, pts)
-
-            # get the previous time convection matrices
-            pdatstr = get_datastr(time=t, meshp=N, nu=nu,
-                                  Nts=Nts, data_prfx=data_prfx)
-            prev_v = dou.load_npa(ddir + pdatstr + '__vel')
-            (convc_mat, rhs_con,
-             rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
-                                                V=femp['V'],
-                                                diribcs=femp['diribcs'])
-
-            try:
-                Zc = dou.load_npa(ddir + pdatstr + cntpstr + '__Z')
-            except IOError:
-                # coeffmat for nwtn adi
-                ft_mat = -(0.5*MT + cts*(AT + convc_mat.T))
-                # rhs for nwtn adi
-                w_mat = np.hstack([MT*Zc, np.sqrt(cts)*trct_mat])
-
-                Zp = pru.proj_alg_ric_newtonadi(mmat=MT,
-                                                amat=ft_mat, transposed=True,
-                                                jmat=stokesmatsc['J'],
-                                                bmat=np.sqrt(cts)*tb_mat,
-                                                wmat=w_mat, z0=Zc,
-                                                nwtn_adi_dict=
-                                                tip['nwtn_adi_dict']
-                                                )['zfac']
-
-                if tip['compress_z']:
-                    # Zc = pru.compress_ZQR(Zp, kmax=tip['comprz_maxc'])
-                    Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'],
-                                           k=tip['comprz_maxc'])
-                else:
-                    Zc = Zp
-
-                if tip['save_full_z']:
-                    dou.save_npa(Zp, fstring=ddir + pdatstr + cntpstr + '__Z')
-                else:
-                    dou.save_npa(Zc, fstring=ddir + pdatstr + cntpstr + '__Z')
-
-            ### and the affine correction
-            at_mat = MT + cts*(AT + convc_mat.T)
-
-            # current rhs
-            ftilde = rhs_con + rhsv_conbc + rhsd_stbc['fv']
-            mtxft = pru.get_mTzzTtb(M.T, Zc, ftilde)
-            fl1 = mc_mat.T * contp.ystarvec(t)
-            rhswc = MT*wc + cts*(fl1 - mtxft)
-
-            mtxtb = pru.get_mTzzTtb(M.T, Zc, tb_mat)
-
-            wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=stokesmatsc['J'],
-                                      umat=-cts*mtxtb, vmat=tb_mat.T,
-                                      rhsv=rhswc)[:NV]
-
-            dou.save_npa(wc, fstring=ddir + pdatstr + cntpstr + '__w')
-            dou.save_npa(mtxtb, fstring=ddir + pdatstr + cntpstr + '__mtxtb')
-            auxstr = ddir + pdatstr + cntpstr
-            feedbackthroughdict.update({t: dict(w=auxstr + '__w',
-                                                mtxtb=auxstr + '__mtxtb')})
 
     soldict.update(clearprvdata=True)
 
