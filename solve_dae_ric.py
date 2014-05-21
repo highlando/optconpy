@@ -5,7 +5,8 @@ import sadptprj_riclyap_adi.proj_ric_utils as pru
 
 
 def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
-                      cmat=None, mu_mat=None, my_mat=None,
+                      cmat=None, rmat=None, vmat=None,
+                      my_mat=None,
                       rhsv=None, rhsp=None,
                       tmesh=None, tdatadict=None,
                       ystarvec=None,
@@ -25,7 +26,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
                 M^TX(T)M = W
 
     where :math:`F=A+N(t)`,
-    where :math:`W:=C^T M_y C`, :math:`G:=B M_u^{-1} B^T`,
+    where :math:`W:=C^T M_y C`, :math:`G:=B R^{-1} B^T`,
     and where :math:`L(Y)` is the Lagrange multiplier term.
 
     Simultaneously we solve for the feedforward term :math:`w`:
@@ -61,8 +62,8 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     MT, AT, NV = mmat.T, amat.T, amat.shape[0]
     # set/compute the terminal values aka starting point
 
-    tct_mat = lau.apply_invsqrt_fromleft(my_mat,
-                                         cmat.T, output='dense')
+    tct_mat = lau.apply_sqrt_fromleft(vmat, cmat.T, output='dense')
+
     Zc = lau.apply_massinv(mmat, tct_mat)
 
     cdatstr = get_datastr(time=tmesh[-1], **gtdtstrargs)
@@ -118,7 +119,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
             else:
                 dou.save_npa(Zc, fstring=cdatstr + '__Z')
 
-        ### and the affine correction
+        # and the affine correction
         at_mat = MT + cts*(AT + nmattd.T)
 
         # current rhs
