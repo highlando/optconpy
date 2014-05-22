@@ -366,8 +366,8 @@ def optcon_nse(problemname='drivencavity',
                                                 contp.alphau, NV)
 
     # we gonna use this quite often
-    MT, AT = stokesmatsc['M'].T, stokesmatsc['A'].T
     M, A = stokesmatsc['M'], stokesmatsc['A']
+    datastrdict = dict(time=None, meshp=N, nu=nu, Nts=Nts, data_prfx=data_prfx)
 
     # compute the uncontrolled steady state (Navier-)Stokes solution
     # as initial value
@@ -451,8 +451,8 @@ def optcon_nse(problemname='drivencavity',
 
         # function for the time depending parts -- to be passed to the solver
 
-        def get_tdparts(time=None, dictofvels=None, V=None,
-                        invinds=None, diribcs=None, **kw):
+        def get_tdpart(time=None, dictofvels=None, V=None,
+                       invinds=None, diribcs=None, **kw):
             curvel = dou.load_npa(dictofvels[time])
             convc_mat, rhs_con, rhsv_conbc = \
                 snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
@@ -464,16 +464,16 @@ def optcon_nse(problemname='drivencavity',
                            diribcs=femp['diribcs'],
                            invinds=invinds)
 
-    solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'], bmat=b_mat,
-                      cmat=ct_mat_reg.T, rmat=u_masmat, vmat=y_masmat,
-                      rhsv=None, rhsp=None,
-                      tmesh=None, tdatadict=None,
-                      ystarvec=None,
-                      nwtn_adi_dict=None,
-                      comprz_thresh=None, comprz_maxc=None, save_full_z=False,
-                      get_tdpart=None, gttdprtargs=gttdprtargs,
-                      get_datastr=None, gtdtstrargs=None)
-
+        solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'], bmat=b_mat,
+                          cmat=ct_mat_reg.T, rmat=u_masmat, vmat=y_masmat,
+                          rhsv=None, rhsp=None,
+                          tmesh=tip['tmesh'], ystarvec=contp.ystarvec,
+                          nwtn_adi_dict=tip['nwtn_adi_dict'],
+                          comprz_thresh=tip['comprz_thresh'],
+                          comprz_maxc=tip['comprz_maxc'],
+                          save_full_z=False,
+                          get_tdpart=get_tdpart, gttdprtargs=gttdprtargs,
+                          get_datastr=get_datastr, gtdtstrargs=datastrdict)
 
     soldict.update(clearprvdata=True)
 
@@ -481,8 +481,6 @@ def optcon_nse(problemname='drivencavity',
                   tb_mat=tb_mat,
                   closed_loop=True, static_feedback=stst_control,
                   **soldict)
-
-    datastrdict = dict(time=None, meshp=N, nu=nu, Nts=Nts, data_prfx=data_prfx)
 
     (yscomplist,
      ystarlist) = extract_output(get_datastr=get_datastr,
