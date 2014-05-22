@@ -13,6 +13,8 @@ import sadptprj_riclyap_adi.proj_ric_utils as pru
 
 import distr_control_fenics.cont_obs_utils as cou
 
+from solve_dae_ric import solve_flow_daeric
+
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 
@@ -462,13 +464,8 @@ def optcon_nse(problemname='drivencavity',
                            diribcs=femp['diribcs'],
                            invinds=invinds)
 
-        zzero = lau.apply_massinv(M, trct_mat)
-
-        wc = lau.apply_massinv(MT, np.dot(mct_mat_reg,
-                                          contp.ystarvec(tip['tE'])))
-
-    solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'], bmat=tb_mat,
-                      cmat=ct_mat_reg.T, mu_mat=None, my_mat=None,
+    solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'], bmat=b_mat,
+                      cmat=ct_mat_reg.T, rmat=u_masmat, vmat=y_masmat,
                       rhsv=None, rhsp=None,
                       tmesh=None, tdatadict=None,
                       ystarvec=None,

@@ -26,20 +26,25 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
                 M^TX(T)M = W
 
     where :math:`F=A+N(t)`,
-    where :math:`W:=C^T M_y C`, :math:`G:=B R^{-1} B^T`,
+    where :math:`W:=C^T V C`, :math:`G:=B R^{-1} B^T`,
     and where :math:`L(Y)` is the Lagrange multiplier term.
 
     Simultaneously we solve for the feedforward term :math:`w`:
 
     .. math::
 
-        \\dot{M^Tw} - [M^TXG+F^T]w - J^Tv = C^T M_y y^* + M^T[Xf + Yg] \\\\
+        \\dot{M^Tw} - [M^TXG+F^T]w - J^Tv = C^T V y^* + M^T[Xf + Yg] \\\\
                 Jw = 0 \\\\
-                M^Tw(T) = C^T M_y y^*(T)
+                M^Tw(T) = C^T V y^*(T)
+
+    Note that :math:`V=M_y` if the norm of :math:`Y` is used
+    in the cost function.
 
 
     Parameters
     ----------
+    cmat : (NY, NV) array
+        the (regularized aka projected) output matrix
     get_tdpart : callable f(t)
         returns the `mattd, rhstd` -- time dependent coefficients matrices
         and right hand side at time `t`
@@ -51,37 +56,39 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     feedbackthroughdict : dictionary
         with time instances as keys and
         | `w` -- the current feedthrough value
-        | `mtxtb` -- the current feedback gain part `(B.T * X * M).T`
+        | `mtxbrm` -- the current feedback gain part `(1/R * B.T * X * M).T`
         as values
     """
+
     if check_c_consist:
         mic = lau.apply_massinv(mmat.T, cmat.T, output='sparse')
         if np.linalg.norm(jmat*mic) > 1e-12:
             raise Warning('cmat need to be projected')
 
     MT, AT, NV = mmat.T, amat.T, amat.shape[0]
-    # set/compute the terminal values aka starting point
-
-    tct_mat = lau.apply_sqrt_fromleft(vmat, cmat.T, output='dense')
-
-    Zc = lau.apply_massinv(mmat, tct_mat)
 
     cdatstr = get_datastr(time=tmesh[-1], **gtdtstrargs)
 
-    mtxtb = pru.get_mTzzTtb(mmat.T, Zc, bmat)
+    # set/compute the terminal values aka starting point
+    tct_mat = lau.apply_sqrt_fromleft(vmat, cmat.T, output='dense')
+    bmat_rpmo = bmat * np.linalg.inv(rmat)
+
+    Zc = lau.apply_massinv(mmat, tct_mat)
+    mtxbrm = pru.get_mTzzTtb(mmat.T, Zc, bmat_rpmo)
 
     dou.save_npa(Zc, fstring=cdatstr + '__Z')
-    dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
+    dou.save_npa(mtxbrm, fstring=cdatstr + '__mtxbrm')
 
     if ystarvec is not None:
-        wc = lau.apply_massinv(MT, np.dot(cmat, ystarvec(tmesh[-1])))
+        wc = lau.apply_massinv(MT, np.dot(cmat, vmat*ystarvec(tmesh[-1])))
         dou.save_npa(wc, fstring=cdatstr + '__w')
     else:
         wc = None
 
     feedbackthroughdict = {tmesh[-1]: dict(w=cdatstr + '__w',
-                                           mtxtb=cdatstr + '__mtxtb')}
+                                           mtxbrm=cdatstr + '__mtxbrm')}
 
+    # time integration
     for tk, t in reversed(list(enumerate(tmesh[1:-1]))):
         cts = tmesh[tk+2] - t
 
@@ -125,18 +132,18 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         # current rhs
         ftilde = rhsvtd + rhsv
         mtxft = pru.get_mTzzTtb(MT, Zc, ftilde)
-        fl1 = mycmat.T * ystarvec(t)
+        fl1 = np.dot(cmat.T, vmat*ystarvec(t))
         rhswc = MT*wc + cts*(fl1 - mtxft)
 
-        mtxtb = pru.get_mTzzTtb(MT, Zc, bmat)
+        mtxbrm = pru.get_mTzzTtb(MT, Zc, bmat_rpmo)
 
         wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=jmat,
-                                  umat=-cts*mtxtb, vmat=bmat.T,
+                                  umat=-cts*mtxbrm, vmat=bmat.T,
                                   rhsv=rhswc)[:NV]
 
         dou.save_npa(wc, fstring=cdatstr + '__w')
-        dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
+        dou.save_npa(mtxbrm, fstring=cdatstr + '__mtxbrm')
         feedbackthroughdict.update({t: dict(w=cdatstr + '__w',
-                                            mtxtb=cdatstr + '__mtxtb')})
+                                            mtxbrm=cdatstr + '__mtxbrm')})
 
     return feedbackthroughdict
