@@ -464,9 +464,12 @@ def optcon_nse(problemname='drivencavity',
                            diribcs=femp['diribcs'],
                            invinds=invinds)
 
+        # old version rhs
+        # ftilde = rhs_con + rhsv_conbc + rhsd_stbc['fv']
+
         solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'], bmat=b_mat,
                           cmat=ct_mat_reg.T, rmat=u_masmat, vmat=y_masmat,
-                          rhsv=None, rhsp=None,
+                          rhsv=rhsd_stbc['fv'], rhsp=None,
                           tmesh=tip['tmesh'], ystarvec=contp.ystarvec,
                           nwtn_adi_dict=tip['nwtn_adi_dict'],
                           comprz_thresh=tip['comprz_thresh'],

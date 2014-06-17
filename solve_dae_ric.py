@@ -5,9 +5,8 @@ import sadptprj_riclyap_adi.proj_ric_utils as pru
 
 
 def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
-                      cmat=None, rmat=None, vmat=None,
-                      my_mat=None,
-                      rhsv=None, rhsp=None,
+                      cmat=None, rhsv=None, rhsp=None,
+                      rmat=None, vmat=None,
                       tmesh=None, ystarvec=None,
                       nwtn_adi_dict=None,
                       comprz_thresh=None, comprz_maxc=None, save_full_z=False,
@@ -62,7 +61,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     if check_c_consist:
         mic = lau.apply_massinv(mmat.T, cmat.T, output='sparse')
         if np.linalg.norm(jmat*mic) > 1e-12:
-            raise Warning('cmat need to be projected')
+            raise Warning('cmat.T needs to be in the kernel of J*M.-1')
 
     MT, AT, NV = mmat.T, amat.T, amat.shape[0]
 
@@ -70,6 +69,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
 
     # set/compute the terminal values aka starting point
     tct_mat = lau.apply_sqrt_fromleft(vmat, cmat.T, output='dense')
+
     bmat_rpmo = bmat * np.linalg.inv(rmat)
 
     Zc = lau.apply_massinv(mmat, tct_mat)
@@ -131,6 +131,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         # current rhs
         ftilde = rhsvtd + rhsv
         mtxft = pru.get_mTzzTtb(MT, Zc, ftilde)
+        # TODO check this still
         fl1 = np.dot(cmat.T, vmat*ystarvec(t))
         rhswc = MT*wc + cts*(fl1 - mtxft)
 
