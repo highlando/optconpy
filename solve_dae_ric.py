@@ -131,8 +131,9 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         # current rhs
         ftilde = rhsvtd + rhsv
         mtxft = pru.get_mTzzTtb(MT, Zc, ftilde)
-        # TODO check this still
+
         fl1 = np.dot(cmat.T, vmat*ystarvec(t))
+
         rhswc = MT*wc + cts*(fl1 - mtxft)
 
         mtxbrm = pru.get_mTzzTtb(MT, Zc, bmat_rpmo)
