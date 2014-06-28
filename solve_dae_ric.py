@@ -46,6 +46,8 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     get_tdpart : callable f(t)
         returns the `mattd, rhstd` -- time dependent coefficients matrices
         and right hand side at time `t`
+    gtdtstrargs : dictionary
+        **kwargs to the current data string
     gttdprtargs : dictionary
         `**kwargs` to get_tdpart
 
@@ -59,18 +61,19 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     """
 
     if check_c_consist:
-        mic = lau.apply_massinv(mmat.T, cmat.T, output='sparse')
+        mic = lau.apply_massinv(mmat.T, cmat.T)
         if np.linalg.norm(jmat*mic) > 1e-12:
             raise Warning('cmat.T needs to be in the kernel of J*M.-1')
 
     MT, AT, NV = mmat.T, amat.T, amat.shape[0]
 
-    cdatstr = get_datastr(time=tmesh[-1], **gtdtstrargs)
+    gtdtstrargs.update(time=tmesh[-1])
+    cdatstr = get_datastr(**gtdtstrargs)
 
     # set/compute the terminal values aka starting point
     tct_mat = lau.apply_sqrt_fromleft(vmat, cmat.T, output='dense')
 
-    bmat_rpmo = bmat * np.linalg.inv(rmat)
+    bmat_rpmo = bmat * np.linalg.inv(rmat.todense())
 
     Zc = lau.apply_massinv(mmat, tct_mat)
     mtxbrm = pru.get_mTzzTtb(mmat.T, Zc, bmat_rpmo)
@@ -79,7 +82,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     dou.save_npa(mtxbrm, fstring=cdatstr + '__mtxbrm')
 
     if ystarvec is not None:
-        wc = lau.apply_massinv(MT, np.dot(cmat, vmat*ystarvec(tmesh[-1])))
+        wc = lau.apply_massinv(MT, np.dot(cmat.T, vmat*ystarvec(tmesh[-1])))
         dou.save_npa(wc, fstring=cdatstr + '__w')
     else:
         wc = None
@@ -104,7 +107,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
             # coeffmat for nwtn adi
             ft_mat = -(0.5*MT + cts*(AT + nmattd.T))
             # rhs for nwtn adi
-            w_mat = np.hstack([MT*Zc, np.sqrt(cts)*cmat])
+            w_mat = np.hstack([MT*Zc, np.sqrt(cts)*tct_mat])
 
             Zp = pru.proj_alg_ric_newtonadi(mmat=MT,
                                             amat=ft_mat, transposed=True,

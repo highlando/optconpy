@@ -13,7 +13,7 @@ import sadptprj_riclyap_adi.proj_ric_utils as pru
 
 import distr_control_fenics.cont_obs_utils as cou
 
-from solve_dae_ric import solve_flow_daeric
+import solve_dae_ric as sdr
 
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
@@ -475,17 +475,18 @@ def optcon_nse(problemname='drivencavity',
             # old version rhs
             # ftilde = rhs_con + rhsv_conbc + rhsd_stbc['fv']
 
-            solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'],
-                              bmat=b_mat,
-                              cmat=ct_mat_reg.T, rmat=u_masmat, vmat=y_masmat,
-                              rhsv=rhsd_stbc['fv'], rhsp=None,
-                              tmesh=tip['tmesh'], ystarvec=contp.ystarvec,
-                              nwtn_adi_dict=tip['nwtn_adi_dict'],
-                              comprz_thresh=tip['comprz_thresh'],
-                              comprz_maxc=tip['comprz_maxc'],
-                              save_full_z=False,
-                              get_tdpart=get_tdpart, gttdprtargs=gttdprtargs,
-                              get_datastr=get_datastr, gtdtstrargs=datastrdict)
+            sdr.solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'],
+                                  bmat=b_mat, cmat=ct_mat_reg.T,
+                                  rmat=u_masmat, vmat=y_masmat,
+                                  rhsv=rhsd_stbc['fv'], rhsp=None,
+                                  tmesh=tip['tmesh'], ystarvec=contp.ystarvec,
+                                  nwtn_adi_dict=tip['nwtn_adi_dict'],
+                                  comprz_thresh=tip['comprz_thresh'],
+                                  comprz_maxc=tip['comprz_maxc'],
+                                  save_full_z=False, get_tdpart=get_tdpart,
+                                  gttdprtargs=gttdprtargs,
+                                  get_datastr=get_datastr,
+                                  gtdtstrargs=datastrdict)
     else:
         # no control
         feedbackthroughdict = None
