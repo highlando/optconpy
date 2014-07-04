@@ -117,8 +117,9 @@ def extract_output(get_datastr=None, datastrdict=None,
 
 def time_int_params(Nts, t0=0.0, tE=1.0):
     dt = (tE - t0) / Nts
-    sqzmesh = True,  # squeeze the mesh for shorter intervals towards the
-                     # initial and terminal point, False for equidist
+    sqzmesh = True
+    # squeeze the mesh for shorter intervals towards the
+    # initial and terminal point, False for equidist
     tmesh = get_tint(t0, tE, Nts, sqzmesh)
 
     tip = dict(t0=t0,
@@ -255,7 +256,7 @@ def optcon_nse(problemname='drivencavity',
     femp.update(bcdata)
 
     # casting some parameters
-    NV, DT, INVINDS = len(femp['invinds']), tip['dt'], femp['invinds']
+    NV = len(femp['invinds'])
 
     soldict = stokesmatsc  # containing A, J, JT
     soldict.update(femp)  # adding V, Q, invinds, diribcs
@@ -264,7 +265,7 @@ def optcon_nse(problemname='drivencavity',
                    N=N, nu=nu,
                    trange=tip['tmesh'],
                    ddir=ddir, get_datastring=get_datastr,
-                   data_prfx=data_prfx,
+                   data_prfx=ddir+data_prfx,
                    clearprvdata=clearprvveldata,
                    paraviewoutput=tip['ParaviewOutput'],
                    vfileprfx=tip['proutdir']+'vel_',
@@ -389,8 +390,7 @@ def optcon_nse(problemname='drivencavity',
             Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
                                            jmat=stokesmatsc['J'],
                                            bmat=tb_mat, wmat=trct_mat,
-                                           nwtn_adi_dict=
-                                           tip['nwtn_adi_dict'],
+                                           nwtn_adi_dict=tip['nwtn_adi_dict'],
                                            z0=zini)['zfac']
             dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
             print 'saved ' + ddir + cdatstr + cntpstr + '__Z'
@@ -431,7 +431,6 @@ def optcon_nse(problemname='drivencavity',
         wc = lau.apply_massinv(MT, np.dot(mct_mat_reg,
                                           contp.ystarvec(tip['tE'])))
 
-        pts = tip['tmesh'][-1] - tip['tmesh'][-2]
         cdatstr = get_datastr(time=tip['tE'], meshp=N, nu=nu,
                               Nts=Nts, data_prfx=data_prfx)
 
@@ -447,13 +446,13 @@ def optcon_nse(problemname='drivencavity',
                                dict(w=auxstr + '__w',
                                     mtxtb=auxstr + '__mtxtb')}
 
-        for tk, t in reversed(list(enumerate(tip['tmesh'][1:-1]))):
-        # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
-            cts = tip['tmesh'][tk+2] - t
-            pts = tip['tmesh'][tk+1] - tip['tmesh'][tk]
+        for tk, t in reversed(list(enumerate(tip['tmesh'][:-1]))):
+            # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
+            cts = tip['tmesh'][tk+1] - t
+            print tk, t
 
-            print 'Time is {0}, timestep is {1}, next is {2}'.\
-                format(t, cts, pts)
+            print 'Time is {0}, timestep is {1}'.\
+                format(t, cts)
 
             # get the previous time convection matrices
             pdatstr = get_datastr(time=t, meshp=N, nu=nu,
@@ -493,7 +492,7 @@ def optcon_nse(problemname='drivencavity',
                 else:
                     dou.save_npa(Zc, fstring=ddir + pdatstr + cntpstr + '__Z')
 
-            ### and the affine correction
+            # ## and the affine correction
             at_mat = MT + cts*(AT + convc_mat.T)
 
             # current rhs
@@ -537,8 +536,8 @@ def optcon_nse(problemname='drivencavity',
     print 'Re = charL / nu = {0}'.format(charlene/nu)
 
 if __name__ == '__main__':
-    optcon_nse(N=15, Nts=30, nu=1e-2,  # clearprvveldata=True,
-               ini_vel_stokes=True, stst_control=True, t0=0.0, tE=5.0)
+    optcon_nse(N=6, Nts=6, nu=1e-2,  # clearprvveldata=True,
+               ini_vel_stokes=True, stst_control=False, t0=0.0, tE=1.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,
     #            t0=0.0, tE=1.0, Nts=25, stst_control=True,
