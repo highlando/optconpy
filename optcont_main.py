@@ -515,7 +515,7 @@ def optcon_nse(problemname='drivencavity',
     print 'Re = charL / nu = {0}'.format(charlene/nu)
 
 if __name__ == '__main__':
-    optcon_nse(N=15, Nts=30, nu=1e-2,  # clearprvveldata=True,
+    optcon_nse(N=6, Nts=6, nu=1e-2,  # clearprvveldata=True,
                ini_vel_stokes=True, stst_control=True, t0=0.0, tE=1.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,

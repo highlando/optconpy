@@ -73,7 +73,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     # set/compute the terminal values aka starting point
     tct_mat = lau.apply_sqrt_fromleft(vmat, cmat.T, output='dense')
 
-    bmat_rpmo = bmat * np.linalg.inv(rmat.todense())
+    bmat_rpmo = bmat * np.linalg.inv(np.array(rmat.todense()))
 
     Zc = lau.apply_massinv(mmat, tct_mat)
     mtxbrm = pru.get_mTzzTtb(mmat.T, Zc, bmat_rpmo)
