@@ -91,14 +91,16 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
                                            mtxbrm=cdatstr + '__mtxbrm')}
 
     # time integration
-    for tk, t in reversed(list(enumerate(tmesh[1:-1]))):
-        cts = tmesh[tk+2] - t
+    for tk, t in reversed(list(enumerate(tmesh[:-1]))):
+        cts = tmesh[tk+1] - t
 
         print 'Time is {0}, timestep is {1}'.\
             format(t, cts)
 
         # get the previous time time-dep matrices
-        cdatstr = get_datastr(time=t, **gttdprtargs)
+
+        gtdtstrargs.update(time=t)
+        cdatstr = get_datastr(**gtdtstrargs)
         nmattd, rhsvtd = get_tdpart(time=t, **gttdprtargs)
 
         try:

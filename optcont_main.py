@@ -221,11 +221,14 @@ def optcon_nse(problemname='drivencavity',
                t0=None, tE=None,
                use_ric_ini_nu=None, alphau=None,
                spec_tip_dict=None,
+               nwtn_adi_dict=None,
                ystar=None):
 
     tip = time_int_params(Nts, t0=t0, tE=tE)
     if spec_tip_dict is not None:
         tip.update(spec_tip_dict)
+    if nwtn_adi_dict is not None:
+        tip['nwtn_adi_dict'] = nwtn_adi_dict
 
     problemdict = dict(drivencavity=dnsps.drivcav_fems,
                        cylinderwake=dnsps.cyl_fems)
@@ -367,8 +370,11 @@ def optcon_nse(problemname='drivencavity',
     trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
                                           mct_mat_reg, output='dense')
 
-    cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY,
-                                                contp.alphau, NV)
+    if closed_loop:
+        cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.\
+            format(contp.NU, contp.NY, contp.alphau, NV)
+    else:
+        cntpstr = ''
 
     # we gonna use this quite often
     M, A = stokesmatsc['M'], stokesmatsc['A']
@@ -475,18 +481,23 @@ def optcon_nse(problemname='drivencavity',
             # old version rhs
             # ftilde = rhs_con + rhsv_conbc + rhsd_stbc['fv']
 
-            sdr.solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'],
-                                  bmat=b_mat, cmat=ct_mat_reg.T,
-                                  rmat=u_masmat, vmat=y_masmat,
-                                  rhsv=rhsd_stbc['fv'], rhsp=None,
-                                  tmesh=tip['tmesh'], ystarvec=contp.ystarvec,
-                                  nwtn_adi_dict=tip['nwtn_adi_dict'],
-                                  comprz_thresh=tip['comprz_thresh'],
-                                  comprz_maxc=tip['comprz_maxc'],
-                                  save_full_z=False, get_tdpart=get_tdpart,
-                                  gttdprtargs=gttdprtargs,
-                                  get_datastr=get_datastr,
-                                  gtdtstrargs=datastrdict)
+            feedbackthroughdict = \
+                sdr.solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'],
+                                      bmat=b_mat, cmat=ct_mat_reg.T,
+                                      rmat=u_masmat, vmat=y_masmat,
+                                      rhsv=rhsd_stbc['fv'], rhsp=None,
+                                      tmesh=tip['tmesh'],
+                                      ystarvec=contp.ystarvec,
+                                      nwtn_adi_dict=tip['nwtn_adi_dict'],
+                                      comprz_thresh=tip['comprz_thresh'],
+                                      comprz_maxc=tip['comprz_maxc'],
+                                      save_full_z=False, get_tdpart=get_tdpart,
+                                      gttdprtargs=gttdprtargs,
+                                      get_datastr=get_datastr,
+                                      gtdtstrargs=datastrdict)
+
+            cdatstr = get_datastr(time='all', meshp=N, nu=nu,
+                                  Nts=None, data_prfx=data_prfx)
     else:
         # no control
         feedbackthroughdict = None
