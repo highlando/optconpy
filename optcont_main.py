@@ -202,12 +202,17 @@ def optcon_nse(problemname='drivencavity',
                ini_vel_stokes=False, stst_control=False,
                t0=None, tE=None,
                use_ric_ini_nu=None, alphau=None,
+               closed_loop=None,
                spec_tip_dict=None,
+               nwtn_adi_dict=None,
                ystar=None):
 
     tip = time_int_params(Nts, t0=t0, tE=tE)
     if spec_tip_dict is not None:
         tip.update(spec_tip_dict)
+
+    if nwtn_adi_dict is not None:
+        tip['nwtn_adi_dict'] = nwtn_adi_dict
 
     problemdict = dict(drivencavity=dnsps.drivcav_fems,
                        cylinderwake=dnsps.cyl_fems)
