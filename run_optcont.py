@@ -13,7 +13,7 @@ nwtn_adi_dict = dict(adi_max_steps=350,
                      full_upd_norm_check=False,
                      check_lyap_res=False)
 
-optcon_nse(N=15, Nts=41, nu=1e-2, clearprvveldata=True,
+optcon_nse(N=6, Nts=6, nu=1e-2, clearprvveldata=True,
            closed_loop=closed_loop, stst_control=stst_control,
            ini_vel_stokes=True, t0=0.0, tE=1.0,
            nwtn_adi_dict=nwtn_adi_dict)
