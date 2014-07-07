@@ -15,6 +15,7 @@ import distr_control_fenics.cont_obs_utils as cou
 
 import solve_dae_ric as sdr
 
+
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 
@@ -509,9 +510,11 @@ def optcon_nse(problemname='drivencavity',
 
     snu.solve_nse(feedbackthroughdict=feedbackthroughdict,
                   tb_mat=tb_mat,
-                  b_mat=b_mat,
                   closed_loop=closed_loop, static_feedback=stst_control,
                   **soldict)
+
+    from debugstuff import plot_norms
+    plot_norms(tip['tmesh'], feedbackthroughdict)
 
     (yscomplist,
      ystarlist) = extract_output(get_datastr=get_datastr,
