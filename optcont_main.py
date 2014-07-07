@@ -509,6 +509,7 @@ def optcon_nse(problemname='drivencavity',
 
     snu.solve_nse(feedbackthroughdict=feedbackthroughdict,
                   tb_mat=tb_mat,
+                  b_mat=b_mat,
                   closed_loop=closed_loop, static_feedback=stst_control,
                   **soldict)
 

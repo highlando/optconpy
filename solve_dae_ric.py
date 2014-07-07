@@ -73,13 +73,17 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     # set/compute the terminal values aka starting point
     tct_mat = lau.apply_sqrt_fromleft(vmat, cmat.T, output='dense')
 
-    bmat_rpmo = bmat * np.linalg.inv(np.array(rmat.todense()))
+    # TODO: good handling of bmat and umasmat
+    tb_mat = lau.apply_invsqrt_fromleft(rmat, bmat,
+                                        output='sparse')
+    # bmat_rpmo = bmat * np.linalg.inv(np.array(rmat.todense()))
 
     Zc = lau.apply_massinv(mmat, tct_mat)
-    mtxbrm = pru.get_mTzzTtb(mmat.T, Zc, bmat_rpmo)
+    mtxtb = pru.get_mTzzTtb(mmat.T, Zc, tb_mat)
+    # mtxbrm = pru.get_mTzzTtb(mmat.T, Zc, bmat_rpmo)
 
     dou.save_npa(Zc, fstring=cdatstr + '__Z')
-    dou.save_npa(mtxbrm, fstring=cdatstr + '__mtxbrm')
+    dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
 
     if ystarvec is not None:
         wc = lau.apply_massinv(MT, np.dot(cmat.T, vmat*ystarvec(tmesh[-1])))
@@ -88,7 +92,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         wc = None
 
     feedbackthroughdict = {tmesh[-1]: dict(w=cdatstr + '__w',
-                                           mtxbrm=cdatstr + '__mtxbrm')}
+                                           mtxtb=cdatstr + '__mtxtb')}
 
     # time integration
     for tk, t in reversed(list(enumerate(tmesh[:-1]))):
@@ -141,15 +145,21 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
 
         rhswc = MT*wc + cts*(fl1 - mtxft)
 
-        mtxbrm = pru.get_mTzzTtb(MT, Zc, bmat_rpmo)
+        mtxtb = pru.get_mTzzTtb(MT, Zc, tb_mat)
+        # mtxtbrm = pru.get_mTzzTtb(MT, Zc, bmat_rpmo)
 
         wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=jmat,
-                                  umat=-cts*mtxbrm, vmat=bmat.T,
+                                  umat=-cts*mtxtb, vmat=tb_mat.T,
                                   rhsv=rhswc)[:NV]
+        # wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=jmat,
+        #                           umat=-cts*mtxbrm, vmat=bmat.T,
+        #                           rhsv=rhswc)[:NV]
 
         dou.save_npa(wc, fstring=cdatstr + '__w')
-        dou.save_npa(mtxbrm, fstring=cdatstr + '__mtxbrm')
+        dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
+        # dou.save_npa(mtxbrm, fstring=cdatstr + '__mtxbrm')
         feedbackthroughdict.update({t: dict(w=cdatstr + '__w',
-                                            mtxbrm=cdatstr + '__mtxbrm')})
+                                            # mtxbrm=cdatstr + '__mtxbrm')})
+                                            mtxtb=cdatstr + '__mtxtb')})
 
     return feedbackthroughdict
