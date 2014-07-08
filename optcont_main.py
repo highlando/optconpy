@@ -430,16 +430,9 @@ def optcon_nse(problemname='drivencavity',
         snu.solve_nse(**soldict)
 
         # set/compute the terminal values aka starting point
-        tc_mat = lau.apply_massinv(y_masmat, mct_mat_reg.T, output='dense')
-        trct_mat2 = lau.apply_sqrt_fromright(y_masmat,
-                                             tc_mat.T, output='dense')
         trct_mat = lau.apply_invsqrt_fromright(y_masmat,
                                                mct_mat_reg, output='dense')
 
-        print np.linalg.norm(trct_mat)
-        print np.linalg.norm(trct_mat2)
-        print np.linalg.norm(np.dot(trct_mat, np.ones((trct_mat.shape[1], 1))))
-        raise Warning('TODO: debug')
         Zc = lau.apply_massinv(M, trct_mat)
 
         wc = lau.apply_massinv(MT, np.dot(mct_mat_reg,
@@ -450,9 +443,9 @@ def optcon_nse(problemname='drivencavity',
 
         mtxtb = pru.get_mTzzTtb(M.T, Zc, tb_mat)
 
-        print 'Norm of terminal Zc', np.linalg.norm(Zc)
-        print 'Norm of terminal MXtB', np.linalg.norm(mtxtb)
-        raise Warning('TODO: debug')
+        # print 'Norm of terminal Zc', np.linalg.norm(Zc)
+        # print 'Norm of terminal MXtB', np.linalg.norm(mtxtb)
+        # raise Warning('TODO: debug')
 
         dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
         dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
@@ -486,6 +479,8 @@ def optcon_nse(problemname='drivencavity',
             except IOError:
                 # coeffmat for nwtn adi
                 ft_mat = -(0.5*MT + cts*(AT + convc_mat.T))
+                print t, np.linalg.norm(ft_mat.todense())
+                raise Warning('TODO: debug')
                 # rhs for nwtn adi
                 w_mat = np.hstack([MT*Zc, np.sqrt(cts)*trct_mat])
 
