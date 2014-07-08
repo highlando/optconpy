@@ -87,10 +87,6 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     else:
         tct_mat = lau.apply_sqrt_fromright(vmat, cmat.T, output='dense')
 
-    print np.linalg.norm(tct_mat)
-    print np.linalg.norm(np.dot(tct_mat, np.ones((tct_mat.shape[1], 1))))
-    raise Warning('TODO: debug')
-
     # TODO: good handling of bmat and umasmat
     tb_mat = lau.apply_invsqrt_fromright(rmat, bmat, output='sparse')
     # bmat_rpmo = bmat * np.linalg.inv(np.array(rmat.todense()))
@@ -98,15 +94,12 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     Zc = lau.apply_massinv(mmat, tct_mat)
     mtxtb = pru.get_mTzzTtb(mmat.T, Zc, tb_mat)
     # mtxbrm = pru.get_mTzzTtb(mmat.T, Zc, bmat_rpmo)
-    print 'Norm of terminal Zc', np.linalg.norm(Zc)
-    print 'Norm of terminal MXtB', np.linalg.norm(mtxtb)
-    raise Warning('TODO: debug')
 
     dou.save_npa(Zc, fstring=cdatstr + '__Z')
     dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
 
     if ystarvec is not None:
-        wc = lau.apply_massinv(MT, np.dot(cmat.T, vmat*ystarvec(tmesh[-1])))
+        wc = lau.apply_massinv(MT, np.dot(mcmat.T, ystarvec(tmesh[-1])))
         dou.save_npa(wc, fstring=cdatstr + '__w')
     else:
         wc = None
@@ -132,6 +125,9 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         except IOError:
             # coeffmat for nwtn adi
             ft_mat = -(0.5*MT + cts*(AT + nmattd.T))
+            print t, np.linalg.norm(ft_mat.todense())
+            raise Warning('TODO: debug')
+
             # rhs for nwtn adi
             w_mat = np.hstack([MT*Zc, np.sqrt(cts)*tct_mat])
 
@@ -161,7 +157,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         ftilde = rhsvtd + rhsv
         mtxft = pru.get_mTzzTtb(MT, Zc, ftilde)
 
-        fl1 = np.dot(cmat.T, vmat*ystarvec(t))
+        fl1 = np.dot(mcmat.T, ystarvec(t))
 
         rhswc = MT*wc + cts*(fl1 - mtxft)
 

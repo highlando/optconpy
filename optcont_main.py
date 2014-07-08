@@ -354,11 +354,6 @@ def optcon_nse(problemname='drivencavity',
     mct_mat = lau.apply_sqrt_fromright(y_masmat, tct_mat, output='sparse')
     print np.linalg.norm(mct_mat.todense())
 
-    ct_mat_reg = lau.app_prj_via_sadpnt(amat=stokesmatsc['M'],
-                                        jmat=stokesmatsc['J'],
-                                        rhsv=c_mat.T,
-                                        transposedprj=True)
-
     # set the weighing matrices
     contp.R = contp.alphau * u_masmat
 
@@ -491,7 +486,8 @@ def optcon_nse(problemname='drivencavity',
                 sdr.solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'],
                                       bmat=b_mat,  # cmat=ct_mat_reg.T,
                                       mcmat=mct_mat_reg.T, v_is_my=True,
-                                      rmat=u_masmat, vmat=y_masmat,
+                                      rmat=contp.alphau*u_masmat,
+                                      vmat=y_masmat,
                                       rhsv=rhsd_stbc['fv'], rhsp=None,
                                       tmesh=tip['tmesh'],
                                       ystarvec=contp.ystarvec,
