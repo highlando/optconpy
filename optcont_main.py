@@ -348,6 +348,12 @@ def optcon_nse(problemname='drivencavity',
                                          rhsv=mc_mat.T,
                                          transposedprj=True)
 
+    print 'debugging...'
+    print np.linalg.norm(mc_mat.todense())
+    tct_mat = lau.apply_invsqrt_fromright(y_masmat, mc_mat.T, output='sparse')
+    mct_mat = lau.apply_sqrt_fromright(y_masmat, tct_mat, output='sparse')
+    print np.linalg.norm(mct_mat.todense())
+
     ct_mat_reg = lau.app_prj_via_sadpnt(amat=stokesmatsc['M'],
                                         jmat=stokesmatsc['J'],
                                         rhsv=c_mat.T,
@@ -364,12 +370,11 @@ def optcon_nse(problemname='drivencavity',
 #
 
     # tilde B = BR^{-1/2}
-    tb_mat = lau.apply_invsqrt_fromleft(contp.R, b_mat,
-                                        output='sparse')
+    tb_mat = lau.apply_invsqrt_fromright(contp.R, b_mat, output='sparse')
     # tb_dense = np.array(tb_mat.todense())
 
-    trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
-                                          mct_mat_reg, output='dense')
+    trct_mat = lau.apply_invsqrt_fromright(y_masmat,
+                                           mct_mat_reg, output='dense')
 
     if closed_loop:
         cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.\
@@ -484,7 +489,8 @@ def optcon_nse(problemname='drivencavity',
 
             feedbackthroughdict = \
                 sdr.solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'],
-                                      bmat=b_mat, cmat=ct_mat_reg.T,
+                                      bmat=b_mat,  # cmat=ct_mat_reg.T,
+                                      mcmat=mct_mat_reg.T, v_is_my=True,
                                       rmat=u_masmat, vmat=y_masmat,
                                       rhsv=rhsd_stbc['fv'], rhsp=None,
                                       tmesh=tip['tmesh'],

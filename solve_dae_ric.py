@@ -6,6 +6,7 @@ import sadptprj_riclyap_adi.proj_ric_utils as pru
 
 def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
                       cmat=None, rhsv=None, rhsp=None,
+                      mcmat=None, v_is_my=False,
                       rmat=None, vmat=None,
                       tmesh=None, ystarvec=None,
                       nwtn_adi_dict=None,
@@ -43,6 +44,11 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     ----------
     cmat : (NY, NV) array
         the (regularized aka projected) output matrix
+    mcmat : (NY, NV) array
+        output matrix times the mass matrix in the output space
+    v_is_my : boolean
+        whether the weighting matrix is the same as the mass matrix, \
+                defaults to `False`
     get_tdpart : callable f(t)
         returns the `mattd, rhstd` -- time dependent coefficients matrices
         and right hand side at time `t`
@@ -61,9 +67,14 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     """
 
     if check_c_consist:
-        mic = lau.apply_massinv(mmat.T, cmat.T)
-        if np.linalg.norm(jmat*mic) > 1e-12:
-            raise Warning('cmat.T needs to be in the kernel of J*M.-1')
+        if v_is_my and mcmat is not None:
+            mic = lau.apply_massinv(mmat.T, mcmat.T)
+            if np.linalg.norm(jmat*mic) > 1e-12:
+                raise Warning('mcmat.T needs to be in the kernel of J*M.-1')
+        elif cmat is not None:
+            mic = lau.apply_massinv(mmat.T, cmat.T)
+            if np.linalg.norm(jmat*mic) > 1e-12:
+                raise Warning('cmat.T needs to be in the kernel of J*M.-1')
 
     MT, AT, NV = mmat.T, amat.T, amat.shape[0]
 
@@ -71,16 +82,25 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     cdatstr = get_datastr(**gtdtstrargs)
 
     # set/compute the terminal values aka starting point
-    tct_mat = lau.apply_sqrt_fromleft(vmat, cmat.T, output='dense')
+    if v_is_my and mcmat is not None:
+        tct_mat = lau.apply_invsqrt_fromright(vmat, mcmat.T, output='dense')
+    else:
+        tct_mat = lau.apply_sqrt_fromright(vmat, cmat.T, output='dense')
+
+    print np.linalg.norm(tct_mat)
+    print np.linalg.norm(np.dot(tct_mat, np.ones((tct_mat.shape[1], 1))))
+    raise Warning('TODO: debug')
 
     # TODO: good handling of bmat and umasmat
-    tb_mat = lau.apply_invsqrt_fromleft(rmat, bmat,
-                                        output='sparse')
+    tb_mat = lau.apply_invsqrt_fromright(rmat, bmat, output='sparse')
     # bmat_rpmo = bmat * np.linalg.inv(np.array(rmat.todense()))
 
     Zc = lau.apply_massinv(mmat, tct_mat)
     mtxtb = pru.get_mTzzTtb(mmat.T, Zc, tb_mat)
     # mtxbrm = pru.get_mTzzTtb(mmat.T, Zc, bmat_rpmo)
+    print 'Norm of terminal Zc', np.linalg.norm(Zc)
+    print 'Norm of terminal MXtB', np.linalg.norm(mtxtb)
+    raise Warning('TODO: debug')
 
     dou.save_npa(Zc, fstring=cdatstr + '__Z')
     dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
