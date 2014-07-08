@@ -337,11 +337,11 @@ def optcon_nse(problemname='drivencavity',
 #
 
     # tilde B = BR^{-1/2}
-    tb_mat = lau.apply_invsqrt_fromleft(contp.R, b_mat,
-                                        output='sparse')
+    tb_mat = lau.apply_invsqrt_fromright(contp.R, b_mat,
+                                         output='sparse')
 
-    trct_mat = lau.apply_invsqrt_fromleft(y_masmat,
-                                          mct_mat_reg, output='dense')
+    trct_mat = lau.apply_invsqrt_fromright(y_masmat,
+                                           mct_mat_reg, output='dense')
 
     cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY,
                                                 contp.alphau, NV)
@@ -419,8 +419,8 @@ def optcon_nse(problemname='drivencavity',
         # next_w = wft  # to be consistent with unsteady state
 
         auxstrg = ddir + cdatstr + cntpstr
-        dou.save_npa(wft, fstring=ddir + cdatstr + cntpstr + '__w')
-        dou.save_npa(mtxtb_stst, fstring=ddir + cdatstr + cntpstr + '__mtxtb')
+        dou.save_npa(wft, fstring=auxstrg + '__w')
+        dou.save_npa(mtxtb_stst, fstring=auxstrg + '__mtxtb')
         feedbackthroughdict = {None:
                                dict(w=auxstrg + '__w',
                                     mtxtb=auxstrg + '__mtxtb')}
@@ -430,8 +430,17 @@ def optcon_nse(problemname='drivencavity',
         snu.solve_nse(**soldict)
 
         # set/compute the terminal values aka starting point
+        tc_mat = lau.apply_massinv(y_masmat, mct_mat_reg.T, output='dense')
+        trct_mat2 = lau.apply_sqrt_fromright(y_masmat,
+                                             tc_mat.T, output='dense')
+        trct_mat = lau.apply_invsqrt_fromright(y_masmat,
+                                               mct_mat_reg, output='dense')
+
+        print np.linalg.norm(trct_mat)
+        print np.linalg.norm(trct_mat2)
+        print np.linalg.norm(np.dot(trct_mat, np.ones((trct_mat.shape[1], 1))))
+        raise Warning('TODO: debug')
         Zc = lau.apply_massinv(M, trct_mat)
-        print np.linalg.norm(Zc)
 
         wc = lau.apply_massinv(MT, np.dot(mct_mat_reg,
                                           contp.ystarvec(tip['tE'])))
@@ -440,6 +449,10 @@ def optcon_nse(problemname='drivencavity',
                               Nts=Nts, data_prfx=data_prfx)
 
         mtxtb = pru.get_mTzzTtb(M.T, Zc, tb_mat)
+
+        print 'Norm of terminal Zc', np.linalg.norm(Zc)
+        print 'Norm of terminal MXtB', np.linalg.norm(mtxtb)
+        raise Warning('TODO: debug')
 
         dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
         dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
@@ -517,6 +530,9 @@ def optcon_nse(problemname='drivencavity',
             auxstr = ddir + pdatstr + cntpstr
             feedbackthroughdict.update({t: dict(w=auxstr + '__w',
                                                 mtxtb=auxstr + '__mtxtb')})
+
+    from debugstuff import plot_norms
+    plot_norms(tip['tmesh'], feedbackthroughdict)
 
     soldict.update(clearprvdata=True)
 
