@@ -479,11 +479,8 @@ def optcon_nse(problemname='drivencavity',
             except IOError:
                 # coeffmat for nwtn adi
                 ft_mat = -(0.5*MT + cts*(AT + convc_mat.T))
-                print t, np.linalg.norm(ft_mat.todense())
-                raise Warning('TODO: debug')
                 # rhs for nwtn adi
                 w_mat = np.hstack([MT*Zc, np.sqrt(cts)*trct_mat])
-
                 Zp = pru.proj_alg_ric_newtonadi(mmat=MT,
                                                 amat=ft_mat, transposed=True,
                                                 jmat=stokesmatsc['J'],
