@@ -6,7 +6,6 @@ import sadptprj_riclyap_adi.proj_ric_utils as pru
 
 def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
                       cmat=None, rhsv=None, rhsp=None,
-                      mcmat=None, v_is_my=False,
                       rmat=None, vmat=None,
                       tmesh=None, ystarvec=None,
                       nwtn_adi_dict=None,
@@ -44,11 +43,6 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     ----------
     cmat : (NY, NV) array
         the (regularized aka projected) output matrix
-    mcmat : (NY, NV) array
-        output matrix times the mass matrix in the output space
-    v_is_my : boolean
-        whether the weighting matrix is the same as the mass matrix, \
-                defaults to `False`
     get_tdpart : callable f(t)
         returns the `mattd, rhstd` -- time dependent coefficients matrices
         and right hand side at time `t`
@@ -67,14 +61,9 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     """
 
     if check_c_consist:
-        if v_is_my and mcmat is not None:
-            mic = lau.apply_massinv(mmat.T, mcmat.T)
-            if np.linalg.norm(jmat*mic) > 1e-12:
-                raise Warning('mcmat.T needs to be in the kernel of J*M.-1')
-        elif cmat is not None:
-            mic = lau.apply_massinv(mmat.T, cmat.T)
-            if np.linalg.norm(jmat*mic) > 1e-12:
-                raise Warning('cmat.T needs to be in the kernel of J*M.-1')
+        mic = lau.apply_massinv(mmat.T, cmat.T)
+        if np.linalg.norm(jmat*mic) > 1e-12:
+            raise Warning('cmat.T needs to be in the kernel of J*M.-1')
 
     MT, AT, NV = mmat.T, amat.T, amat.shape[0]
 
@@ -82,23 +71,11 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     cdatstr = get_datastr(**gtdtstrargs)
 
     # set/compute the terminal values aka starting point
-    if v_is_my and mcmat is not None:
-        tct_mat = lau.apply_invsqrt_fromright(vmat, mcmat.T, output='dense')
-    else:
-        tct_mat = lau.apply_sqrt_fromright(vmat, cmat.T, output='dense')
+    tct_mat = lau.apply_sqrt_fromleft(vmat, cmat.T, output='dense')
 
     # TODO: good handling of bmat and umasmat
     tb_mat = lau.apply_invsqrt_fromleft(rmat, bmat,
                                         output='sparse')
-=======
-    if v_is_my and mcmat is not None:
-        tct_mat = lau.apply_invsqrt_fromright(vmat, mcmat.T, output='dense')
-    else:
-        tct_mat = lau.apply_sqrt_fromright(vmat, cmat.T, output='dense')
-
-    # TODO: good handling of bmat and umasmat
-    tb_mat = lau.apply_invsqrt_fromright(rmat, bmat, output='sparse')
->>>>>>> outsrc-daeric
     # bmat_rpmo = bmat * np.linalg.inv(np.array(rmat.todense()))
 
     Zc = lau.apply_massinv(mmat, tct_mat)
@@ -109,7 +86,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
 
     if ystarvec is not None:
-        wc = lau.apply_massinv(MT, np.dot(mcmat.T, ystarvec(tmesh[-1])))
+        wc = lau.apply_massinv(MT, np.dot(cmat.T, vmat*ystarvec(tmesh[-1])))
         dou.save_npa(wc, fstring=cdatstr + '__w')
     else:
         wc = None
@@ -137,10 +114,11 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
             ft_mat = -(0.5*MT + cts*(AT + nmattd.T))
             # rhs for nwtn adi
             w_mat = np.hstack([MT*Zc, np.sqrt(cts)*tct_mat])
+
             Zp = pru.proj_alg_ric_newtonadi(mmat=MT,
                                             amat=ft_mat, transposed=True,
                                             jmat=jmat,
-                                            bmat=np.sqrt(cts)*tb_mat,
+                                            bmat=np.sqrt(cts)*bmat,
                                             wmat=w_mat, z0=Zc,
                                             nwtn_adi_dict=nwtn_adi_dict
                                             )['zfac']
@@ -163,7 +141,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         ftilde = rhsvtd + rhsv
         mtxft = pru.get_mTzzTtb(MT, Zc, ftilde)
 
-        fl1 = np.dot(mcmat.T, ystarvec(t))
+        fl1 = np.dot(cmat.T, vmat*ystarvec(t))
 
         rhswc = MT*wc + cts*(fl1 - mtxft)
 
