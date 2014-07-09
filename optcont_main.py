@@ -13,9 +13,6 @@ import sadptprj_riclyap_adi.proj_ric_utils as pru
 
 import distr_control_fenics.cont_obs_utils as cou
 
-import solve_dae_ric as sdr
-
-
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
 
@@ -31,8 +28,8 @@ class ContParams():
     def __init__(self, odcoo, ystar=None):
         # TODO: accept ystar as input for better scripting
         if ystar is None:
-            self.ystarx = dolfin.Expression('-0.0', t=0)
-            self.ystary = dolfin.Expression('0.0', t=0)
+            self.ystarx = dolfin.Expression('-1.0', t=0)
+            self.ystary = dolfin.Expression('1.0', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -97,7 +94,7 @@ class ContParams():
 
 
 def extract_output(get_datastr=None, datastrdict=None,
-                   ddir='', tmesh=None, c_mat=None,
+                   ddir=None, tmesh=None, c_mat=None,
                    ystarvec=None):
 
     datastrdict.update(time=tmesh[0])
@@ -200,28 +197,12 @@ def load_json_dicts(StrToJs):
     return JsDict
 
 
-def get_convmats_rhs(strtodata, invinds=None, V=None, diribcs=None, **kw):
-    """retrieving the time varying coefficient matrix and associated rhs,
-
-
-    where the latter also contains the dirichlet bcs
-    """
-
-    prev_v = dou.load_npa(strtodata)
-
-    (convc_mat, rhs_con,
-     rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
-                                        V=V, diribcs=diribcs)
-
-    return convc_mat, rhsv_conbc + rhs_con
-
-
 def optcon_nse(problemname='drivencavity',
                N=10, Nts=10, nu=1e-2, clearprvveldata=False,
                ini_vel_stokes=False, stst_control=False,
-               closed_loop=True,
                t0=None, tE=None,
                use_ric_ini_nu=None, alphau=None,
+               closed_loop=None,
                spec_tip_dict=None,
                nwtn_adi_dict=None,
                ystar=None):
@@ -229,6 +210,7 @@ def optcon_nse(problemname='drivencavity',
     tip = time_int_params(Nts, t0=t0, tE=tE)
     if spec_tip_dict is not None:
         tip.update(spec_tip_dict)
+
     if nwtn_adi_dict is not None:
         tip['nwtn_adi_dict'] = nwtn_adi_dict
 
@@ -238,6 +220,17 @@ def optcon_nse(problemname='drivencavity',
     problemfem = problemdict[problemname]
     femp = problemfem(N)
 
+    if stst_control:
+        data_prfx = 'stst_' + problemname + '__'
+    else:
+        data_prfx = problemname + '__'
+
+    # specify in what spatial direction Bu changes. The remaining is constant
+    if problemname == 'drivencavity':
+        uspacedep = 0
+    elif problemname == 'cylinderwake':
+        uspacedep = 1
+
     # output
     ddir = 'data/'
     try:
@@ -245,21 +238,6 @@ def optcon_nse(problemname='drivencavity',
     except OSError:
         raise Warning('need "' + ddir + '" subdir for storing the data')
     os.chdir('..')
-
-    if closed_loop:
-        if stst_control:
-            data_prfx = ddir + 'stst_' + problemname + '__'
-        else:
-            data_prfx = ddir + 'tdst_' + problemname + '__'
-
-    else:
-        data_prfx = ddir + problemname + '__'
-
-    # specify in what spatial direction Bu changes. The remaining is constant
-    if problemname == 'drivencavity':
-        uspacedep = 0
-    elif problemname == 'cylinderwake':
-        uspacedep = 1
 
     stokesmats = dts.get_stokessysmats(femp['V'], femp['Q'], nu)
     rhsd_vf = dts.setget_rhs(femp['V'], femp['Q'],
@@ -291,8 +269,8 @@ def optcon_nse(problemname='drivencavity',
     soldict.update(fv_stbc=rhsd_stbc['fv'], fp_stbc=rhsd_stbc['fp'],
                    N=N, nu=nu,
                    trange=tip['tmesh'],
-                   get_datastring=get_datastr,
-                   data_prfx=data_prfx,
+                   ddir=ddir, get_datastring=get_datastr,
+                   data_prfx=ddir+data_prfx,
                    clearprvdata=clearprvveldata,
                    paraviewoutput=tip['ParaviewOutput'],
                    vfileprfx=tip['proutdir']+'vel_',
@@ -338,7 +316,6 @@ def optcon_nse(problemname='drivencavity',
 
     # for further use:
     c_mat = lau.apply_massinv(y_masmat, mc_mat, output='sparse')
-
     if contp.ystarx is None:
         c_mat = c_mat[NY:, :][:, :]  # TODO: Do this right
         mc_mat = mc_mat[NY:, :][:, :]  # TODO: Do this right
@@ -360,24 +337,20 @@ def optcon_nse(problemname='drivencavity',
 #
 
     # tilde B = BR^{-1/2}
-    tb_mat = lau.apply_invsqrt_fromright(contp.R, b_mat, output='sparse')
-    # tb_dense = np.array(tb_mat.todense())
+    tb_mat = lau.apply_invsqrt_fromright(contp.R, b_mat,
+                                         output='sparse')
 
     trct_mat = lau.apply_invsqrt_fromright(y_masmat,
                                            mct_mat_reg, output='dense')
 
-    if closed_loop:
-        cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.\
-            format(contp.NU, contp.NY, contp.alphau, NV)
-    else:
-        cntpstr = ''
+    cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.format(contp.NU, contp.NY,
+                                                contp.alphau, NV)
 
     # we gonna use this quite often
+    MT, AT = stokesmatsc['M'].T, stokesmatsc['A'].T
     M, A = stokesmatsc['M'], stokesmatsc['A']
-    datastrdict = dict(time=None, meshp=N, nu=nu, Nts=Nts, data_prfx=data_prfx)
 
-    # compute the uncontrolled steady state (Navier-)Stokes solution
-    # as initial value
+    # computation initial value
     if ini_vel_stokes:
         # compute the uncontrolled steady state Stokes solution
         ini_vel, newtonnorms = snu.solve_steadystate_nse(vel_nwtn_stps=0,
@@ -385,151 +358,188 @@ def optcon_nse(problemname='drivencavity',
                                                          **soldict)
         soldict.update(dict(iniv=ini_vel))
     else:
+        # compute the uncontrolled steady state (Navier-)Stokes solution
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
         soldict.update(dict(iniv=ini_vel))
 
-    if closed_loop:
-        if stst_control:
-            lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
-            # infinite control horizon, steady target state
-            cdatstr = get_datastr(time=None, meshp=N, nu=nu,
-                                  Nts=None, data_prfx=data_prfx)
+    if stst_control:
+        lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
+        # infinite control horizon, steady target state
+        cdatstr = get_datastr(time=None, meshp=N, nu=nu,
+                              Nts=None, data_prfx=data_prfx)
 
-            (convc_mat, rhs_con,
-             rhsv_conbc) = snu.get_v_conv_conts(prev_v=lin_point,
-                                                invinds=invinds,
-                                                V=femp['V'],
-                                                diribcs=femp['diribcs'])
+        (convc_mat, rhs_con,
+         rhsv_conbc) = snu.get_v_conv_conts(prev_v=lin_point,
+                                            invinds=invinds,
+                                            V=femp['V'],
+                                            diribcs=femp['diribcs'])
 
-            try:
-                Z = dou.load_npa(cdatstr + cntpstr + '__Z')
-                print 'loaded ' + cdatstr + cntpstr + '__Z'
-            except IOError:
-                if use_ric_ini_nu is not None:
-                    cdatstr = get_datastr(nwtn=None, time=None, meshp=N,
-                                          nu=use_ric_ini_nu, Nts=None,
-                                          data_prfx=data_prfx)
-                    try:
-                        zini = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
-                        print 'Initialize Newton ADI by Z from ' + cdatstr
-                    except IOError:
-                        raise Warning('No data for initialization of '
-                                      ' Newton ADI -- need ' + cdatstr + '__Z')
-                    cdatstr = get_datastr(meshp=N, nu=nu, data_prfx=data_prfx)
-                else:
-                    zini = None
+        try:
+            Z = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+            print 'loaded ' + ddir + cdatstr + cntpstr + '__Z'
+        except IOError:
+            if use_ric_ini_nu is not None:
+                cdatstr = get_datastr(nwtn=None, time=None, meshp=N,
+                                      nu=use_ric_ini_nu, Nts=None,
+                                      data_prfx=data_prfx)
+                try:
+                    zini = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
+                    print 'Initialize Newton ADI by Z from ' + cdatstr
+                except IOError:
+                    raise Warning('No data for initialization of '
+                                  ' Newton ADI -- need ' + cdatstr + '__Z')
+                cdatstr = get_datastr(meshp=N, nu=nu, data_prfx=data_prfx)
+            else:
+                zini = None
 
-                Z = pru.\
-                    proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
+            Z = pru.proj_alg_ric_newtonadi(mmat=M, amat=-A-convc_mat,
                                            jmat=stokesmatsc['J'],
                                            bmat=tb_mat, wmat=trct_mat,
                                            nwtn_adi_dict=tip['nwtn_adi_dict'],
                                            z0=zini)['zfac']
+            dou.save_npa(Z, fstring=ddir + cdatstr + cntpstr + '__Z')
+            print 'saved ' + ddir + cdatstr + cntpstr + '__Z'
 
-                dou.save_npa(Z, fstring=cdatstr + cntpstr + '__Z')
-                print 'saved ' + cdatstr + cntpstr + '__Z'
+            if tip['compress_z']:
+                Zc = pru.compress_Zsvd(Z, thresh=tip['comprz_thresh'],
+                                       k=tip['comprz_maxc'])
+                Z = Zc
 
-                if tip['compress_z']:
-                    Zc = pru.compress_Zsvd(Z, thresh=tip['comprz_thresh'],
-                                           k=tip['comprz_maxc'])
-                    Z = Zc
+        fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
 
-            fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
+        mtxtb_stst = pru.get_mTzzTtb(M.T, Z, tb_mat)
+        mtxfv_stst = pru.get_mTzzTtb(M.T, Z, fvnstst)
 
-            mtxtb_stst = pru.get_mTzzTtb(M.T, Z, tb_mat)
-            mtxfv_stst = pru.get_mTzzTtb(M.T, Z, fvnstst)
+        fl = mc_mat.T * contp.ystarvec(0)
 
-            fl = mc_mat.T * contp.ystarvec(0)
+        wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
+                                   jmat=stokesmatsc['J'],
+                                   rhsv=fl-mtxfv_stst, umat=-mtxtb_stst,
+                                   vmat=tb_mat.T)[:NV]
+        # next_w = wft  # to be consistent with unsteady state
 
-            wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
-                                       jmat=stokesmatsc['J'],
-                                       rhsv=fl-mtxfv_stst, umat=-mtxtb_stst,
-                                       vmat=tb_mat.T)[:NV]
-            # next_w = wft  # to be consistent with unsteady state
+        auxstrg = ddir + cdatstr + cntpstr
+        dou.save_npa(wft, fstring=auxstrg + '__w')
+        dou.save_npa(mtxtb_stst, fstring=auxstrg + '__mtxtb')
+        feedbackthroughdict = {None:
+                               dict(w=auxstrg + '__w',
+                                    mtxtb=auxstrg + '__mtxtb')}
 
-            auxstrg = cdatstr + cntpstr
-            dou.save_npa(wft, fstring=cdatstr + cntpstr + '__w')
-            dou.save_npa(mtxtb_stst, fstring=cdatstr + cntpstr + '__mtxtb')
-            feedbackthroughdict = {None:
-                                   dict(w=auxstrg + '__w',
-                                        mtxtb=auxstrg + '__mtxtb')}
+    else:
+        # compute the forward solution
+        snu.solve_nse(**soldict)
 
-        else:
-            # compute the forward solution
-            dictofvels = snu.solve_nse(return_dictofvelstrs=True, **soldict)
+        # set/compute the terminal values aka starting point
+        trct_mat = lau.apply_invsqrt_fromright(y_masmat,
+                                               mct_mat_reg, output='dense')
 
-            # function for the time depending parts
-            # -- to be passed to the solver
+        Zc = lau.apply_massinv(M, trct_mat)
 
-            def get_tdpart(time=None, dictofvels=None, V=None,
-                           invinds=None, diribcs=None, **kw):
-                curvel = dou.load_npa(dictofvels[time])
-                convc_mat, rhs_con, rhsv_conbc = \
-                    snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
-                                         V=V, diribcs=diribcs)
-                return convc_mat, rhsv_conbc+rhs_con
+        wc = lau.apply_massinv(MT, np.dot(mct_mat_reg,
+                                          contp.ystarvec(tip['tE'])))
 
-            gttdprtargs = dict(dictofvels=dictofvels,
-                               V=femp['V'],
-                               diribcs=femp['diribcs'],
-                               invinds=invinds)
+        cdatstr = get_datastr(time=tip['tE'], meshp=N, nu=nu,
+                              Nts=Nts, data_prfx=data_prfx)
 
-            # old version rhs
+        mtxtb = pru.get_mTzzTtb(M.T, Zc, tb_mat)
+
+        # print 'Norm of terminal Zc', np.linalg.norm(Zc)
+        # print 'Norm of terminal MXtB', np.linalg.norm(mtxtb)
+        # raise Warning('TODO: debug')
+
+        dou.save_npa(Zc, fstring=ddir + cdatstr + cntpstr + '__Z')
+        dou.save_npa(wc, fstring=ddir + cdatstr + cntpstr + '__w')
+        dou.save_npa(mtxtb, fstring=ddir + cdatstr + cntpstr + '__mtxtb')
+
+        auxstr = ddir + cdatstr + cntpstr
+
+        feedbackthroughdict = {tip['tmesh'][-1]:
+                               dict(w=auxstr + '__w',
+                                    mtxtb=auxstr + '__mtxtb')}
+
+        for tk, t in reversed(list(enumerate(tip['tmesh'][:-1]))):
+            # for t in np.linspace(tip['tE'] -  DT, tip['t0'], Nts):
+            cts = tip['tmesh'][tk+1] - t
+            print tk, t
+
+            print 'Time is {0}, timestep is {1}'.\
+                format(t, cts)
+
+            # get the previous time convection matrices
+            pdatstr = get_datastr(time=t, meshp=N, nu=nu,
+                                  Nts=Nts, data_prfx=data_prfx)
+            prev_v = dou.load_npa(ddir + pdatstr + '__vel')
             (convc_mat, rhs_con,
-             rhsv_conbc) = snu.get_v_conv_conts(prev_v=lin_point,
-                                                invinds=invinds,
+             rhsv_conbc) = snu.get_v_conv_conts(prev_v=prev_v, invinds=invinds,
                                                 V=femp['V'],
                                                 diribcs=femp['diribcs'])
 
             try:
-                Z = dou.load_npa(cdatstr + cntpstr + '__Z')
-                print 'loaded ' + cdatstr + cntpstr + '__Z'
+                Zc = dou.load_npa(ddir + pdatstr + cntpstr + '__Z')
             except IOError:
-                if use_ric_ini_nu is not None:
-                    cdatstr = get_datastr(nwtn=None, time=None, meshp=N,
-                                          nu=use_ric_ini_nu, Nts=None,
-                                          data_prfx=data_prfx)
-                    try:
-                        zini = dou.load_npa(ddir + cdatstr + cntpstr + '__Z')
-                        print 'Initialize Newton ADI by Z from ' + cdatstr
-                    except IOError:
-                        raise Warning('No data for initialization of '
-                                      ' Newton ADI -- need ' + cdatstr + '__Z')
-                    cdatstr = get_datastr(meshp=N, nu=nu, data_prfx=data_prfx)
-                else:
-                    zini = None
-
-                Z = pru.\
+                # coeffmat for nwtn adi
+                ft_mat = -(0.5*MT + cts*(AT + convc_mat.T))
+                # rhs for nwtn adi
+                w_mat = np.hstack([MT*Zc, np.sqrt(cts)*trct_mat])
+                Zp = pru.proj_alg_ric_newtonadi(mmat=MT,
+                                                amat=ft_mat, transposed=True,
+                                                jmat=stokesmatsc['J'],
+                                                bmat=np.sqrt(cts)*tb_mat,
+                                                wmat=w_mat, z0=Zc,
+                                                nwtn_adi_dict=
+                                                tip['nwtn_adi_dict']
+                                                )['zfac']
 
                 if tip['compress_z']:
-                    Zc = pru.compress_Zsvd(Z, thresh=tip['comprz_thresh'],
+                    # Zc = pru.compress_ZQR(Zp, kmax=tip['comprz_maxc'])
+                    Zc = pru.compress_Zsvd(Zp, thresh=tip['comprz_thresh'],
                                            k=tip['comprz_maxc'])
-                    Z = Zc
+                else:
+                    Zc = Zp
 
-            fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
+                if tip['save_full_z']:
+                    dou.save_npa(Zp, fstring=ddir + pdatstr + cntpstr + '__Z')
+                else:
+                    dou.save_npa(Zc, fstring=ddir + pdatstr + cntpstr + '__Z')
 
-            mtxtb_stst = pru.get_mTzzTtb(M.T, Z, tb_mat)
-            mtxfv_stst = pru.get_mTzzTtb(M.T, Z, fvnstst)
+            # ## and the affine correction
+            at_mat = MT + cts*(AT + convc_mat.T)
 
-            fl = mc_mat.T * contp.ystarvec(0)
+            # current rhs
+            ftilde = rhs_con + rhsv_conbc + rhsd_stbc['fv']
+            mtxft = pru.get_mTzzTtb(M.T, Zc, ftilde)
+            fl1 = mc_mat.T * contp.ystarvec(t)
+            rhswc = MT*wc + cts*(fl1 - mtxft)
 
+            mtxtb = pru.get_mTzzTtb(M.T, Zc, tb_mat)
 
+            wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=stokesmatsc['J'],
+                                      umat=-cts*mtxtb, vmat=tb_mat.T,
+                                      rhsv=rhswc)[:NV]
+
+            dou.save_npa(wc, fstring=ddir + pdatstr + cntpstr + '__w')
+            dou.save_npa(mtxtb, fstring=ddir + pdatstr + cntpstr + '__mtxtb')
+            auxstr = ddir + pdatstr + cntpstr
+            feedbackthroughdict.update({t: dict(w=auxstr + '__w',
+                                                mtxtb=auxstr + '__mtxtb')})
 
     soldict.update(clearprvdata=True)
 
     snu.solve_nse(feedbackthroughdict=feedbackthroughdict,
                   tb_mat=tb_mat,
-                  closed_loop=closed_loop, static_feedback=stst_control,
+                  closed_loop=True, static_feedback=stst_control,
                   **soldict)
+
+    datastrdict = dict(time=None, meshp=N, nu=nu, Nts=Nts, data_prfx=data_prfx)
 
     (yscomplist,
      ystarlist) = extract_output(get_datastr=get_datastr,
                                  datastrdict=datastrdict,
-                                 tmesh=tip['tmesh'],
+                                 ddir=ddir, tmesh=tip['tmesh'],
                                  c_mat=c_mat, ystarvec=contp.ystarvec)
 
     save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
-                     fstring=cdatstr + cntpstr + '__sigout')
+                     fstring=ddir + cdatstr + cntpstr + '__sigout')
 
     print 'dim of v :', femp['V'].dim()
     charlene = .15 if problemname == 'cylinderwake' else 1.0
@@ -537,7 +547,7 @@ def optcon_nse(problemname='drivencavity',
 
 if __name__ == '__main__':
     optcon_nse(N=6, Nts=6, nu=1e-2,  # clearprvveldata=True,
-               ini_vel_stokes=True, stst_control=True, t0=0.0, tE=1.0)
+               ini_vel_stokes=True, stst_control=False, t0=0.0, tE=1.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,
     #            t0=0.0, tE=1.0, Nts=25, stst_control=True,

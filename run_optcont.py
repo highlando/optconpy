@@ -1,7 +1,7 @@
 from optcont_main import optcon_nse
 
 closed_loop = 1
-stst_control = 1
+stst_control = 0
 
 nwtn_adi_dict = dict(adi_max_steps=350,
                      adi_newZ_reltol=1e-7,
@@ -13,7 +13,7 @@ nwtn_adi_dict = dict(adi_max_steps=350,
                      full_upd_norm_check=False,
                      check_lyap_res=False)
 
-optcon_nse(N=6, Nts=2, nu=1e-2, clearprvveldata=True,
+optcon_nse(N=12, Nts=41, nu=1e-2, clearprvveldata=True,
            closed_loop=closed_loop, stst_control=stst_control,
            ini_vel_stokes=True, t0=0.0, tE=1.0,
            nwtn_adi_dict=nwtn_adi_dict)
