@@ -1,7 +1,7 @@
 from optcont_main import optcon_nse
 
 closed_loop = 1
-stst_control = 0
+stst_control = 1
 
 nwtn_adi_dict = dict(adi_max_steps=350,
                      adi_newZ_reltol=1e-7,

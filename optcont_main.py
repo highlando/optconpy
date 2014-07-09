@@ -30,8 +30,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            self.ystarx = dolfin.Expression('-0.0', t=0)
-            self.ystary = dolfin.Expression('0.0', t=0)
+            self.ystarx = dolfin.Expression('-1.0', t=0)
+            self.ystary = dolfin.Expression('1.0', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -348,12 +348,6 @@ def optcon_nse(problemname='drivencavity',
                                          rhsv=mc_mat.T,
                                          transposedprj=True)
 
-    print 'debugging...'
-    print np.linalg.norm(mc_mat.todense())
-    tct_mat = lau.apply_invsqrt_fromright(y_masmat, mc_mat.T, output='sparse')
-    mct_mat = lau.apply_sqrt_fromright(y_masmat, tct_mat, output='sparse')
-    print np.linalg.norm(mct_mat.todense())
-
     # set the weighing matrices
     contp.R = contp.alphau * u_masmat
 
@@ -514,9 +508,6 @@ def optcon_nse(problemname='drivencavity',
                   tb_mat=tb_mat,
                   closed_loop=closed_loop, static_feedback=stst_control,
                   **soldict)
-
-    from debugstuff import plot_norms
-    plot_norms(tip['tmesh'], feedbackthroughdict)
 
     (yscomplist,
      ystarlist) = extract_output(get_datastr=get_datastr,
