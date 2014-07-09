@@ -460,9 +460,12 @@ def optcon_nse(problemname='drivencavity',
             # compute the forward solution
             dictofvels = snu.solve_nse(return_dictofvelstrs=True, **soldict)
 
+            # update the curnwtnsdict
+            for tkp in curnwtnsdict.keys():
+                curnwtnsdict[tkp]['v'] = dictofvels[tkp]
+
             # function for the time depending parts
             # -- to be passed to the solver
-
             def get_tdpart(time=None, dictofvalues=None, feedback=False,
                            V=None, invinds=None, diribcs=None, **kw):
 
@@ -506,6 +509,7 @@ def optcon_nse(problemname='drivencavity',
                                       comprz_maxc=tip['comprz_maxc'],
                                       save_full_z=False, get_tdpart=get_tdpart,
                                       gttdprtargs=gttdprtargs,
+                                      curnwtnsdict=curnwtnsdict,
                                       get_datastr=get_datastr,
                                       gtdtstrargs=datastrdict)
 

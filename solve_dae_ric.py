@@ -10,6 +10,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
                       rmat=None, vmat=None,
                       tmesh=None, ystarvec=None,
                       nwtn_adi_dict=None,
+                      curnwtnsdict=None,
                       comprz_thresh=None, comprz_maxc=None, save_full_z=False,
                       get_tdpart=None, gttdprtargs=None,
                       get_datastr=None, gtdtstrargs=None,
@@ -115,10 +116,19 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
             format(t, cts)
 
         # get the previous time time-dep matrices
-
         gtdtstrargs.update(time=t)
         cdatstr = get_datastr(**gtdtstrargs)
         nmattd, rhsvtd = get_tdpart(time=t, **gttdprtargs)
+
+        # get the feedback from the current newton step
+        if curnwtnsdict is not None:
+            try:
+                cnsw = dou.load_npa(curnwtnsdict[t]['w'])
+                cnsmtxtb = dou.load_npa(curnwtnsdict[t]['mtxtb'])
+            except IOError:
+                cnsw, cnsmtxtb = None, None
+        else:
+            cnsw, cnsmtxtb = None, None
 
         try:
             Zc = dou.load_npa(cdatstr + '__Z')
@@ -166,6 +176,17 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         # wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=jmat,
         #                           umat=-cts*mtxbrm, vmat=bmat.T,
         #                           rhsv=rhswc)[:NV]
+
+        if curnwtnsdict is not None:
+            try:
+                cnsw = dou.load_npa(curnwtnsdict[t]['w'])
+                cnsmtxtb = dou.load_npa(curnwtnsdict[t]['mtxtb'])
+                cnsw = cnsw + wc
+                cnsmtxtb = cnsmtxtb + mtxtb
+                cnsw = dou.save_npa(cnsw, curnwtnsdict[t]['w'])
+                cnsmtxtb = dou.save_npa(cnsmtxtb, curnwtnsdict[t]['mtxtb'])
+            except IOError:
+                pass  # the first iteration
 
         dou.save_npa(wc, fstring=cdatstr + '__w')
         dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
