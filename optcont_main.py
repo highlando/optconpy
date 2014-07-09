@@ -28,8 +28,8 @@ class ContParams():
     def __init__(self, odcoo, ystar=None):
         # TODO: accept ystar as input for better scripting
         if ystar is None:
-            self.ystarx = dolfin.Expression('-0.0', t=0)
-            self.ystary = dolfin.Expression('0.0', t=0)
+            self.ystarx = dolfin.Expression('-1.0', t=0)
+            self.ystary = dolfin.Expression('1.0', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -522,9 +522,6 @@ def optcon_nse(problemname='drivencavity',
             auxstr = ddir + pdatstr + cntpstr
             feedbackthroughdict.update({t: dict(w=auxstr + '__w',
                                                 mtxtb=auxstr + '__mtxtb')})
-
-    from debugstuff import plot_norms
-    plot_norms(tip['tmesh'], feedbackthroughdict)
 
     soldict.update(clearprvdata=True)
 
