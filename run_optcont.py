@@ -13,7 +13,12 @@ nwtn_adi_dict = dict(adi_max_steps=350,
                      full_upd_norm_check=False,
                      check_lyap_res=False)
 
+curnwtnstpdict = {None: {'v': None,
+                         'mtxtb': None,
+                         'w': None}}
+
 optcon_nse(N=12, Nts=41, nu=1e-2, clearprvveldata=True,
            closed_loop=closed_loop, stst_control=stst_control,
            ini_vel_stokes=True, t0=0.0, tE=1.0,
+           cnsd=curnwtnstpdict,
            nwtn_adi_dict=nwtn_adi_dict)

@@ -31,7 +31,7 @@ class ContParams():
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
             self.ystarx = dolfin.Expression('-0.0', t=0)
-            self.ystary = dolfin.Expression('0.0', t=0)
+            self.ystary = dolfin.Expression('-0.2', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -219,6 +219,7 @@ def optcon_nse(problemname='drivencavity',
                N=10, Nts=10, nu=1e-2, clearprvveldata=False,
                ini_vel_stokes=False, stst_control=False,
                closed_loop=True,
+               curnwtnsdict=None,
                t0=None, tE=None,
                use_ric_ini_nu=None, alphau=None,
                spec_tip_dict=None,
@@ -387,7 +388,8 @@ def optcon_nse(problemname='drivencavity',
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
         soldict.update(dict(iniv=ini_vel))
 
-    if closed_loop:
+    outernwtnstps = 1
+    for cns in range(outernwtnstps):
         if stst_control:
             lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
             # infinite control horizon, steady target state
@@ -454,21 +456,35 @@ def optcon_nse(problemname='drivencavity',
                                         mtxtb=auxstrg + '__mtxtb')}
 
         else:
+            soldict.update({feedbackthroughdict: curnwtnsdict})
             # compute the forward solution
             dictofvels = snu.solve_nse(return_dictofvelstrs=True, **soldict)
 
             # function for the time depending parts
             # -- to be passed to the solver
 
-            def get_tdpart(time=None, dictofvels=None, V=None,
-                           invinds=None, diribcs=None, **kw):
-                curvel = dou.load_npa(dictofvels[time])
-                convc_mat, rhs_con, rhsv_conbc = \
-                    snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
-                                         V=V, diribcs=diribcs)
-                return convc_mat, rhsv_conbc+rhs_con
+            def get_tdpart(time=None, dictofvalues=None, feedback=False,
+                           V=None, invinds=None, diribcs=None, **kw):
 
-            gttdprtargs = dict(dictofvels=dictofvels,
+                if feedback:
+                    curvel = dou.load_npa(dictofvalues[time]['v'])
+                    convc_mat, rhs_con, rhsv_conbc = \
+                        snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
+                                             V=V, diribcs=diribcs)
+                    curw = dou.load_npa(dictofvalues[time]['w'])
+                    curmtxtb = dou.load_npa(dictofvalues[time]['mtxtb'])
+
+                    return (convc_mat, rhsv_conbc+rhs_con,
+                            curmtxtb, curw)
+
+                else:
+                    curvel = dou.load_npa(dictofvalues[time])
+                    convc_mat, rhs_con, rhsv_conbc = \
+                        snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
+                                             V=V, diribcs=diribcs)
+                    return convc_mat, rhsv_conbc+rhs_con
+
+            gttdprtargs = dict(dictofvalues=dictofvels,
                                V=femp['V'],
                                diribcs=femp['diribcs'],
                                invinds=invinds)
