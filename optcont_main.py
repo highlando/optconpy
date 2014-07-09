@@ -469,23 +469,11 @@ def optcon_nse(problemname='drivencavity',
             def get_tdpart(time=None, dictofvalues=None, feedback=False,
                            V=None, invinds=None, diribcs=None, **kw):
 
-                if feedback:
-                    curvel = dou.load_npa(dictofvalues[time]['v'])
-                    convc_mat, rhs_con, rhsv_conbc = \
-                        snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
-                                             V=V, diribcs=diribcs)
-                    curw = dou.load_npa(dictofvalues[time]['w'])
-                    curmtxtb = dou.load_npa(dictofvalues[time]['mtxtb'])
-
-                    return (convc_mat, rhsv_conbc+rhs_con,
-                            curmtxtb, curw)
-
-                else:
-                    curvel = dou.load_npa(dictofvalues[time])
-                    convc_mat, rhs_con, rhsv_conbc = \
-                        snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
-                                             V=V, diribcs=diribcs)
-                    return convc_mat, rhsv_conbc+rhs_con
+                curvel = dou.load_npa(dictofvalues[time])
+                convc_mat, rhs_con, rhsv_conbc = \
+                    snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
+                                         V=V, diribcs=diribcs)
+                return convc_mat, rhsv_conbc+rhs_con
 
             gttdprtargs = dict(dictofvalues=dictofvels,
                                V=femp['V'],
