@@ -215,11 +215,21 @@ def get_convmats_rhs(strtodata, invinds=None, V=None, diribcs=None, **kw):
     return convc_mat, rhsv_conbc + rhs_con
 
 
+def init_nwtnstps_value_dict(tmesh=None, data_prfx=None):
+    cnd = {}
+    for t in tmesh:
+        cnd.update({t: {'v': data_prfx + '__cns_v_t{0}'.format(t),
+                        'mtxtb': data_prfx + '__cns_mtxtb_t{0}'.format(t),
+                        'w': data_prfx + '__cns_w_t{0}'.format(t)}})
+
+    return cnd
+
+
 def optcon_nse(problemname='drivencavity',
                N=10, Nts=10, nu=1e-2, clearprvveldata=False,
                ini_vel_stokes=False, stst_control=False,
                closed_loop=True,
-               curnwtnsdict=None,
+               outernwtnstps=1,
                t0=None, tE=None,
                use_ric_ini_nu=None, alphau=None,
                spec_tip_dict=None,
@@ -388,7 +398,6 @@ def optcon_nse(problemname='drivencavity',
         ini_vel, newtonnorms = snu.solve_steadystate_nse(**soldict)
         soldict.update(dict(iniv=ini_vel))
 
-    outernwtnstps = 1
     for cns in range(outernwtnstps):
         if stst_control:
             lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
@@ -456,13 +465,15 @@ def optcon_nse(problemname='drivencavity',
                                         mtxtb=auxstrg + '__mtxtb')}
 
         else:
-            soldict.update({feedbackthroughdict: curnwtnsdict})
-            # compute the forward solution
-            dictofvels = snu.solve_nse(return_dictofvelstrs=True, **soldict)
 
-            # update the curnwtnsdict
-            for tkp in curnwtnsdict.keys():
-                curnwtnsdict[tkp]['v'] = dictofvels[tkp]
+            cns_data_prfx = 'data/cnsvars'
+            curnwtnsdict = init_nwtnstps_value_dict(tmesh=tip['tmesh'],
+                                                    data_prfx=cns_data_prfx)
+            # initialization: compute the forward solution
+            dictofvels = snu.solve_nse(return_dictofvelstrs=True, **soldict)
+            # # update the curnwtnsdict
+            # for tkp in curnwtnsdict.keys():
+            #     curnwtnsdict[tkp]['v'] = dictofvels[tkp]
 
             # function for the time depending parts
             # -- to be passed to the solver
@@ -482,27 +493,36 @@ def optcon_nse(problemname='drivencavity',
 
             # old version rhs
             # ftilde = rhs_con + rhsv_conbc + rhsd_stbc['fv']
+            for cns in range(outernwtnstps):
 
-            feedbackthroughdict = \
-                sdr.solve_flow_daeric(mmat=M, amat=A, jmat=stokesmatsc['J'],
-                                      bmat=b_mat,  # cmat=ct_mat_reg.T,
-                                      mcmat=mct_mat_reg.T, v_is_my=True,
-                                      rmat=contp.alphau*u_masmat,
-                                      vmat=y_masmat,
-                                      rhsv=rhsd_stbc['fv'], rhsp=None,
-                                      tmesh=tip['tmesh'],
-                                      ystarvec=contp.ystarvec,
-                                      nwtn_adi_dict=tip['nwtn_adi_dict'],
-                                      comprz_thresh=tip['comprz_thresh'],
-                                      comprz_maxc=tip['comprz_maxc'],
-                                      save_full_z=False, get_tdpart=get_tdpart,
-                                      gttdprtargs=gttdprtargs,
-                                      curnwtnsdict=curnwtnsdict,
-                                      get_datastr=get_datastr,
-                                      gtdtstrargs=datastrdict)
+                datastrdict.update(data_prfx=data_prfx+'_cns{0}'.format(cns))
+                feedbackthroughdict = \
+                    sdr.solve_flow_daeric(mmat=M, amat=A,
+                                          jmat=stokesmatsc['J'],
+                                          bmat=b_mat,  # cmat=ct_mat_reg.T,
+                                          mcmat=mct_mat_reg.T, v_is_my=True,
+                                          rmat=contp.alphau*u_masmat,
+                                          vmat=y_masmat,
+                                          rhsv=rhsd_stbc['fv'], rhsp=None,
+                                          tmesh=tip['tmesh'],
+                                          ystarvec=contp.ystarvec,
+                                          nwtn_adi_dict=tip['nwtn_adi_dict'],
+                                          comprz_thresh=tip['comprz_thresh'],
+                                          comprz_maxc=tip['comprz_maxc'],
+                                          save_full_z=False,
+                                          get_tdpart=get_tdpart,
+                                          gttdprtargs=gttdprtargs,
+                                          curnwtnsdict=curnwtnsdict,
+                                          get_datastr=get_datastr,
+                                          gtdtstrargs=datastrdict)
 
-            cdatstr = get_datastr(time='all', meshp=N, nu=nu,
-                                  Nts=None, data_prfx=data_prfx)
+                cdatstr = get_datastr(time='all', meshp=N, nu=nu,
+                                      Nts=None, data_prfx=data_prfx)
+
+                dictofvels = snu.solve_nse(return_dictofvelstrs=True,
+                                           feedbackthroughdict=curnwtnsdict,
+                                           **soldict)
+                gttdprtargs.update(dictofvalues=dictofvels)
     else:
         # no control
         feedbackthroughdict = None
