@@ -108,6 +108,11 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     feedbackthroughdict = {tmesh[-1]: dict(w=cdatstr + '__w',
                                            mtxtb=cdatstr + '__mtxtb')}
 
+    # save the end values
+    if curnwtnsdict is not None:
+        dou.save_npa(wc, fstring=curnwtnsdict[tmesh[-1]]['w'])
+        dou.save_npa(mtxtb, fstring=curnwtnsdict[tmesh[-1]]['mtxtb'])
+
     # time integration
     for tk, t in reversed(list(enumerate(tmesh[:-1]))):
         cts = tmesh[tk+1] - t
@@ -137,8 +142,11 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
             ft_mat = -(0.5*MT + cts*(AT + nmattd.T))
             # rhs for nwtn adi
             w_mat = np.hstack([MT*Zc, np.sqrt(cts)*tct_mat])
+            # feedback from a previous Newton step
+            mtxb = np.sqrt(cts)*cnsmtxtb if cnsmtxtb is not None else None
             Zp = pru.proj_alg_ric_newtonadi(mmat=MT,
                                             amat=ft_mat, transposed=True,
+                                            mtxoldb=mtxb,
                                             jmat=jmat,
                                             bmat=np.sqrt(cts)*tb_mat,
                                             wmat=w_mat, z0=Zc,
@@ -161,6 +169,12 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
 
         # current rhs
         ftilde = rhsvtd + rhsv
+
+        # apply the feedback and through
+        if cnsw is not None:
+            ftilde = rhsvtd + rhsv + cnsw
+        cnsmtxtb = cnsmtxtb + mtxtb if cnsmtxtb is not None else mtxtb
+
         mtxft = pru.get_mTzzTtb(MT, Zc, ftilde)
 
         fl1 = np.dot(mcmat.T, ystarvec(t))
@@ -171,22 +185,18 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         # mtxtbrm = pru.get_mTzzTtb(MT, Zc, bmat_rpmo)
 
         wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=jmat,
-                                  umat=-cts*mtxtb, vmat=tb_mat.T,
+                                  umat=-cts*cnsmtxtb, vmat=tb_mat.T,
                                   rhsv=rhswc)[:NV]
         # wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=jmat,
         #                           umat=-cts*mtxbrm, vmat=bmat.T,
         #                           rhsv=rhswc)[:NV]
 
+        # update the feedback in Newton
         if curnwtnsdict is not None:
-            try:
-                cnsw = dou.load_npa(curnwtnsdict[t]['w'])
-                cnsmtxtb = dou.load_npa(curnwtnsdict[t]['mtxtb'])
-                cnsw = cnsw + wc
-                cnsmtxtb = cnsmtxtb + mtxtb
-                cnsw = dou.save_npa(cnsw, curnwtnsdict[t]['w'])
-                cnsmtxtb = dou.save_npa(cnsmtxtb, curnwtnsdict[t]['mtxtb'])
-            except IOError:
-                pass  # the first iteration
+            cnsw = cnsw + wc if cnsw is not None else wc
+            cnsmtxtb = cnsmtxtb + mtxtb if cnsmtxtb is not None else mtxtb
+            dou.save_npa(cnsw, fstring=curnwtnsdict[t]['w'])
+            dou.save_npa(cnsmtxtb, fstring=curnwtnsdict[t]['mtxtb'])
 
         dou.save_npa(wc, fstring=cdatstr + '__w')
         dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
