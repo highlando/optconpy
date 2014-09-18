@@ -95,24 +95,6 @@ class ContParams():
             raise UserWarning('need provide at least one component of ystar')
 
 
-def extract_output(dictofvels=None,
-                   ddir='', tmesh=None, c_mat=None,
-                   ystarvec=None):
-
-    cur_v = dou.load_npa(dictofvels[0])
-    yn = c_mat*cur_v
-    yscomplist = [yn.flatten().tolist()]
-    ystarlist = [ystarvec(0).flatten().tolist()]
-
-    for t in tmesh[1:]:
-        cur_v = dou.load_npa(dictofvels[t])
-        yn = c_mat*cur_v
-        yscomplist.append(yn.flatten().tolist())
-        ystarlist.append(ystarvec(0).flatten().tolist())
-
-    return yscomplist, ystarlist
-
-
 def time_int_params(Nts, t0=0.0, tE=1.0):
     dt = (tE - t0) / Nts
     sqzmesh = True
@@ -536,9 +518,9 @@ def optcon_nse(problemname='drivencavity',
                                    static_feedback=stst_control, **soldict)
 
     (yscomplist,
-     ystarlist) = extract_output(dictofvels=dictofvels,
-                                 tmesh=tip['tmesh'],
-                                 c_mat=c_mat, ystarvec=contp.ystarvec)
+     ystarlist) = dou.extract_output(dictofvels=dictofvels,
+                                     tmesh=tip['tmesh'],
+                                     c_mat=c_mat, ystarvec=contp.ystarvec)
 
     save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
                      fstring=cdatstr + cntpstr + '__sigout')
