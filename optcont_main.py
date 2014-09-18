@@ -449,7 +449,7 @@ def optcon_nse(problemname='drivencavity',
                 solve_nse(return_dictofvelstrs=True,
                           feedbackthroughdict=feedbackthroughdict, **soldict)
 
-        else:
+        else:  # time dep closed loop
 
             cns_data_prfx = 'data/cnsvars'
             invd = init_nwtnstps_value_dict
@@ -500,12 +500,23 @@ def optcon_nse(problemname='drivencavity',
                         curnwtnsdict=curnwtnsdict,
                         get_datastr=get_datastr, gtdtstrargs=datastrdict)
 
+                # for t in feedbackthroughdict.keys():
+                #     curw = dou.load_npa(feedbackthroughdict[t]['mtxtb'])
+                #     print cns, t, np.linalg.norm(curw)
+
                 cdatstr = get_datastr(time='all', meshp=N, nu=nu,
                                       Nts=None, data_prfx=data_prfx)
 
                 dictofvels = snu.\
                     solve_nse(return_dictofvelstrs=True,
-                              feedbackthroughdict=curnwtnsdict, **soldict)
+                              closed_loop=True, tb_mat=tb_mat,
+                              feedbackthroughdict=feedbackthroughdict,
+                              **soldict)
+
+                for t in dictofvels.keys():
+                    curw = dou.load_npa(dictofvels[t])
+                    print cns, t, np.linalg.norm(curw)
+
                 gttdprtargs.update(dictofvalues=dictofvels)
     else:
         # no control

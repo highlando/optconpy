@@ -7,7 +7,7 @@ outernwtnstps = 2
 
 nwtn_adi_dict = dict(adi_max_steps=100,
                      adi_newZ_reltol=1e-7,
-                     nwtn_max_steps=30,
+                     nwtn_max_steps=20,
                      nwtn_upd_reltol=4e-8,
                      nwtn_upd_abstol=1e-7,
                      verbose=True,
@@ -19,8 +19,8 @@ nwtn_adi_dict = dict(adi_max_steps=100,
 #                          'mtxtb': None,
 #                          'w': None}}
 
-optcon_nse(N=10, Nts=5, nu=1e-2, clearprvveldata=True,
+optcon_nse(N=10, Nts=5, nu=1e-1, clearprvveldata=True,
            closed_loop=closed_loop, stst_control=stst_control,
-           ini_vel_stokes=True, t0=0.0, tE=1.0,
+           ini_vel_stokes=True, t0=0.0, tE=0.1,
            outernwtnstps=outernwtnstps,
            nwtn_adi_dict=nwtn_adi_dict)
