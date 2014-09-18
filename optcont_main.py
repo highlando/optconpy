@@ -445,6 +445,9 @@ def optcon_nse(problemname='drivencavity',
             feedbackthroughdict = {None:
                                    dict(w=auxstrg + '__w',
                                         mtxtb=auxstrg + '__mtxtb')}
+            dictofvels = snu.\
+                solve_nse(return_dictofvelstrs=True,
+                          feedbackthroughdict=feedbackthroughdict, **soldict)
 
         else:
 
@@ -514,11 +517,11 @@ def optcon_nse(problemname='drivencavity',
         soldict.update(clearprvdata=True)
         dictofvels = snu.solve_nse(feedbackthroughdict=feedbackthroughdict,
                                    tb_mat=tb_mat, closed_loop=closed_loop,
-                                   preturn_dictofvelstrs=True,
+                                   return_dictofvelstrs=True,
                                    static_feedback=stst_control, **soldict)
 
     (yscomplist,
-     ystarlist) = dou.extract_output(dictofvels=dictofvels,
+     ystarlist) = dou.extract_output(dictofpaths=dictofvels,
                                      tmesh=tip['tmesh'],
                                      c_mat=c_mat, ystarvec=contp.ystarvec)
 
