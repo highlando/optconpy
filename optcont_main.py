@@ -30,8 +30,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            self.ystarx = dolfin.Expression('-0.0', t=0)
-            self.ystary = dolfin.Expression('-0.2', t=0)
+            self.ystarx = dolfin.Expression('0.1', t=0)
+            self.ystary = dolfin.Expression('0.1', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -199,6 +199,12 @@ def init_nwtnstps_value_dict(tmesh=None, data_prfx=None):
         cnd.update({t: {'v': data_prfx + '__cns_v_t{0}'.format(t),
                         'mtxtb': data_prfx + '__cns_mtxtb_t{0}'.format(t),
                         'w': data_prfx + '__cns_w_t{0}'.format(t)}})
+        print cnd[t]['mtxtb']
+        try:
+            os.remove(cnd[t]['mtxtb']+'.npy')
+            os.remove(cnd[t]['w']+'.npy')
+        except OSError:
+            pass
 
     return cnd
 
@@ -544,7 +550,7 @@ def optcon_nse(problemname='drivencavity',
     print 'Re = charL / nu = {0}'.format(charlene/nu)
 
 if __name__ == '__main__':
-    optcon_nse(N=6, Nts=6, nu=1e-2,  # clearprvveldata=True,
+    optcon_nse(N=12, Nts=6, nu=1e-2,  # clearprvveldata=True,
                ini_vel_stokes=True, stst_control=True, t0=0.0, tE=1.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,
