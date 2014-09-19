@@ -2,6 +2,7 @@ import dolfin
 import json
 import numpy as np
 import os
+import glob
 
 import dolfin_navier_scipy.dolfin_to_sparrays as dts
 import dolfin_navier_scipy.data_output_utils as dou
@@ -200,11 +201,8 @@ def init_nwtnstps_value_dict(tmesh=None, data_prfx=None):
                         'mtxtb': data_prfx + '__cns_mtxtb_t{0}'.format(t),
                         'w': data_prfx + '__cns_w_t{0}'.format(t)}})
         print cnd[t]['mtxtb']
-        try:
-            os.remove(cnd[t]['mtxtb']+'.npy')
-            os.remove(cnd[t]['w']+'.npy')
-        except OSError:
-            pass
+        for fname in glob.glob(data_prfx + '__cns_*_t*'):
+            os.remove(fname)
 
     return cnd
 
@@ -506,9 +504,9 @@ def optcon_nse(problemname='drivencavity',
                         curnwtnsdict=curnwtnsdict,
                         get_datastr=get_datastr, gtdtstrargs=datastrdict)
 
-                # for t in feedbackthroughdict.keys():
-                #     curw = dou.load_npa(feedbackthroughdict[t]['mtxtb'])
-                #     print cns, t, np.linalg.norm(curw)
+                for t in feedbackthroughdict.keys():
+                    curw = dou.load_npa(feedbackthroughdict[t]['mtxtb'])
+                    print cns, t, np.linalg.norm(curw)
 
                 cdatstr = get_datastr(time='all', meshp=N, nu=nu,
                                       Nts=None, data_prfx=data_prfx)
@@ -519,9 +517,9 @@ def optcon_nse(problemname='drivencavity',
                               feedbackthroughdict=feedbackthroughdict,
                               **soldict)
 
-                for t in dictofvels.keys():
-                    curw = dou.load_npa(dictofvels[t])
-                    print cns, t, np.linalg.norm(curw)
+                # for t in dictofvels.keys():
+                #     curw = dou.load_npa(dictofvels[t])
+                #     print cns, t, np.linalg.norm(curw)
 
                 gttdprtargs.update(dictofvalues=dictofvels)
     else:
