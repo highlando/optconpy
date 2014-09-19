@@ -200,7 +200,6 @@ def init_nwtnstps_value_dict(tmesh=None, data_prfx=None):
         cnd.update({t: {'v': data_prfx + '__cns_v_t{0}'.format(t),
                         'mtxtb': data_prfx + '__cns_mtxtb_t{0}'.format(t),
                         'w': data_prfx + '__cns_w_t{0}'.format(t)}})
-        print cnd[t]['mtxtb']
         for fname in glob.glob(data_prfx + '__cns_*_t*'):
             os.remove(fname)
 
@@ -504,7 +503,7 @@ def optcon_nse(problemname='drivencavity',
                         curnwtnsdict=curnwtnsdict,
                         get_datastr=get_datastr, gtdtstrargs=datastrdict)
 
-                for t in feedbackthroughdict.keys():
+                for t in tip['tmesh']:  # feedbackthroughdict.keys():
                     curw = dou.load_npa(feedbackthroughdict[t]['mtxtb'])
                     print cns, t, np.linalg.norm(curw)
 
