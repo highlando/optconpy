@@ -1,0 +1,14 @@
+Driven Cavity
+=============
+ * done: changes not visible in output
+ * done: need check the outputplotting
+
+Outer Newton
+============
+
+in every iteration, check
+ * done: save the data newton steps - with `N`
+ * done: mtxb -- changes
+ * feedback matrix in the snu.solve_nse changes
+ * feedback (matrix.v) changes
+ * velocity changes
