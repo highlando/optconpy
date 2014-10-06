@@ -461,9 +461,6 @@ def optcon_nse(problemname='drivencavity',
             # initialization: compute the forward solution
             dictofvels = snu.solve_nse(return_dictofvelstrs=True,
                                        **soldict)
-            # # update the curnwtnsdict
-            # for tkp in curnwtnsdict.keys():
-            #     curnwtnsdict[tkp]['v'] = dictofvels[tkp]
 
             # function for the time depending parts
             # -- to be passed to the solver
@@ -514,6 +511,7 @@ def optcon_nse(problemname='drivencavity',
                     solve_nse(return_dictofvelstrs=True,
                               closed_loop=True, tb_mat=tb_mat,
                               feedbackthroughdict=feedbackthroughdict,
+                              vel_nwtn_stps=40,
                               **soldict)
 
                 # for t in dictofvels.keys():
@@ -532,7 +530,8 @@ def optcon_nse(problemname='drivencavity',
         dictofvels = snu.solve_nse(feedbackthroughdict=feedbackthroughdict,
                                    tb_mat=tb_mat, closed_loop=closed_loop,
                                    return_dictofvelstrs=True,
-                                   static_feedback=stst_control, **soldict)
+                                   static_feedback=stst_control,
+                                   **soldict)
 
     (yscomplist,
      ystarlist) = dou.extract_output(dictofpaths=dictofvels,
