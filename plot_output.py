@@ -16,7 +16,7 @@ def outputplot(tmesh, ycomp, ystar=None, fname='notspecified'):
     plt.setp(lines, color='r', linewidth=2.0)
 
     plt.yticks([0.2, 0, -0.2])
-    plt.xticks([0, 2])
+    # plt.xticks([0, 2])
 
     tikz_save(fname + '.tikz',
               figureheight='\\figureheight',

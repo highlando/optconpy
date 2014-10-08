@@ -215,6 +215,7 @@ def optcon_nse(problemname='drivencavity',
                use_ric_ini_nu=None, alphau=None,
                spec_tip_dict=None,
                nwtn_adi_dict=None,
+               linearizednse=False,
                ystar=None):
 
     tip = time_int_params(Nts, t0=t0, tE=tE)
@@ -236,6 +237,9 @@ def optcon_nse(problemname='drivencavity',
     except OSError:
         raise Warning('need "' + ddir + '" subdir for storing the data')
     os.chdir('..')
+
+    if linearizednse and not outernwtnstps == 1:
+        raise Warning('Linearized problem can have only one Newton step')
 
     if closed_loop:
         if stst_control:

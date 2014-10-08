@@ -1,9 +1,9 @@
 from optcont_main import optcon_nse
 
-closed_loop = 1
+closed_loop = 0
 stst_control = 0
 
-outernwtnstps = 2
+outernwtnstps = 1
 
 nwtn_adi_dict = dict(adi_max_steps=100,
                      adi_newZ_reltol=1e-7,
@@ -19,8 +19,9 @@ nwtn_adi_dict = dict(adi_max_steps=100,
 #                          'mtxtb': None,
 #                          'w': None}}
 scaletest = 1e0
-optcon_nse(N=12, Nts=5*scaletest, nu=0.5*1e-2, clearprvveldata=True,
+optcon_nse(N=20, Nts=5*scaletest, nu=0.5*1e-2, clearprvveldata=True,
            closed_loop=closed_loop, stst_control=stst_control,
            ini_vel_stokes=True, t0=0.0, tE=0.1*scaletest,
            outernwtnstps=outernwtnstps,
+           linearizednse=True,
            nwtn_adi_dict=nwtn_adi_dict)
