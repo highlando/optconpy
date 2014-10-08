@@ -16,3 +16,8 @@ in every iteration, check
  * check implementation of feedback + updates
    * in ADI iteration
    * in/for solve_nse
+	
+Check for Linearized Prob (like in the diss):
+=============================================
+
+ * time dep vel lin point for solve nse (not there yet)...
