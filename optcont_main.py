@@ -511,7 +511,7 @@ def optcon_nse(problemname='drivencavity',
                     solve_nse(return_dictofvelstrs=True,
                               closed_loop=True, tb_mat=tb_mat,
                               feedbackthroughdict=feedbackthroughdict,
-                              vel_nwtn_stps=40,
+                              vel_nwtn_stps=5,
                               **soldict)
 
                 # for t in dictofvels.keys():
