@@ -31,8 +31,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            self.ystarx = dolfin.Expression('0.1', t=0)
-            self.ystary = dolfin.Expression('0.1', t=0)
+            self.ystarx = dolfin.Expression('0.0', t=0)
+            self.ystary = dolfin.Expression('0.0', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -42,7 +42,7 @@ class ContParams():
 
         self.R = None
         # regularization parameter
-        self.alphau = 1e-4
+        self.alphau = 1e-6
         self.V = None
         self.W = None
 
@@ -452,8 +452,17 @@ def optcon_nse(problemname='drivencavity',
             feedbackthroughdict = {None:
                                    dict(w=auxstrg + '__w',
                                         mtxtb=auxstrg + '__mtxtb')}
+
+            cns = 0
+            soldict.update(data_prfx=data_prfx+'_cns{0}'.format(cns))
             dictofvels = snu.\
                 solve_nse(return_dictofvelstrs=True,
+                          closed_loop=True,
+                          static_feedback=True,
+                          tb_mat=tb_mat,
+                          lin_vel_point={None: lin_point},
+                          vel_pcrd_stps=0,
+                          vel_nwtn_stps=1,
                           feedbackthroughdict=feedbackthroughdict, **soldict)
 
         else:  # time dep closed loop
@@ -488,6 +497,9 @@ def optcon_nse(problemname='drivencavity',
 
                 datastrdict.update(data_prfx=data_prfx+'_cns{0}'.
                                    format(cns))
+                soldict.update(data_prfx=data_prfx+'_cns{0}'.
+                               format(cns))
+
                 sfd = sdr.solve_flow_daeric
                 feedbackthroughdict = \
                     sfd(mmat=M, amat=A, jmat=stokesmatsc['J'],
@@ -511,12 +523,22 @@ def optcon_nse(problemname='drivencavity',
                 cdatstr = get_datastr(time='all', meshp=N, nu=nu,
                                       Nts=None, data_prfx=data_prfx)
 
-                dictofvels = snu.\
-                    solve_nse(return_dictofvelstrs=True,
-                              closed_loop=True, tb_mat=tb_mat,
-                              feedbackthroughdict=feedbackthroughdict,
-                              vel_nwtn_stps=5,
-                              **soldict)
+                if linearizednse:
+                    dictofvels = snu.\
+                        solve_nse(return_dictofvelstrs=True,
+                                  closed_loop=True, tb_mat=tb_mat,
+                                  lin_vel_point=dictofvels,
+                                  feedbackthroughdict=feedbackthroughdict,
+                                  vel_nwtn_stps=1,
+                                  vel_pcrd_stps=0,
+                                  **soldict)
+                else:
+                    dictofvels = snu.\
+                        solve_nse(return_dictofvelstrs=True,
+                                  closed_loop=True, tb_mat=tb_mat,
+                                  feedbackthroughdict=feedbackthroughdict,
+                                  vel_nwtn_stps=5,
+                                  **soldict)
 
                 # for t in dictofvels.keys():
                 #     curw = dou.load_npa(dictofvels[t])
@@ -550,7 +572,7 @@ def optcon_nse(problemname='drivencavity',
     print 'Re = charL / nu = {0}'.format(charlene/nu)
 
 if __name__ == '__main__':
-    optcon_nse(N=12, Nts=6, nu=1e-2,  # clearprvveldata=True,
+    optcon_nse(N=12, Nts=10, nu=1e-2,  # clearprvveldata=True,
                ini_vel_stokes=True, stst_control=True, t0=0.0, tE=1.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,
