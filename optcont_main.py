@@ -391,7 +391,7 @@ def optcon_nse(problemname='drivencavity',
                                   Nts=None, data_prfx=data_prfx)
 
             (convc_mat, rhs_con,
-             rhsv_conbc) = snu.get_v_conv_conts(prev_v=lin_point,
+             rhsv_conbc) = snu.get_v_conv_conts(prev_v=0*lin_point,
                                                 invinds=invinds,
                                                 V=femp['V'],
                                                 diribcs=femp['diribcs'])
@@ -434,15 +434,16 @@ def optcon_nse(problemname='drivencavity',
             fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] +\
                 rhsd_vfrc['fvc']
 
-            mtxtb_stst = pru.get_mTzzTtb(M.T, Z, tb_mat)
-            mtxfv_stst = pru.get_mTzzTtb(M.T, Z, fvnstst)
+            # X = -ZZ.T
+            mtxtb_stst = -pru.get_mTzzTtb(M.T, Z, tb_mat)
+            mtxfv_stst = -pru.get_mTzzTtb(M.T, Z, fvnstst)
 
             fl = mc_mat.T * contp.ystarvec(0)
 
             wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
                                        jmat=stokesmatsc['J'],
-                                       rhsv=fl-mtxfv_stst,
-                                       umat=-mtxtb_stst,
+                                       rhsv=fl+mtxfv_stst,
+                                       umat=mtxtb_stst,
                                        vmat=tb_mat.T)[:NV]
             # next_w = wft  # to be consistent with unsteady state
 
@@ -460,7 +461,7 @@ def optcon_nse(problemname='drivencavity',
                           closed_loop=True,
                           static_feedback=True,
                           tb_mat=tb_mat,
-                          lin_vel_point={None: lin_point},
+                          lin_vel_point={None: 0*lin_point},
                           vel_pcrd_stps=0,
                           vel_nwtn_stps=1,
                           feedbackthroughdict=feedbackthroughdict, **soldict)
