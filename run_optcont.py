@@ -5,7 +5,7 @@ stst_control = 1
 
 outernwtnstps = 1
 
-nwtn_adi_dict = dict(adi_max_steps=200,
+nwtn_adi_dict = dict(adi_max_steps=300,
                      adi_newZ_reltol=1e-7,
                      nwtn_max_steps=20,
                      nwtn_upd_reltol=4e-8,

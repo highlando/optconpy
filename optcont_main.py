@@ -455,7 +455,8 @@ def optcon_nse(problemname='drivencavity',
                                        rhsv=fl+mtxfv_stst,
                                        umat=mtxtb_stst,
                                        vmat=tb_mat.T)[:NV]
-            # next_w = wft  # to be consistent with unsteady state
+
+            raise Warning('TODO: debug')
 
             auxstrg = cdatstr + cntpstr
             dou.save_npa(wft, fstring=cdatstr + cntpstr + '__w')
