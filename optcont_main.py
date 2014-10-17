@@ -1,6 +1,7 @@
 import dolfin
 import json
 import numpy as np
+import scipy.sparse as sps
 import os
 import glob
 
@@ -31,8 +32,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            self.ystarx = dolfin.Expression('0.0', t=0)
-            self.ystary = dolfin.Expression('0.0', t=0)
+            self.ystarx = dolfin.Expression('0.1', t=0)
+            self.ystary = dolfin.Expression('0.1', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -215,7 +216,8 @@ def optcon_nse(problemname='drivencavity',
                use_ric_ini_nu=None, alphau=None,
                spec_tip_dict=None,
                nwtn_adi_dict=None,
-               linearizednse=False,
+               linearized_nse=False,
+               stokes_flow=False,
                ystar=None):
 
     tip = time_int_params(Nts, t0=t0, tE=tE)
@@ -238,7 +240,7 @@ def optcon_nse(problemname='drivencavity',
         raise Warning('need "' + ddir + '" subdir for storing the data')
     os.chdir('..')
 
-    if linearizednse and not outernwtnstps == 1:
+    if linearized_nse and not outernwtnstps == 1:
         raise Warning('Linearized problem can have only one Newton step')
 
     if closed_loop:
@@ -249,6 +251,9 @@ def optcon_nse(problemname='drivencavity',
 
     else:
         data_prfx = ddir + problemname + '__'
+
+    if stokes_flow:
+        data_prfx = data_prfx + 'stokes__'
 
     # specify in what spatial direction Bu changes. The remaining is constant
     if problemname == 'drivencavity':
@@ -385,16 +390,20 @@ def optcon_nse(problemname='drivencavity',
 
     if closed_loop:
         if stst_control:
-            lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
+            if stokes_flow:
+                convc_mat = sps.csr_matrix((NV, NV))
+                rhs_con, rhsv_conbc = np.zeros((NV, 1)), np.zeros((NV, 1))
+                lin_point = None
+            else:
+                lin_point, newtonnorms = snu.solve_steadystate_nse(**soldict)
+                (convc_mat, rhs_con,
+                 rhsv_conbc) = snu.get_v_conv_conts(prev_v=lin_point,
+                                                    invinds=invinds,
+                                                    V=femp['V'],
+                                                    diribcs=femp['diribcs'])
             # infinite control horizon, steady target state
             cdatstr = get_datastr(time=None, meshp=N, nu=nu,
                                   Nts=None, data_prfx=data_prfx)
-
-            (convc_mat, rhs_con,
-             rhsv_conbc) = snu.get_v_conv_conts(prev_v=0*lin_point,
-                                                invinds=invinds,
-                                                V=femp['V'],
-                                                diribcs=femp['diribcs'])
 
             try:
                 Z = dou.load_npa(cdatstr + cntpstr + '__Z')
@@ -431,14 +440,15 @@ def optcon_nse(problemname='drivencavity',
                                            k=tip['comprz_maxc'])
                     Z = Zc
 
-            fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] +\
-                rhsd_vfrc['fvc']
+            fvnstst = rhs_con + rhsv_conbc + rhsd_stbc['fv'] + rhsd_vfrc['fvc']
 
             # X = -ZZ.T
             mtxtb_stst = -pru.get_mTzzTtb(M.T, Z, tb_mat)
             mtxfv_stst = -pru.get_mTzzTtb(M.T, Z, fvnstst)
 
             fl = mc_mat.T * contp.ystarvec(0)
+
+            print np.linalg.norm(rhsv_conbc), np.linalg.norm(convc_mat*fvnstst)
 
             wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
                                        jmat=stokesmatsc['J'],
@@ -461,9 +471,11 @@ def optcon_nse(problemname='drivencavity',
                           closed_loop=True,
                           static_feedback=True,
                           tb_mat=tb_mat,
-                          lin_vel_point={None: 0*lin_point},
+                          lin_vel_point={None: lin_point},
+                          stokes_flow=stokes_flow,
                           vel_pcrd_stps=0,
                           vel_nwtn_stps=1,
+                          clearprvveldata=True,
                           feedbackthroughdict=feedbackthroughdict, **soldict)
 
         else:  # time dep closed loop
@@ -524,7 +536,7 @@ def optcon_nse(problemname='drivencavity',
                 cdatstr = get_datastr(time='all', meshp=N, nu=nu,
                                       Nts=None, data_prfx=data_prfx)
 
-                if linearizednse:
+                if linearized_nse:
                     dictofvels = snu.\
                         solve_nse(return_dictofvelstrs=True,
                                   closed_loop=True, tb_mat=tb_mat,

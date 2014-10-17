@@ -5,7 +5,7 @@ stst_control = 1
 
 outernwtnstps = 1
 
-nwtn_adi_dict = dict(adi_max_steps=100,
+nwtn_adi_dict = dict(adi_max_steps=200,
                      adi_newZ_reltol=1e-7,
                      nwtn_max_steps=20,
                      nwtn_upd_reltol=4e-8,
@@ -18,10 +18,11 @@ nwtn_adi_dict = dict(adi_max_steps=100,
 # curnwtnstpdict = {None: {'v': None,
 #                          'mtxtb': None,
 #                          'w': None}}
-scaletest = 5e0
+scaletest = 1e1
 optcon_nse(N=20, Nts=6*scaletest, nu=0.5*1e-2, clearprvveldata=False,
            closed_loop=closed_loop, stst_control=stst_control,
            ini_vel_stokes=True, t0=0.0, tE=0.1*scaletest,
            outernwtnstps=outernwtnstps,
-           linearizednse=True,
+           # linearized_nse=True,
+           stokes_flow=True,
            nwtn_adi_dict=nwtn_adi_dict)
