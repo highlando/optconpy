@@ -32,8 +32,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            self.ystarx = dolfin.Expression('0.1', t=0)
-            self.ystary = dolfin.Expression('0.1', t=0)
+            self.ystarx = dolfin.Expression('0.0', t=0)
+            self.ystary = dolfin.Expression('0.0', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -448,15 +448,14 @@ def optcon_nse(problemname='drivencavity',
 
             fl = mc_mat.T * contp.ystarvec(0)
 
-            print np.linalg.norm(rhsv_conbc), np.linalg.norm(convc_mat*fvnstst)
+            print (np.linalg.norm(fl), np.linalg.norm(rhsv_conbc),
+                   np.linalg.norm(convc_mat*fvnstst))
 
             wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
                                        jmat=stokesmatsc['J'],
                                        rhsv=fl+mtxfv_stst,
                                        umat=mtxtb_stst,
                                        vmat=tb_mat.T)[:NV]
-
-            raise Warning('TODO: debug')
 
             auxstrg = cdatstr + cntpstr
             dou.save_npa(wft, fstring=cdatstr + cntpstr + '__w')

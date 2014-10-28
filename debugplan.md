@@ -1,3 +1,7 @@
+start!!! steady state stokes
+============================
+ * check `umat_c` in snu.solve_nse
+
 done: Driven Cavity
 =============
  * done: changes not visible in output
@@ -20,4 +24,5 @@ in every iteration, check
 Check for Linearized Prob (like in the diss):
 =============================================
 
- * time dep vel lin point for solve nse (not there yet)...
+ * done: time dep vel lin point for solve nse (not there yet)...
+ 
