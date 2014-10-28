@@ -1,6 +1,6 @@
-start!!! steady state stokes
+DONE: start!!! steady state stokes
 ============================
- * check `umat_c` in snu.solve_nse
+ * done: check `umat_c` in snu.solve_nse
 
 done: Driven Cavity
 =============

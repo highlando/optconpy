@@ -32,8 +32,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            self.ystarx = dolfin.Expression('0.0', t=0)
-            self.ystary = dolfin.Expression('0.0', t=0)
+            self.ystarx = dolfin.Expression('0.1', t=0)
+            self.ystary = dolfin.Expression('-0.1', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -43,7 +43,7 @@ class ContParams():
 
         self.R = None
         # regularization parameter
-        self.alphau = 1e-6
+        self.alphau = 1e-8
         self.V = None
         self.W = None
 

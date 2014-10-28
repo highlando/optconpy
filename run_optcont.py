@@ -1,11 +1,11 @@
 from optcont_main import optcon_nse
 
-closed_loop = 0
+closed_loop = 1
 stst_control = 1
 
 outernwtnstps = 1
 
-nwtn_adi_dict = dict(adi_max_steps=300,
+nwtn_adi_dict = dict(adi_max_steps=400,
                      adi_newZ_reltol=1e-7,
                      nwtn_max_steps=20,
                      nwtn_upd_reltol=4e-8,
@@ -18,7 +18,7 @@ nwtn_adi_dict = dict(adi_max_steps=300,
 # curnwtnstpdict = {None: {'v': None,
 #                          'mtxtb': None,
 #                          'w': None}}
-scaletest = 10*1e1
+scaletest = 2*1e1
 optcon_nse(N=20, Nts=2*scaletest, nu=0.5*1e-2, clearprvveldata=False,
            closed_loop=closed_loop, stst_control=stst_control,
            ini_vel_stokes=True, t0=0.0, tE=0.1*scaletest,
