@@ -486,6 +486,7 @@ def optcon_nse(problemname='drivencavity',
                                 data_prfx=cns_data_prfx)
             # initialization: compute the forward solution
             dictofvels = snu.solve_nse(return_dictofvelstrs=True,
+                                       stokes_flow=stokes_flow,
                                        **soldict)
 
             # function for the time depending parts
@@ -493,10 +494,15 @@ def optcon_nse(problemname='drivencavity',
             def get_tdpart(time=None, dictofvalues=None, feedback=False,
                            V=None, invinds=None, diribcs=None, **kw):
 
-                curvel = dou.load_npa(dictofvalues[time])
-                convc_mat, rhs_con, rhsv_conbc = \
-                    snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
-                                         V=V, diribcs=diribcs)
+                if stokes_flow:
+                    convc_mat = sps.csr_matrix((NV, NV))
+                    rhs_con, rhsv_conbc = np.zeros((NV, 1)), np.zeros((NV, 1))
+                else:
+                    curvel = dou.load_npa(dictofvalues[time])
+                    convc_mat, rhs_con, rhsv_conbc = \
+                        snu.get_v_conv_conts(prev_v=curvel, invinds=invinds,
+                                             V=V, diribcs=diribcs)
+
                 return convc_mat, rhsv_conbc+rhs_con
 
             gttdprtargs = dict(dictofvalues=dictofvels,
@@ -549,6 +555,7 @@ def optcon_nse(problemname='drivencavity',
                     dictofvels = snu.\
                         solve_nse(return_dictofvelstrs=True,
                                   closed_loop=True, tb_mat=tb_mat,
+                                  stokes_flow=stokes_flow,
                                   feedbackthroughdict=feedbackthroughdict,
                                   vel_nwtn_stps=5,
                                   **soldict)
