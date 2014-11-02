@@ -93,7 +93,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     # bmat_rpmo = bmat * np.linalg.inv(np.array(rmat.todense()))
 
     Zc = lau.apply_massinv(mmat, tct_mat)
-    mtxtb = pru.get_mTzzTtb(mmat.T, Zc, tb_mat)
+    mtxtb = -pru.get_mTzzTtb(mmat.T, Zc, tb_mat)
     # mtxbrm = pru.get_mTzzTtb(mmat.T, Zc, bmat_rpmo)
 
     dou.save_npa(Zc, fstring=cdatstr + '__Z')
@@ -181,11 +181,11 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
 
         rhswc = MT*wc + cts*(fl1 - mtxft)
 
-        mtxtb = pru.get_mTzzTtb(MT, Zc, tb_mat)
+        mtxtb = -pru.get_mTzzTtb(MT, Zc, tb_mat)
         # mtxtbrm = pru.get_mTzzTtb(MT, Zc, bmat_rpmo)
 
         wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=jmat,
-                                  umat=-cts*cnsmtxtb, vmat=tb_mat.T,
+                                  umat=cts*cnsmtxtb, vmat=tb_mat.T,
                                   rhsv=rhswc)[:NV]
         # wc = lau.solve_sadpnt_smw(amat=at_mat, jmat=jmat,
         #                           umat=-cts*mtxbrm, vmat=bmat.T,

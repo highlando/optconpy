@@ -17,6 +17,8 @@ import distr_control_fenics.cont_obs_utils as cou
 
 import solve_dae_ric as sdr
 
+# import debugstuff as dbs
+
 
 dolfin.parameters.linear_algebra_backend = 'uBLAS'
 
@@ -32,8 +34,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            self.ystarx = dolfin.Expression('0.1', t=0)
-            self.ystary = dolfin.Expression('-0.1', t=0)
+            self.ystarx = dolfin.Expression('-0.1', t=0)
+            self.ystary = dolfin.Expression('0.1', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -485,9 +487,14 @@ def optcon_nse(problemname='drivencavity',
             curnwtnsdict = invd(tmesh=tip['tmesh'],
                                 data_prfx=cns_data_prfx)
             # initialization: compute the forward solution
-            dictofvels = snu.solve_nse(return_dictofvelstrs=True,
-                                       stokes_flow=stokes_flow,
-                                       **soldict)
+            if not stokes_flow:
+                dictofvels = snu.solve_nse(return_dictofvelstrs=True,
+                                           stokes_flow=stokes_flow,
+                                           **soldict)
+            else:
+                dictofvels = None
+
+            # dbs.plot_vel_norms(tip['tmesh'], dictofvels)
 
             # function for the time depending parts
             # -- to be passed to the solver
@@ -535,9 +542,9 @@ def optcon_nse(problemname='drivencavity',
                         curnwtnsdict=curnwtnsdict,
                         get_datastr=get_datastr, gtdtstrargs=datastrdict)
 
-                for t in tip['tmesh']:  # feedbackthroughdict.keys():
-                    curw = dou.load_npa(feedbackthroughdict[t]['mtxtb'])
-                    print cns, t, np.linalg.norm(curw)
+                # for t in tip['tmesh']:  # feedbackthroughdict.keys():
+                #     curw = dou.load_npa(feedbackthroughdict[t]['mtxtb'])
+                #     print cns, t, np.linalg.norm(curw)
 
                 cdatstr = get_datastr(time='all', meshp=N, nu=nu,
                                       Nts=None, data_prfx=data_prfx)

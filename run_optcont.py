@@ -18,8 +18,8 @@ nwtn_adi_dict = dict(adi_max_steps=200,
 # curnwtnstpdict = {None: {'v': None,
 #                          'mtxtb': None,
 #                          'w': None}}
-scaletest = 0.5*1e1
-optcon_nse(N=20, Nts=2*scaletest, nu=0.5*1e-2, clearprvveldata=False,
+scaletest = 0.2*1e1
+optcon_nse(N=20, Nts=16*scaletest, nu=0.5*1e-2, clearprvveldata=True,
            closed_loop=closed_loop, stst_control=stst_control,
            ini_vel_stokes=True, t0=0.0, tE=0.1*scaletest,
            outernwtnstps=outernwtnstps,
