@@ -68,7 +68,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     feedbackthroughdict : dictionary
         with time instances as keys and
         | `w` -- the current feedthrough value
-        | `mtxbrm` -- the current feedback gain part `(1/R * B.T * X * M).T`
+        | `mtxtb` -- the current feedback gain part `(R.-1/2 * B.T * X * M).T`
         as values
     """
 

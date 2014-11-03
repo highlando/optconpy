@@ -211,6 +211,60 @@ def init_nwtnstps_value_dict(tmesh=None, data_prfx=None):
     return cnd
 
 
+def eval_costfunc(V=None, W=None, R=None, cmat=None, ystar=None,
+                  bmat=None, tbmat=None,
+                  tmesh=None, veldict=None, fbftdict=None,
+                  penau=True):
+    """ evaluate the cost functional
+
+    dy(T)'Vdy(T) + int_tmesh dy'Wdy + u'Ru
+
+    where u is a R.-1B(XMv+w)
+
+    Parameters
+    ----------
+    penau : boolean, optional
+        whether or not to include `u` in the cost functional, defalts to `True`
+
+    """
+
+    def _dywdy(t, V=None):
+        cvel = np.load(veldict[tmesh[0]]+'.npy')
+        delty = ystar(t) - lau.mm_dnssps(cmat, cvel)
+        if V is None:
+            return np.dot(delty.T, lau.mm_dnssps(W, delty))
+        else:
+            return np.dot(delty.T, lau.mm_dnssps(V, delty))
+
+    def _uru(t):
+        if not penau:
+            return 0
+        cvel = np.load(veldict[tmesh[t]]+'.npy')
+        if R is None and tbmat is not None:
+            try:
+                curfb = np.dot(np.load(fbftdict[t]['mtxtb']+'.npy').T, cvel)
+                curft = tbmat.T*np.load(fbftdict[t]['w']+'.npy')
+            except KeyError:
+                curfb = np.dot(np.load(fbftdict[None]['mtxtb']+'.npy').T, cvel)
+                curft = tbmat.T*np.load(fbftdict[None]['w']+'.npy')
+            return np.dot((curfb+curft).T, curfb+curft)
+        else:
+            raise NotImplementedError()
+
+    cts = tmesh[1] - tmesh[0]
+    # time int by pw trapezoidal rule
+    cfv = 0
+    ccfv_old = _dywdy(tmesh[0]) + _uru(tmesh[0])
+    for k, t in enumerate(tmesh[1:]):
+        cts = t - tmesh[k]
+        ccfv_new = _dywdy(tmesh[t]) + _uru(tmesh[t])
+        cfv += 0.5*cts*(ccfv_new + ccfv_old)
+        ccfv_old = ccfv_new
+    # final pena value
+    cfv += _dywdy(tmesh[-1], V=V)
+    return cfv
+
+
 def optcon_nse(problemname='drivencavity',
                N=10, Nts=10, nu=1e-2, clearprvveldata=False,
                ini_vel_stokes=False, stst_control=False,
@@ -490,12 +544,12 @@ def optcon_nse(problemname='drivencavity',
             curnwtnsdict = invd(tmesh=tip['tmesh'],
                                 data_prfx=cns_data_prfx)
             # initialization: compute the forward solution
-            if not stokes_flow:
+            if stokes_flow:
+                dictofvels = None
+            else:
                 dictofvels = snu.solve_nse(return_dictofvelstrs=True,
                                            stokes_flow=stokes_flow,
                                            **soldict)
-            else:
-                dictofvels = None
 
             # dbs.plot_vel_norms(tip['tmesh'], dictofvels)
 
@@ -587,6 +641,7 @@ def optcon_nse(problemname='drivencavity',
         soldict.update(clearprvdata=True)
         dictofvels = snu.solve_nse(feedbackthroughdict=feedbackthroughdict,
                                    tb_mat=tb_mat, closed_loop=closed_loop,
+                                   stokes_flow=stokes_flow,
                                    return_dictofvelstrs=True,
                                    static_feedback=stst_control,
                                    **soldict)
@@ -598,6 +653,22 @@ def optcon_nse(problemname='drivencavity',
 
     save_output_json(yscomplist, tip['tmesh'].tolist(), ystar=ystarlist,
                      fstring=cdatstr + cntpstr + '__sigout')
+
+    costfunval = eval_costfunc(W=y_masmat, V=contp.gamma*y_masmat,
+                               R=None, tbmat=tb_mat, cmat=c_mat,
+                               ystar=contp.ystarvec,
+                               tmesh=tip['tmesh'], veldict=dictofvels,
+                               fbftdict=feedbackthroughdict)
+
+    print 'Value of cost functional: ', costfunval
+
+    costfunval = eval_costfunc(W=y_masmat, V=contp.gamma*y_masmat,
+                               R=None, tbmat=tb_mat, cmat=c_mat,
+                               ystar=contp.ystarvec, penau=False,
+                               tmesh=tip['tmesh'], veldict=dictofvels,
+                               fbftdict=feedbackthroughdict)
+
+    print 'Value of cost functional not considering `u`: ', costfunval
 
     print 'dim of v :', femp['V'].dim()
     charlene = .15 if problemname == 'cylinderwake' else 1.0
