@@ -8,6 +8,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
                       cmat=None, rhsv=None, rhsp=None,
                       mcmat=None, v_is_my=False,
                       rmat=None, vmat=None,
+                      gamma=1.0,
                       tmesh=None, ystarvec=None,
                       nwtn_adi_dict=None,
                       curnwtnsdict=None,
@@ -47,6 +48,10 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
         the (regularized aka projected) output matrix
     mcmat : (NY, NV) array
         output matrix times the mass matrix in the output space
+    gamma : float, optional
+        weighting parameter for penalization of the terminal value,
+        TODO: rather provide the right weighting matrix V,
+        defaults to `1.0`
     v_is_my : boolean
         whether the weighting matrix is the same as the mass matrix, \
                 defaults to `False`
@@ -92,7 +97,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     tb_mat = lau.apply_invsqrt_fromright(rmat, bmat, output='sparse')
     # bmat_rpmo = bmat * np.linalg.inv(np.array(rmat.todense()))
 
-    Zc = lau.apply_massinv(mmat, tct_mat)
+    Zc = np.sqrt(gamma)*lau.apply_massinv(mmat, tct_mat)
     mtxtb = -pru.get_mTzzTtb(mmat.T, Zc, tb_mat)
     # mtxbrm = pru.get_mTzzTtb(mmat.T, Zc, bmat_rpmo)
 
@@ -100,7 +105,7 @@ def solve_flow_daeric(mmat=None, amat=None, jmat=None, bmat=None,
     dou.save_npa(mtxtb, fstring=cdatstr + '__mtxtb')
 
     if ystarvec is not None:
-        wc = lau.apply_massinv(MT, np.dot(mcmat.T, ystarvec(tmesh[-1])))
+        wc = lau.apply_massinv(MT, gamma*np.dot(mcmat.T, ystarvec(tmesh[-1])))
         dou.save_npa(wc, fstring=cdatstr + '__w')
     else:
         wc = None

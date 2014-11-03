@@ -45,7 +45,9 @@ class ContParams():
 
         self.R = None
         # regularization parameter
-        self.alphau = 1e-8
+        self.alphau = 1e-9
+        # weighting of the penalization of the terminal value
+        self.gamma = 1e-3
         self.V = None
         self.W = None
 
@@ -369,14 +371,15 @@ def optcon_nse(problemname='drivencavity',
                                            mct_mat_reg, output='dense')
 
     if closed_loop:
-        cntpstr = 'NV{3}NY{0}NU{1}alphau{2}'.\
-            format(contp.NU, contp.NY, contp.alphau, NV)
+        cntpstr = 'NV{3}NY{0}NU{1}alphau{2}gamma{4}'.\
+            format(contp.NU, contp.NY, contp.alphau, NV, contp.gamma)
     else:
         cntpstr = ''
 
     # we gonna use this quite often
     M, A = stokesmatsc['M'], stokesmatsc['A']
-    datastrdict = dict(time=None, meshp=N, nu=nu, Nts=Nts, data_prfx=data_prfx)
+    datastrdict = dict(time=None, meshp=N, nu=nu, Nts=Nts,
+                       data_prfx=data_prfx)
 
     # compute the uncontrolled steady state (Navier-)Stokes solution
     # as initial value
@@ -521,9 +524,9 @@ def optcon_nse(problemname='drivencavity',
             # ftilde = rhs_con + rhsv_conbc + rhsd_stbc['fv']
             for cns in range(outernwtnstps):
 
-                datastrdict.update(data_prfx=data_prfx+'_cns{0}'.
+                datastrdict.update(data_prfx=data_prfx+cntpstr+'_cns{0}'.
                                    format(cns))
-                soldict.update(data_prfx=data_prfx+'_cns{0}'.
+                soldict.update(data_prfx=data_prfx+cntpstr+'_cns{0}'.
                                format(cns))
 
                 sfd = sdr.solve_flow_daeric
@@ -533,7 +536,9 @@ def optcon_nse(problemname='drivencavity',
                         # cmat=ct_mat_reg.T,
                         mcmat=mct_mat_reg.T,
                         v_is_my=True, rmat=contp.alphau*u_masmat,
-                        vmat=y_masmat, rhsv=rhsd_stbc['fv'], rhsp=None,
+                        vmat=y_masmat, rhsv=rhsd_stbc['fv'],
+                        gamma=contp.gamma,
+                        rhsp=None,
                         tmesh=tip['tmesh'], ystarvec=contp.ystarvec,
                         nwtn_adi_dict=tip['nwtn_adi_dict'],
                         comprz_thresh=tip['comprz_thresh'],
