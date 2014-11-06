@@ -34,8 +34,8 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            self.ystarx = dolfin.Expression('-0.1', t=0)
-            self.ystary = dolfin.Expression('0.1', t=0)
+            self.ystarx = dolfin.Expression('-0.1*sin(5*3.14*t)', t=0)
+            self.ystary = dolfin.Expression('0.1*sin(5*3.14*t)', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -229,7 +229,7 @@ def eval_costfunc(V=None, W=None, R=None, cmat=None, ystar=None,
     """
 
     def _dywdy(t, V=None):
-        cvel = np.load(veldict[tmesh[0]]+'.npy')
+        cvel = np.load(veldict[tmesh[t]]+'.npy')
         delty = ystar(t) - lau.mm_dnssps(cmat, cvel)
         if V is None:
             return np.dot(delty.T, lau.mm_dnssps(W, delty))
@@ -257,7 +257,7 @@ def eval_costfunc(V=None, W=None, R=None, cmat=None, ystar=None,
     ccfv_old = _dywdy(tmesh[0]) + _uru(tmesh[0])
     for k, t in enumerate(tmesh[1:]):
         cts = t - tmesh[k]
-        ccfv_new = _dywdy(tmesh[t]) + _uru(tmesh[t])
+        ccfv_new = _dywdy(t) + _uru(t)
         cfv += 0.5*cts*(ccfv_new + ccfv_old)
         ccfv_old = ccfv_new
     # final pena value
@@ -507,9 +507,6 @@ def optcon_nse(problemname='drivencavity',
 
             fl = mc_mat.T * contp.ystarvec(0)
 
-            print (np.linalg.norm(fl), np.linalg.norm(rhsv_conbc),
-                   np.linalg.norm(convc_mat*fvnstst))
-
             wft = lau.solve_sadpnt_smw(amat=A.T+convc_mat.T,
                                        jmat=stokesmatsc['J'],
                                        rhsv=fl+mtxfv_stst,
@@ -525,15 +522,16 @@ def optcon_nse(problemname='drivencavity',
 
             cns = 0
             soldict.update(data_prfx=data_prfx+'_cns{0}'.format(cns))
+            if linearized_nse:
+                soldict.update(vel_pcrd_stps=0,
+                               vel_nwtn_stps=1,
+                               lin_vel_point={None: lin_point})
             dictofvels = snu.\
                 solve_nse(return_dictofvelstrs=True,
                           closed_loop=True,
                           static_feedback=True,
                           tb_mat=tb_mat,
-                          lin_vel_point={None: lin_point},
                           stokes_flow=stokes_flow,
-                          vel_pcrd_stps=0,
-                          vel_nwtn_stps=1,
                           clearprvveldata=True,
                           feedbackthroughdict=feedbackthroughdict, **soldict)
 
@@ -675,7 +673,7 @@ def optcon_nse(problemname='drivencavity',
     print 'Re = charL / nu = {0}'.format(charlene/nu)
 
 if __name__ == '__main__':
-    optcon_nse(N=12, Nts=10, nu=1e-2,  # clearprvveldata=True,
+    optcon_nse(N=12, Nts=10, nu=1e-2, clearprvveldata=False,
                ini_vel_stokes=True, stst_control=True, t0=0.0, tE=1.0)
     # optcon_nse(problemname='cylinderwake', N=3, nu=1e-3,
     #            clearprvveldata=False,
