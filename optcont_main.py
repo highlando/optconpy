@@ -34,8 +34,10 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            self.ystarx = dolfin.Expression('-0.1*sin(5*3.14*t)', t=0)
-            self.ystary = dolfin.Expression('0.1*sin(5*3.14*t)', t=0)
+            # self.ystarx = dolfin.Expression('-0.1*sin(5*3.14*t)', t=0)
+            # self.ystary = dolfin.Expression('0.1*sin(5*3.14*t)', t=0)
+            self.ystarx = dolfin.Expression('-0.0', t=0)
+            self.ystary = dolfin.Expression('0.0', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -621,7 +623,8 @@ def optcon_nse(problemname='drivencavity',
                                   closed_loop=True, tb_mat=tb_mat,
                                   stokes_flow=stokes_flow,
                                   feedbackthroughdict=feedbackthroughdict,
-                                  vel_nwtn_stps=5,
+                                  vel_pcrd_stps=1,
+                                  vel_nwtn_stps=2,
                                   **soldict)
 
                 # for t in dictofvels.keys():

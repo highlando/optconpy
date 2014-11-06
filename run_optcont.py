@@ -1,7 +1,7 @@
 from optcont_main import optcon_nse
 
 closed_loop = 1
-stst_control = 1
+stst_control = 0
 
 outernwtnstps = 1
 
@@ -11,8 +11,8 @@ nwtn_adi_dict = dict(adi_max_steps=300,
                      nwtn_upd_reltol=4e-8,
                      nwtn_upd_abstol=1e-7,
                      verbose=True,
-                     ms=[-15.0, -10.0, -5.0, -3.0, -2.0, -1.5, -1.3, -1.0],
-                     # ms=[-5.0, -3.0, -2.0, -1.5, -1.3, -1.1, -1.0],
+                     # ms=[-15.0, -10.0, -5.0, -3.0, -2.0, -1.5, -1.3, -1.0],
+                     ms=[-5.0, -3.0, -2.0, -1.5, -1.3, -1.1, -1.0],
                      full_upd_norm_check=False,
                      check_lyap_res=False)
 
