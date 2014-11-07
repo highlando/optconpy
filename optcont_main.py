@@ -34,10 +34,10 @@ class ContParams():
     """
     def __init__(self, odcoo, ystar=None):
         if ystar is None:
-            # self.ystarx = dolfin.Expression('-0.1*sin(5*3.14*t)', t=0)
-            # self.ystary = dolfin.Expression('0.1*sin(5*3.14*t)', t=0)
-            self.ystarx = dolfin.Expression('-0.0', t=0)
-            self.ystary = dolfin.Expression('0.0', t=0)
+            self.ystarx = dolfin.Expression('-0.1*sin(5*3.14*t)', t=0)
+            self.ystary = dolfin.Expression('0.1*sin(5*3.14*t)', t=0)
+            # self.ystarx = dolfin.Expression('-0.0', t=0)
+            # self.ystary = dolfin.Expression('0.0', t=0)
             # if t, then add t=0 to both comps !!1!!11
         else:
             self.ystarx = ystar[0]
@@ -231,7 +231,7 @@ def eval_costfunc(V=None, W=None, R=None, cmat=None, ystar=None,
     """
 
     def _dywdy(t, V=None):
-        cvel = np.load(veldict[tmesh[t]]+'.npy')
+        cvel = np.load(veldict[t]+'.npy')
         delty = ystar(t) - lau.mm_dnssps(cmat, cvel)
         if V is None:
             return np.dot(delty.T, lau.mm_dnssps(W, delty))
@@ -241,7 +241,7 @@ def eval_costfunc(V=None, W=None, R=None, cmat=None, ystar=None,
     def _uru(t):
         if not penau:
             return 0
-        cvel = np.load(veldict[tmesh[t]]+'.npy')
+        cvel = np.load(veldict[t]+'.npy')
         if R is None and tbmat is not None:
             try:
                 curfb = np.dot(np.load(fbftdict[t]['mtxtb']+'.npy').T, cvel)

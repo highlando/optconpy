@@ -24,6 +24,6 @@ optcon_nse(N=25, Nts=64*scaletest, nu=0.5e-2, clearprvveldata=True,
            closed_loop=closed_loop, stst_control=stst_control,
            ini_vel_stokes=True, t0=0.0, tE=0.1*scaletest,
            outernwtnstps=outernwtnstps,
-           linearized_nse=True,
+           # linearized_nse=True,
            # stokes_flow=True,
            nwtn_adi_dict=nwtn_adi_dict)
