@@ -1,4 +1,5 @@
 from optcont_main import optcon_nse
+import dolfin
 
 closed_loop = 1
 stst_control = 0
@@ -16,14 +17,22 @@ nwtn_adi_dict = dict(adi_max_steps=300,
                      full_upd_norm_check=False,
                      check_lyap_res=False)
 
-# curnwtnstpdict = {None: {'v': None,
-#                          'mtxtb': None,
-#                          'w': None}}
+alphau = 1e-9
+gamma = 1e-3
+ystarstr = ['0', '0']
+# ystarstr = ['-0.1*sin(5*3.14*t)', '0.1*sin(5*3.14*t)']
+
+ystar = [dolfin.Expression(ystarstr[0], t=0),
+         dolfin.Expression(ystarstr[1], t=0)]
+
 scaletest = 0.2*1e1
 optcon_nse(N=25, Nts=64*scaletest, nu=0.5e-2, clearprvveldata=True,
            closed_loop=closed_loop, stst_control=stst_control,
            ini_vel_stokes=True, t0=0.0, tE=0.1*scaletest,
            outernwtnstps=outernwtnstps,
-           # linearized_nse=True,
+           linearized_nse=True,
+           alphau=alphau,
+           gamma=gamma,
+           ystar=ystar,
            # stokes_flow=True,
            nwtn_adi_dict=nwtn_adi_dict)

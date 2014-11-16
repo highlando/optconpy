@@ -32,7 +32,7 @@ class ContParams():
     - weighting matrices (if None, then massmatrix)
     - desired output
     """
-    def __init__(self, odcoo, ystar=None):
+    def __init__(self, odcoo, gamma=1e-3, alphau=1e-6, ystar=None):
         if ystar is None:
             self.ystarx = dolfin.Expression('-0.1*sin(5*3.14*t)', t=0)
             self.ystary = dolfin.Expression('0.1*sin(5*3.14*t)', t=0)
@@ -47,9 +47,9 @@ class ContParams():
 
         self.R = None
         # regularization parameter
-        self.alphau = 1e-9
+        self.alphau = alphau
         # weighting of the penalization of the terminal value
-        self.gamma = 1e-3
+        self.gamma = gamma
         self.V = None
         self.W = None
 
@@ -273,7 +273,8 @@ def optcon_nse(problemname='drivencavity',
                closed_loop=True,
                outernwtnstps=1,
                t0=None, tE=None,
-               use_ric_ini_nu=None, alphau=None,
+               use_ric_ini_nu=None,
+               alphau=1e-9, gamma=1e-3,
                spec_tip_dict=None,
                nwtn_adi_dict=None,
                linearized_nse=False,
@@ -362,11 +363,9 @@ def optcon_nse(problemname='drivencavity',
 # Prepare for control
 #
 
-    contp = ContParams(femp['odcoo'], ystar)
+    contp = ContParams(femp['odcoo'], ystar=ystar, alphau=alphau, gamma=gamma)
     # casting some parameters
     NY, NU = contp.NY, contp.NU
-    if alphau is not None:
-        contp.alphau = alphau
 
     contsetupstr = problemname + '__NV{0}NU{1}NY{2}'.format(NV, NU, NY)
 
