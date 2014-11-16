@@ -1,12 +1,12 @@
 import matplotlib.pyplot as plt
 
 
-def plot_optcont_json(jsonfile, fname='notspecified'):
+def plot_optcont_json(jsonfile, fname='notspecified', extra=None):
     outputplot(jsonfile['tmesh'], jsonfile['ycomp'],
-               ystar=jsonfile['ystar'], fname=fname)
+               ystar=jsonfile['ystar'], fname=fname, extra=extra)
 
 
-def outputplot(tmesh, ycomp, ystar=None, fname='notspecified'):
+def outputplot(tmesh, ycomp, ystar=None, extra=None, fname='notspecified'):
     from matplotlib2tikz import save as tikz_save
 
     if ystar is not None:
@@ -20,6 +20,7 @@ def outputplot(tmesh, ycomp, ystar=None, fname='notspecified'):
 
     tikz_save(fname + '.tikz',
               figureheight='\\figureheight',
-              figurewidth='\\figurewidth'
+              figurewidth='\\figurewidth',
+              extra=extra
               )
     plt.show(block=False)
