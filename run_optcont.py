@@ -3,7 +3,7 @@ import dolfin
 
 from dolfin_navier_scipy.data_output_utils import logtofile
 
-logtofile('logfile_rev1')
+# logtofile('logfile_rev1')
 
 closed_loop = 1
 stst_control = 0
