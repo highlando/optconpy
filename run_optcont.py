@@ -3,7 +3,7 @@ import dolfin
 
 from dolfin_navier_scipy.data_output_utils import logtofile
 
-logtofile('logfile1')
+logtofile('logfile_rev1')
 
 closed_loop = 1
 stst_control = 0
@@ -23,8 +23,8 @@ nwtn_adi_dict = dict(adi_max_steps=300,
 
 alphau = 1e-9
 gamma = 1e-1
-ystarstr = ['0', '0']
-# ystarstr = ['-0.1*sin(5*3.14*t)', '0.1*sin(5*3.14*t)']
+# ystarstr = ['0', '0']
+ystarstr = ['-0.1*sin(5*3.14*t)', '0.1*sin(5*3.14*t)']
 
 ystar = [dolfin.Expression(ystarstr[0], t=0),
          dolfin.Expression(ystarstr[1], t=0)]

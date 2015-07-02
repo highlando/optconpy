@@ -336,6 +336,7 @@ def optcon_nse(problemname='drivencavity',
      invinds, bcinds, bcvals) = dts.condense_sysmatsbybcs(stokesmats,
                                                           femp['diribcs'])
 
+    print 'Dimension of the div matrix: ', stokesmatsc['J'].shape
     # pressure freedom and dirichlet reduced rhs
     rhsd_vfrc = dict(fpr=rhsd_vf['fp'], fvc=rhsd_vf['fv'][invinds, ])
 
@@ -348,8 +349,9 @@ def optcon_nse(problemname='drivencavity',
 
     soldict = stokesmatsc  # containing A, J, JT
     soldict.update(femp)  # adding V, Q, invinds, diribcs
-    soldict.update(rhsd_vfrc)  # adding fvc, fpr
-    soldict.update(fv_stbc=rhsd_stbc['fv'], fp_stbc=rhsd_stbc['fp'],
+    # soldict.update(rhsd_vfrc)  # adding fvc, fpr
+    soldict.update(fv=rhsd_stbc['fv']+rhsd_vfrc['fvc'],
+                   fp=rhsd_stbc['fp']+rhsd_vfrc['fpr'],
                    N=N, nu=nu,
                    trange=tip['tmesh'],
                    get_datastring=get_datastr,
