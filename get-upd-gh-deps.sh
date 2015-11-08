@@ -3,18 +3,27 @@
 # use this script by calling `source get-upd-gh-deps.sh` in the console
 
 mkdir dolfin_navier_scipy
-touch dolfin_navier_scipy/__init__.py
-wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/dolfin_to_sparrays.py dolfin_navier_scipy/dolfin_to_sparrays.py
-wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/data_output_utils.py dolfin_navier_scipy/data_output_utils.py
-wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/data_output_utils.py dolfin_navier_scipy/stokes_navier_utils.py
-wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/data_output_utils.py dolfin_navier_scipy/problem_setups.py
+cd dolfin_navier_scipy
+rm dolfin_to_sparrays.py data_output_utils.py problem_setups.py stokes_navier_utils.py
+touch __init__.py
+wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/dolfin_to_sparrays.py
+wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/data_output_utils.py 
+wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/problem_setups.py
+wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/stokes_navier_utils.py
+cd ..
 
 mkdir sadptprj_riclyap_adi
-touch sadptprj_riclyap_adi/__init__.py
-wget https://raw.githubusercontent.com/highlando/sadptprj_riclyap_adi/master/lin_alg_utils.py sadptprj_riclyap_adi/lin_alg_utils.py
-wget https://raw.githubusercontent.com/highlando/sadptprj_riclyap_adi/master/lin_alg_utils.py sadptprj_riclyap_adi/proj_ric_utils.py
+cd sadptprj_riclyap_adi
+rm lin_alg_utils.py proj_ric_utils.py
+touch __init__.py
+wget https://raw.githubusercontent.com/highlando/sadptprj_riclyap_adi/master/lin_alg_utils.py
+wget https://raw.githubusercontent.com/highlando/sadptprj_riclyap_adi/master/proj_ric_utils.py
+cd ..
 
 mkdir distr_control_fenics
-touch distr_control_fenics/__init__.py
-wget https://raw.githubusercontent.com/highlando/distr_control_fenics/master/cont_obs_utils.py distr_control_fenics/cont_obs_utils.py
+cd distr_control_fenics/
+rm cont_obs_utils.py 
+touch __init__.py
+wget https://raw.githubusercontent.com/highlando/distr_control_fenics/master/cont_obs_utils.py
+cd ..
 

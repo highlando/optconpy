@@ -25,3 +25,9 @@ and my own python modules
  * [`dolfin_navier_scipy`](www.github.com/highlando/dolfin_navier_scipy)
  * [`sadptprj_riclyap_adi`](www.github.com/highlando/sadptprj_riclyap_adi)
  * [`distr_control_fenics`](www.github.com/highlando/distr_control_fenics)
+
+The necessary files from my github repos are automatically downloaded and made available via the script `get-upd-gh-deps.sh` via
+```
+source get-upd-gh-deps.sh
+```
+.
