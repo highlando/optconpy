@@ -2,8 +2,7 @@ from optcont_main import optcon_nse
 import dolfin
 
 from dolfin_navier_scipy.data_output_utils import logtofile
-
-# logtofile('logfile_rev1_gamma1e-7')
+logtofile('logfile_rev1_gamma1e-7')
 
 closed_loop = 1
 stst_control = 0
@@ -21,13 +20,13 @@ nwtn_adi_dict = dict(adi_max_steps=300,
                      full_upd_norm_check=False,
                      check_lyap_res=False)
 
-alphau = 1e-11
+alphau = 1e-07
 gamma = 1e-1
 # ystarstr = ['0', '0']
 ystarstr = ['-0.1*sin(5*3.14*t)', '0.1*sin(5*3.14*t)']
 
-ystar = [dolfin.Expression(ystarstr[0], t=0),
-         dolfin.Expression(ystarstr[1], t=0)]
+ystar = [dolfin.Expression(ystarstr[0], t=0, degree=2),
+         dolfin.Expression(ystarstr[1], t=0, degree=2)]
 
 scaletest = 0.2*1e1
 optcon_nse(N=25, Nts=64*scaletest, nu=0.5e-2, clearprvveldata=True,
