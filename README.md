@@ -18,16 +18,14 @@ in which the data and the results are stored.
 The computed results are stored as *json* files that are input to the post processing and plotting routines from the submodule `plot_utils`.
 
 ## Dependencies:
- * Numpy 1.8.2
- * Scipy 0.13.2
- * dolfin 1.3.0 - the dolfin interface to [FEniCS](www.fenicsproject.org)
+ * Numpy 1.8.2; 1.11.0
+ * Scipy 0.13.2; 0.17.0-1
+ * dolfin 1.3.0; 2016.2.0.dev0 - the dolfin interface to [FEniCS](www.fenicsproject.org)
 and my own python modules
  * [`dolfin_navier_scipy`](www.github.com/highlando/dolfin_navier_scipy)
  * [`sadptprj_riclyap_adi`](www.github.com/highlando/sadptprj_riclyap_adi)
  * [`distr_control_fenics`](www.github.com/highlando/distr_control_fenics)
 
-The necessary files from my github repos are automatically downloaded and made available via the script `get-upd-gh-deps.sh` via
-```
-source get-upd-gh-deps.sh
-```
-.
+### Get the home-brew dependencies
+
+ * the branch `deps-included` has the home-brew python modules already included

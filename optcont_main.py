@@ -20,9 +20,6 @@ import solve_dae_ric as sdr
 # import debugstuff as dbs
 
 
-dolfin.parameters.linear_algebra_backend = 'uBLAS'
-
-
 class ContParams():
     """define the parameters of the control problem
 
