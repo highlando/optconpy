@@ -27,10 +27,5 @@ and my own python modules
  * [`distr_control_fenics`](www.github.com/highlando/distr_control_fenics)
 
 ### Get the home-brew dependencies
- * the branch `deps-included` has the home-brew python modules already included
 
-The necessary files from my github repos are automatically downloaded and made available via the script `get-upd-gh-deps.sh` via
-```
-source get-upd-gh-deps.sh
-```
-.
+ * the branch `deps-included` has the home-brew python modules already included
