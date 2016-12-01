@@ -3,9 +3,9 @@
 
 mkdir dolfin_navier_scipy
 cd dolfin_navier_scipy
-rm *.py
+rm data_output_utils.py stokes_navier_utils.py problem_setups.py dolfin_to_sparrays.py
 wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/dolfin_navier_scipy/data_output_utils.py
-wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/dolfin_navier_scipy/get_exp_nsmats.py
+wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/dolfin_navier_scipy/stokes_navier_utils.py
 wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/dolfin_navier_scipy/problem_setups.py
 wget https://raw.githubusercontent.com/highlando/dolfin_navier_scipy/master/dolfin_navier_scipy/dolfin_to_sparrays.py
 touch __init__.py

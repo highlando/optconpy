@@ -4,10 +4,21 @@ import scipy.sparse as sps
 import scipy.sparse.linalg as spsla
 
 import sadptprj_riclyap_adi.lin_alg_utils as lau
+import dolfin_navier_scipy.dolfin_to_sparrays as dts
 
 from dolfin import dx, inner
 
-dolfin.parameters.linear_algebra_backend = "uBLAS"
+# dolfin.parameters.linear_algebra_backend = "Eigen"
+
+__all__ = ['get_inp_opa',
+           'get_mout_opa',
+           'app_difffreeproj',
+           'get_regularized_c',
+           'Cast1Dto2D',
+           'get_rightinv',
+           'extract_output',
+           'CharactFun',
+           'get_pavrg_onsubd']
 
 
 def get_inp_opa(cdcoo=None, NU=8, V=None, xcomp=0):
@@ -28,7 +39,7 @@ def get_inp_opa(cdcoo=None, NU=8, V=None, xcomp=0):
     cdom = ContDomain(cdcoo)
 
     v = dolfin.TestFunction(V)
-    v_one = dolfin.Expression(('1', '1'))
+    v_one = dolfin.Expression(('1', '1'), element=V.ufl_element())
     v_one = dolfin.interpolate(v_one, V)
 
     BX, BY = [], []
@@ -77,18 +88,23 @@ def get_mout_opa(odcoo=None, NY=8, V=None, NV=20):
     odom = ContDomain(odcoo)
 
     v = dolfin.TestFunction(V)
-    voney = dolfin.Expression(('0', '1'))
-    vonex = dolfin.Expression(('1', '0'))
+    voney = dolfin.Expression(('0', '1'), element=V.ufl_element())
+    vonex = dolfin.Expression(('1', '0'), element=V.ufl_element())
     voney = dolfin.interpolate(voney, V)
     vonex = dolfin.interpolate(vonex, V)
 
     # factor to compute the average via \bar u = 1/h \int_0^h u(x) dx
     Ci = 1.0 / (odcoo['xmax'] - odcoo['xmin'])
 
-    omega_y = dolfin.RectangleMesh(odcoo['xmin'], odcoo['ymin'],
-                                   odcoo['xmax'], odcoo['ymax'],
-                                   NV/5, NY-1)
-
+    try:
+        omega_y = dolfin.RectangleMesh(odcoo['xmin'], odcoo['ymin'],
+                                       odcoo['xmax'], odcoo['ymax'],
+                                       NV/5, NY-1)
+    except TypeError:  # e.g. in newer dolfin versions
+        omega_y = dolfin.\
+            RectangleMesh(dolfin.Point(odcoo['xmin'], odcoo['ymin']),
+                          dolfin.Point(odcoo['xmax'], odcoo['ymax']),
+                          NV/5, NY-1)
     y_y = dolfin.VectorFunctionSpace(omega_y, 'CG', 1)
     # vone_yx = dolfin.interpolate(vonex, y_y)
     # vone_yy = dolfin.interpolate(voney, y_y)
@@ -103,9 +119,7 @@ def get_mout_opa(odcoo=None, NY=8, V=None, NV=20):
     u = dolfin.TrialFunction(V)
 
     MP = dolfin.assemble(inner(v, u) * charfun * dx)
-
-    rows, cols, values = MP.data()
-    MPa = sps.dia_matrix(sps.csr_matrix((values, cols, rows)))
+    MPa = dolfin.as_backend_type(MP).sparray()
 
     checkf = MPa.diagonal()
     dofs_on_subd = np.where(checkf > 0)[0]
@@ -261,11 +275,10 @@ class L2abLinBas():
         yu = dolfin.TrialFunction(Y)
         my = yv * yu * dx
         my = dolfin.assemble(my)
-        rows, cols, values = my.data()
-        return sps.csr_matrix((values, cols, rows))
+        return dolfin.as_backend_type(my).sparray()
 
 
-class Cast1Dto2D(dolfin.Expression):
+def Cast1Dto2D(u, cdom, vcomp=None, xcomp=0, degree=2):
     """ casts a function u defined on [u.a, u.b]
 
     into the f[comp] of an expression
@@ -274,34 +287,37 @@ class Cast1Dto2D(dolfin.Expression):
     and simply extruding into the other direction
     """
 
-    def __init__(self, u, cdom, vcomp=None, xcomp=0):
-        # control 1D basis function
-        self.u = u
-        # domain of control
-        self.cdom = cdom
-        # component of the value to be set as u(s)
-        self.vcomp = vcomp
-        # component of x to be considered as s coordinate
-        self.xcomp = xcomp
-        # transformation of the intervals [cd.xmin, cd.xmax] -> [a, b]
-        # via s = m*x + d
-        self.m = (self.u.b - self.u.a) / \
-            (cdom.maxxy[self.xcomp] - cdom.minxy[self.xcomp])
-        self.d = self.u.b - self.m * cdom.maxxy[self.xcomp]
+    # control 1D basis function
+    u = u
+    # domain of control
+    cdom = cdom
+    # component of the value to be set as u(s)
+    vcomp = vcomp
+    # component of x to be considered as s coordinate
+    xcomp = xcomp
+    # transformation of the intervals [cd.xmin, cd.xmax] -> [a, b]
+    # via s = m*x + d
+    m = (u.b - u.a) / \
+        (cdom.maxxy[xcomp] - cdom.minxy[xcomp])
+    d = u.b - m * cdom.maxxy[xcomp]
 
-    def eval(self, value, x):
-        if self.cdom.inside(x, False):
-            if self.xcomp is None:
-                value[:] = self.u.evaluate(self.m * x[self.xcomp] + self.d)
+    class IDtoIIDExpr(dolfin.Expression):
+
+        def eval(self, value, x):
+            if cdom.inside(x, False):
+                if xcomp is None:
+                    value[:] = u.evaluate(m * x[xcomp] + d)
+                else:
+                    value[:] = 0
+                    value[vcomp] = u.evaluate(
+                        m * x[xcomp] + d)
             else:
                 value[:] = 0
-                value[self.vcomp] = self.u.evaluate(
-                    self.m * x[self.xcomp] + self.d)
-        else:
-            value[:] = 0
 
-    def value_shape(self):
-        return (2,)
+        def value_shape(self):
+            return (2,)
+
+    return IDtoIIDExpr(degree=degree)
 
 
 def get_rightinv(C):
@@ -393,28 +409,27 @@ def extract_output(strdict=None, tmesh=None, c_mat=None,
     return yscomplist, ystarlist
 
 
-class CharactFun(dolfin.Expression):
+def CharactFun(subdom, degree=2):
     """ characteristic function of subdomain """
-    def __init__(self, subdom):
-        self.subdom = subdom
+    class xifunexp(dolfin.Expression):
 
-    def eval(self, value, x):
-        if self.subdom.inside(x, False):
-            value[:] = 1
-        else:
-            value[:] = 0
+        def eval(self, value, x):
+            if subdom.inside(x, False):
+                value[:] = 1
+            else:
+                value[:] = 0
 
-    # def value_shape(self):
-    #     return (2,)
+    return xifunexp(degree=degree)
 
 
-def get_pavrg_onsubd(odcoo=None, Q=None):
+def get_pavrg_onsubd(odcoo=None, Q=None, ppin=None):
     """assemble matrix that returns the pressure average over a subdomain
 
     """
 
     odom = ContDomain(odcoo)
     q = dolfin.TrialFunction(Q)
+    p = dolfin.TestFunction(Q)
 
     # factor to compute the average via \bar u = 1/h \int_0^h u(x) dx
     Ci = 1.0 / ((odcoo['xmax'] - odcoo['xmin']) *
@@ -422,6 +437,13 @@ def get_pavrg_onsubd(odcoo=None, Q=None):
 
     charfun = CharactFun(odom)
 
-    cp = dolfin.assemble(Ci * q * charfun * dx)
+    # TODO: no need to have `p` and then sum up all rows
+    # TODO: integrate over subdomain rather than using `charfun`
+    cp = dolfin.assemble(Ci * p * q * charfun * dx)
+    CP = dts.mat_dolfin2sparse(cp)
+    ccp = sps.csc_matrix(CP.sum(axis=0))
 
-    return np.atleast_2d(cp.array()[:-1])
+    if ppin is None:
+        return ccp  # np.atleast_2d(cp.array())
+    else:
+        raise UserWarning('Need to implement/specify the pinned pressure')

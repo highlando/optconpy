@@ -234,7 +234,10 @@ def apply_sqrt_fromright(M, rhsa, output=None):
         the sqrt of the inverse of `M` applied to `rhsa` from the left
 
     """
-    Z = scipy.linalg.cholesky(M.todense())
+    if sps.isspmatrix(M):
+        Z = scipy.linalg.cholesky(M.todense())
+    else:
+        Z = scipy.linalg.cholesky(M)
     # R = Z.T*Z  <-> R^-1 = Z^-1*Z.-T
     if output == 'sparse':
         return sps.csc_matrix(rhsa * Z)

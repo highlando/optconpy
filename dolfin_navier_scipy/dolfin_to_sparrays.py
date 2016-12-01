@@ -4,7 +4,10 @@ import scipy.sparse as sps
 
 from dolfin import dx, grad, div, inner
 
-dolfin.parameters.linear_algebra_backend = "uBLAS"
+try:
+    dolfin.parameters.linear_algebra_backend = "Eigen"
+except RuntimeError:
+    dolfin.parameters.linear_algebra_backend = "uBLAS"
 
 __all__ = ['ass_convmat_asmatquad',
            'get_stokessysmats',
@@ -44,8 +47,11 @@ def mat_dolfin2sparse(A):
     """get the csr matrix representing an assembled linear dolfin form
 
     """
-    rows, cols, values = A.data()
-    return sps.csr_matrix((values, cols, rows))
+    try:
+        return dolfin.as_backend_type(A).sparray()
+    except RuntimeError:  # `dolfin <= 1.5+` with `'uBLAS'` support
+        rows, cols, values = A.data()
+        return sps.csr_matrix((values, cols, rows))
 
 
 def ass_convmat_asmatquad(W=None, invindsw=None):
@@ -110,12 +116,10 @@ def ass_convmat_asmatquad(W=None, invindsw=None):
         nxi = dolfin.assemble(v * bi.dx(0) * vt * dx)
         nyi = dolfin.assemble(v * bi.dx(1) * vt * dx)
 
-        rows, cols, values = nxi.data()
-        nxim = sps.csr_matrix((values, cols, rows))
+        nxim = mat_dolfin2sparse(nxi)
         nxim.eliminate_zeros()
 
-        rows, cols, values = nyi.data()
-        nyim = sps.csr_matrix((values, cols, rows))
+        nyim = mat_dolfin2sparse(nyi)
         nyim.eliminate_zeros()
 
         # resorting of the arrays and inserting zero columns
@@ -213,20 +217,11 @@ def get_stokessysmats(V, Q, nu=None, bccontrol=False,
     MP = dolfin.assemble(mp)
 
     # Convert DOLFIN representation to scipy arrays
-    rows, cols, values = M.data()
-    Ma = sps.csr_matrix((values, cols, rows))
-
-    rows, cols, values = MP.data()
-    MPa = sps.csr_matrix((values, cols, rows))
-
-    rows, cols, values = A.data()
-    Aa = sps.csr_matrix((values, cols, rows))
-
-    rows, cols, values = Grad.data()
-    JTa = sps.csr_matrix((values, cols, rows))
-
-    rows, cols, values = Div.data()
-    Ja = sps.csr_matrix((values, cols, rows))
+    Ma = mat_dolfin2sparse(M)
+    MPa = mat_dolfin2sparse(MP)
+    Aa = mat_dolfin2sparse(A)
+    JTa = mat_dolfin2sparse(Grad)
+    Ja = mat_dolfin2sparse(Div)
 
     stokesmats = {'M': Ma,
                   'A': Aa,
@@ -246,11 +241,11 @@ def get_stokessysmats(V, Q, nu=None, bccontrol=False,
             Gamma.mark(bparts, 0)
 
             # Robin boundary form
-            arob = dolfin.inner(u, v) * dolfin.ds(0)
-            brob = dolfin.inner(v, bcfun) * dolfin.ds(0)
+            arob = dolfin.inner(u, v) * dolfin.ds(0, subdomain_data=bparts)
+            brob = dolfin.inner(v, bcfun) * dolfin.ds(0, subdomain_data=bparts)
 
-            amatrob = dolfin.assemble(arob, exterior_facet_domains=bparts)
-            bmatrob = dolfin.assemble(brob, exterior_facet_domains=bparts)
+            amatrob = dolfin.assemble(arob)  # , exterior_facet_domains=bparts)
+            bmatrob = dolfin.assemble(brob)  # , exterior_facet_domains=bparts)
 
             amatrob = mat_dolfin2sparse(amatrob)
             amatrob.eliminate_zeros()
@@ -308,12 +303,10 @@ def get_convmats(u0_dolfun=None, u0_vec=None, V=None, invinds=None,
     f3 = dolfin.assemble(f3)
 
     # Convert DOLFIN representation to scipy arrays
-    rows, cols, values = n1.data()
-    N1 = sps.csr_matrix((values, cols, rows))
+    N1 = mat_dolfin2sparse(n1)
     N1.eliminate_zeros()
 
-    rows, cols, values = n2.data()
-    N2 = sps.csr_matrix((values, cols, rows))
+    N2 = mat_dolfin2sparse(n2)
     N2.eliminate_zeros()
 
     fv = f3.array()
@@ -391,7 +384,10 @@ def get_convvec(u0_dolfun=None, V=None, u0_vec=None, femp=None,
     ConvForm = inner(grad(u0) * u0, v) * dx
 
     ConvForm = dolfin.assemble(ConvForm)
-    ConvVec = ConvForm.array()[invinds]
+    if invinds is not None:
+        ConvVec = ConvForm.array()[invinds]
+    else:
+        ConvVec = ConvForm.array()
     ConvVec = ConvVec.reshape(len(ConvVec), 1)
 
     return ConvVec
@@ -572,7 +568,9 @@ def expand_vp_dolfunc(V=None, Q=None, invinds=None, diribcs=None, vp=None,
 
     v = dolfin.Function(V)
 
-    if diribcs is None or len(vc) > len(invinds):
+    if vc.size > V.dim():
+        raise UserWarning('The dimension of the vector must no exceed V.dim')
+    elif diribcs is None or len(vc) == V.dim():
         # we assume that the boundary conditions are already contained in vc
         ve = vc
     else:
@@ -581,6 +579,7 @@ def expand_vp_dolfunc(V=None, Q=None, invinds=None, diribcs=None, vp=None,
         for bc in diribcs:
             bcdict = bc.get_boundary_values()
             ve[bcdict.keys(), 0] = bcdict.values()
+
         ve[invinds] = vc
 
     if pc is not None:
@@ -676,7 +675,7 @@ def get_dof_coors(V, invinds=None):
 
     # unidofs, uniinds = np.unique(dofar, return_index=True)
 
-    coorfun = dolfin.Expression(('x[0]', 'x[1]'))
+    coorfun = dolfin.Expression(('x[0]', 'x[1]'), element=V.ufl_element())
     coorfun = dolfin.interpolate(coorfun, V)
 
     xinds = V.sub(0).dofmap().dofs()

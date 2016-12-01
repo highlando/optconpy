@@ -216,11 +216,11 @@ def drivcav_fems(N, vdgree=2, pdgree=1, scheme=None, bccontrol=None):
 
     mesh = dolfin.UnitSquareMesh(N, N)
     if scheme == 'CR':
-        print 'we use Crouzieux-Raviart elements !'
+        # print 'we use Crouzieux-Raviart elements !'
         V = dolfin.VectorFunctionSpace(mesh, "CR", 1)
         Q = dolfin.FunctionSpace(mesh, "DG", 0)
     if scheme == 'TH':
-        print 'we use Taylor-Hood elements !'
+        # print 'we use Taylor-Hood elements !'
         V = dolfin.VectorFunctionSpace(mesh, "CG", 2)
         Q = dolfin.FunctionSpace(mesh, "CG", 1)
     else:
@@ -303,7 +303,7 @@ def cyl_fems(refinement_level=2, vdgree=2, pdgree=1, scheme=None,
          * `fp`: right hand side of the continuity equation
          * `charlen`: characteristic length of the setup
          * `odcoo`: dictionary with the coordinates of the \
-                 domain of observatio
+                 domain of observation
          * `cdcoo`: dictionary with the coordinates of the domain of control
          * `uspacedep`: int that specifies in what spatial direction Bu \
                 changes. The remaining is constant
@@ -415,6 +415,30 @@ def cyl_fems(refinement_level=2, vdgree=2, pdgree=1, scheme=None,
             else:
                 return on_boundary and r < radius + bmarg
 
+    # Outflow boundary
+    class OutflowBoundary(dolfin.SubDomain):
+        def inside(self, x, on_boundary):
+            return on_boundary and x[0] > xmax - bmarg
+
+    # # meshes are available from https://launchpad.net/nsbench
+    # Load mesh
+    if refinement_level > 9:
+        raise RuntimeError("No mesh available for refinement level {0}".
+                           format(refinement_level))
+    try:
+        mesh = dolfin.Mesh("mesh/cylinder_%d.xml.gz" % refinement_level)
+    except RuntimeError:
+        mesh = dolfin.Mesh("mesh/cylinder_%d.xml" % refinement_level)
+
+    # scheme = 'CR'
+    if scheme == 'CR':
+        # print 'we use Crouzieux-Raviart elements !'
+        V = dolfin.VectorFunctionSpace(mesh, "CR", 1)
+        Q = dolfin.FunctionSpace(mesh, "DG", 0)
+    else:
+        V = dolfin.VectorFunctionSpace(mesh, "CG", vdgree)
+        Q = dolfin.FunctionSpace(mesh, "CG", pdgree)
+
     if bccontrol:
         def _csf(s, nvec):
             return ((1. - 0.5*(1 + np.sin(s*2*np.pi + 0.5*np.pi)))*nvec[0],
@@ -428,29 +452,29 @@ def cyl_fems(refinement_level=2, vdgree=2, pdgree=1, scheme=None,
                 inbbx = insidebbox(x, whichbox=1)
                 return on_boundary and r < radius + bmarg and inbbx
 
-        class ContShapeOne(dolfin.Expression):
-            def __init__(self):
-                self.xs = []
+        def cont_shape_one(element=None):
+            class ContShapeOne(dolfin.Expression):
 
-            def eval(self, value, x):
-                self.xs.append([x[0], x[1]])
-                xvec = x - centvec.flatten()
-                aang = np.arccos(np.dot(xvec, b1base)
-                                 / (np.linalg.norm(xvec)
-                                    * np.linalg.norm(b1base)))
-                s = aang/extensrad
+                def eval(self, value, x):
+                    xvec = x - centvec.flatten()
+                    aang = np.arccos(np.dot(xvec, b1base)
+                                     / (np.linalg.norm(xvec)
+                                        * np.linalg.norm(b1base)))
+                    s = aang/extensrad
 
-                vls = _csf(s, b1normal)
-                value[0], value[1] = vls[0], vls[1]
-                if verbose:
-                    dx = x[0] - xcenter
-                    dy = x[1] - ycenter
-                    r = dolfin.sqrt(dx*dx + dy*dy)
-                    print x - centvec.flatten(), ': s=', s, ': r=', r, \
-                        ':', np.linalg.norm(np.array(vls))
+                    vls = _csf(s, b1normal)
+                    value[0], value[1] = vls[0], vls[1]
+                    if verbose:
+                        dx = x[0] - xcenter
+                        dy = x[1] - ycenter
+                        r = dolfin.sqrt(dx*dx + dy*dy)
+                        print x - centvec.flatten(), ': s=', s, ': r=', r, \
+                            ':', np.linalg.norm(np.array(vls))
 
-            def value_shape(self):
-                return (2,)
+                def value_shape(self):
+                    return (2,)
+
+            return ContShapeOne(element=element)
 
         class ContBoundaryTwo(dolfin.SubDomain):
             def inside(self, x, on_boundary):
@@ -460,56 +484,34 @@ def cyl_fems(refinement_level=2, vdgree=2, pdgree=1, scheme=None,
                 inbbx = insidebbox(x, whichbox=2)
                 return on_boundary and r < radius + bmarg and inbbx
 
-        class ContShapeTwo(dolfin.Expression):
-            def __init__(self):
-                self.xs = []
+        def cont_shape_two(element=None):
+            class ContShapeTwo(dolfin.Expression):
+                def eval(self, value, x):
+                    xvec = x - centvec.flatten()
+                    aang = np.arccos(np.dot(xvec, b2base)
+                                     / (np.linalg.norm(xvec)
+                                        * np.linalg.norm(b2base)))
+                    s = aang/extensrad
 
-            def eval(self, value, x):
-                self.xs.append([x[0], x[1]])
-                xvec = x - centvec.flatten()
-                aang = np.arccos(np.dot(xvec, b2base)
-                                 / (np.linalg.norm(xvec)
-                                    * np.linalg.norm(b2base)))
-                s = aang/extensrad
+                    vls = _csf(s, b2normal)
+                    value[0], value[1] = vls[0], vls[1]
+                    if verbose:
+                        dx = x[0] - xcenter
+                        dy = x[1] - ycenter
+                        r = dolfin.sqrt(dx*dx + dy*dy)
+                        print x - centvec.flatten(), ': s=', s, ': r=', r, \
+                            ':', np.linalg.norm(np.array(vls))
 
-                vls = _csf(s, b2normal)
-                value[0], value[1] = vls[0], vls[1]
-                if verbose:
-                    dx = x[0] - xcenter
-                    dy = x[1] - ycenter
-                    r = dolfin.sqrt(dx*dx + dy*dy)
-                    print x - centvec.flatten(), ': s=', s, ': r=', r, \
-                        ':', np.linalg.norm(np.array(vls))
-
-            def value_shape(self):
-                return (2,)
+                def value_shape(self):
+                    return (2,)
+            return ContShapeTwo(element=element)
 
         bcsubdoms = [ContBoundaryOne, ContBoundaryTwo]
-        bcshapefuns = [ContShapeOne(), ContShapeTwo()]
+        bcshapefuns = [cont_shape_one(element=V.ufl_element()),
+                       cont_shape_two(element=V.ufl_element())]
     else:
         bcsubdoms = [None, None]
         bcshapefuns = [None, None]
-
-    # Outflow boundary
-    class OutflowBoundary(dolfin.SubDomain):
-        def inside(self, x, on_boundary):
-            return on_boundary and x[0] > xmax - bmarg
-
-    # # meshes are available from https://launchpad.net/nsbench
-    # Load mesh
-    if refinement_level > 9:
-        raise RuntimeError("No mesh available for refinement level {0}".
-                           format(refinement_level))
-    mesh = dolfin.Mesh("mesh/cylinder_%d.xml" % refinement_level)
-
-    # scheme = 'CR'
-    if scheme == 'CR':
-        print 'we use Crouzieux-Raviart elements !'
-        V = dolfin.VectorFunctionSpace(mesh, "CR", 1)
-        Q = dolfin.FunctionSpace(mesh, "DG", 0)
-    else:
-        V = dolfin.VectorFunctionSpace(mesh, "CG", vdgree)
-        Q = dolfin.FunctionSpace(mesh, "CG", pdgree)
 
     # dolfin.plot(mesh)
     # dolfin.interactive(True)
@@ -525,7 +527,7 @@ def cyl_fems(refinement_level=2, vdgree=2, pdgree=1, scheme=None,
 
     # Create inflow boundary condition
     g0 = dolfin.Expression(('4*(x[1]*(ymax-x[1]))/(ymax*ymax)', '0.0'),
-                           ymax=ymax)
+                           ymax=ymax, element=V.ufl_element())
     bc0 = dolfin.DirichletBC(V, g0, InflowBoundary())
 
     # Create no-slip boundary condition

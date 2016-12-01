@@ -239,14 +239,14 @@ def get_mTzzTtb(MT, Z, tB, output=None):
         return MT*(np.dot(Z, np.dot(Z.T, tB)))
 
 
-def proj_alg_ric_newtonadi(mmat=None, amat=None, jmat=None,
-                           bmat=None, wmat=None, z0=None, mtxoldb=None,
-                           transposed=False,
-                           nwtn_adi_dict=dict(adi_max_steps=150,
-                                              adi_newZ_reltol=1e-5,
-                                              nwtn_max_steps=14,
-                                              nwtn_upd_reltol=1e-8),
-                           **kw):
+def pymess_dae2_newtonadi(mmat=None, amat=None, jmat=None,
+                          bmat=None, wmat=None, z0=None, mtxoldb=None,
+                          transposed=False,
+                          nwtn_adi_dict=dict(adi_max_steps=150,
+                                             adi_newZ_reltol=1e-5,
+                                             nwtn_max_steps=14,
+                                             nwtn_upd_reltol=1e-8),
+                          **kw):
     """ solve the projected algebraic ricc via newton adi
 
     `M.T*X*A + A.T*X*M - M.T*X*B*B.T*X*M + J(Y) = -WW.T`
@@ -286,6 +286,123 @@ def proj_alg_ric_newtonadi(mmat=None, amat=None, jmat=None,
                 mtxb = mt * np.dot(znc, np.dot(znc.T, bmat))
             except ValueError:  # if bmat is sparse
                 mtxb = mt * np.dot(znc, znc.T * bmat)
+            mtxbt = mtxb.T
+            rhsadi = np.hstack([mtxb, wmat])
+        # to avoid a dense matrix we use the smw formula
+        # to compute (A-UV).-T
+        # for the factorization mTxg.T =  tb * mTxtb.T = U*V
+        # and we add the previous feedback:
+        if mtxoldb is not None:
+            mtxbt = mtxbt + mtxoldb.T
+
+        znn = solve_proj_lyap_stein(amat=at, mmat=mt, jmat=jmat,
+                                    wmat=rhsadi,
+                                    umat=bmat, vmat=mtxbt,
+                                    transposed=loctransposed,
+                                    nwtn_adi_dict=nwtn_adi_dict)['zfac']
+
+        if nwtn_adi_dict['full_upd_norm_check']:
+            if znc is None:  # there was no initial guess
+                znc = 0*znn
+            upd_fnorm = lau.comp_sqfnrm_factrd_diff(znn, znc)
+            upd_fnorm = np.sqrt(np.abs(upd_fnorm))
+
+        else:
+            if znc is None:  # there was no initial guess
+                znc = 0*znn
+            vec = np.random.randn(znn.shape[0], 1)
+            vecn1 = comp_diff_zzv(znn, znc, vec)
+            vec = np.random.randn(znn.shape[0], 1)
+            vecn2 = comp_diff_zzv(znn, znc, vec)
+            vec = np.random.randn(znn.shape[0], 1)
+            # to make the estimate relative
+            vecn3 = np.linalg.norm(np.dot(znn, np.dot(znn.T, vec)))
+            if (vecn2 + vecn1)/vecn3 < 8e-9:
+                upd_fnorm, nzn, nzc = lau.\
+                    comp_sqfnrm_factrd_diff(znn, znc, ret_sing_norms=True)
+                upd_fnorm_n = np.sqrt(np.abs(upd_fnorm) / np.abs(nzn))
+
+        nwtn_upd_fnorms.append(upd_fnorm_n)
+        try:
+            if np.allclose(upd_fnorm_n, upd_fnorm):
+                print 'no more change in the norm of the update... break'
+                break
+        except TypeError:
+            pass
+        if nwtn_adi_dict['full_upd_norm_check']:
+            upd_fnorm = upd_fnorm_n
+        elif (vecn2 + vecn1)/vecn3 < 8e-9:
+            upd_fnorm = upd_fnorm_n
+
+        try:
+            if nwtn_adi_dict['verbose']:
+                print ('Newton ADI step: {1} -- ' +
+                       'rel f norm of update: {0}').format(upd_fnorm,
+                                                           nwtn_stp + 1)
+                if not nwtn_adi_dict['full_upd_norm_check']:
+                    print ('btw, we decided whether to compute the actual ' +
+                           'norm on the base of estimates:')
+                    print '|| upd * vec || / || vec || = {0}'.format(vecn2)
+                    print '||Z*vec|| = {0}'.format(vecn3)
+
+        except KeyError:
+            pass    # no verbosity specified - nothing is shown
+
+        znc = znn
+        nwtn_stp += 1
+        if (upd_fnorm is not None
+                and upd_fnorm < nwtn_adi_dict['nwtn_upd_reltol']):
+            break
+
+    return dict(zfac=znn, nwtn_upd_fnorms=nwtn_upd_fnorms)
+
+
+def proj_alg_ric_newtonadi(mmat=None, amat=None, jmat=None,
+                           bmat=None, wmat=None, z0=None, mtxoldb=None,
+                           transposed=False,
+                           nwtn_adi_dict=dict(adi_max_steps=150,
+                                              adi_newZ_reltol=1e-5,
+                                              nwtn_max_steps=14,
+                                              nwtn_upd_reltol=1e-8),
+                           **kw):
+    """ solve the projected algebraic ricc via newton adi
+
+    `M.T*X*A + A.T*X*M - M.T*X*B*B.T*X*M + J(Y) = -WW.T`
+
+    `JXM = 0 and M.TXJ.T = 0`
+
+    If `mtxb` is given,
+    (e.g. as the feedback computed in a previous step of a Newton iteration),
+    the coefficient matrix with feedback
+
+    `A.T <- A.T - mtxb*b`
+
+    is considered
+
+    """
+
+    if transposed:
+        mt, at = mmat, amat
+    else:
+        mt, at = mmat.T, amat.T
+    loctransposed = True
+
+    if sps.isspmatrix(wmat):
+        wmat = np.array(wmat.todense())
+
+    znc = z0
+    nwtn_stp, upd_fnorm, upd_fnorm_n = 0, None, None
+    nwtn_upd_fnorms = []
+    # import pdb
+    # pdb.set_trace()
+
+    while nwtn_stp < nwtn_adi_dict['nwtn_max_steps']:
+
+        if znc is None:  # i.e., if z0 was None
+            rhsadi = wmat
+            mtxbt = None
+        else:
+            mtxb = mt * np.dot(znc, lau.mm_dnssps(znc.T, bmat))
             mtxbt = mtxb.T
             rhsadi = np.hstack([mtxb, wmat])
         # to avoid a dense matrix we use the smw formula
