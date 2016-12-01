@@ -1,0 +1,58 @@
+
+RELEASE INFO
+Description:	Ubuntu 16.04.1 LTS
+Release:	16.04
+Codename:	xenial
+
+KERNEL INFO
+operating system: GNU/Linux
+kernel name: Linux
+kernel release: 4.4.0-47-generic
+kernel version: #68-Ubuntu SMP Wed Oct 26 19:39:52 UTC 2016
+plattfrom type: x86_64 (64Bit)
+
+PROCESSOR INFO
+CPU type: Intel(R) Core(TM) i7-4600U CPU @ 2.10GHz
+number of physical CPUs: 1
+number of cores (virtual): 4
+Processor 1
+    number of physical cores:  2
+    cache size : 4096 KB (only highest level)
+total number of physical cores: 2
+
+MEMORY INFO
+RAM installed: 7.875.732 kB
+SWAP installed: 0 kB
+
+default MATLAB version
+not available
+default Octave version
+GNU Octave, version 4.0.0
+
+default Python version
+Python 2.7.12
+
+Python 2 version
+Python 2.7.12
+
+Python 3 version
+Python 3.5.2
+
+Version of the GNU Compiler Collection
+gcc\g++\gfortran (Ubuntu 5.4.0-6ubuntu1~16.04.4) 5.4.0 20160609
+
+Version of the GNU C Library
+libc: 2.23
+
+default BLAS shared object version
+Source: lapack Version: 3.6.0-2ubuntu2
+
+default LAPACK shared object version
+Source: lapack Version: 3.6.0-2ubuntu2
+
+default NumPy version
+1:1.11.0-1ubuntu1
+
+default SciPy version
+0.17.0-1
+
