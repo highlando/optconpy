@@ -2,6 +2,8 @@
 
 Python suite for solving velocity tracking problems on finite horizones by the Riccati based ansatz described in my PhD thesis.
 
+[![DOI](https://zenodo.org/badge/10438916.svg)](https://zenodo.org/badge/latestdoi/10438916)
+
 To get started, run
 
 ```
